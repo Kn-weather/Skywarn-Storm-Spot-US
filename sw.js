@@ -10,9 +10,10 @@
    - Map tiles (cartocdn.com, tilecache.rainviewer.com): network-only
      (too many to cache, and they update frequently) */
 
-var CACHE_NAME='skywarn-us-v1';
+var CACHE_NAME='skywarn-us-v2';
 var STATIC_ASSETS=[
-  './nws_us_alert_map.html',
+  './',
+  './index.html',
   './manifest.json',
   './skywarn-logo.png',
   'https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap',
