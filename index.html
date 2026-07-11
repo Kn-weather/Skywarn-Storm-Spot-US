@@ -126,21 +126,6 @@ body{
   background:#050505;
 }
 #alertMap{height:100%;width:100%;background:#050505;z-index:1;touch-action:none}
-/* Alert count badge (top-right of map area, below the Leaflet zoom controls
-   which are now at topright) */
-.alert-map-count{
-  position:absolute;top:75px;right:10px;z-index:1000;
-  background:rgba(10,10,10,.85);
-  border:1px solid var(--acc);
-  border-radius:var(--rs);
-  padding:6px 12px;
-  font-size:11px;color:var(--acc);font-weight:600;
-  backdrop-filter:blur(12px);
-  -webkit-backdrop-filter:blur(12px);
-  display:flex;align-items:center;gap:6px;
-  max-width:calc(100% - 20px);
-}
-.alert-map-count i{font-size:10px;opacity:.8}
 /* Controls panel (top-LEFT of map area, collapsed by default, transparent) */
 .alert-map-controls{
   position:absolute;top:10px;left:10px;z-index:1000;
@@ -197,7 +182,10 @@ body{
 .alert-map-controls .divider{
   margin-top:8px;padding-top:8px;border-top:1px solid var(--bdr);
 }
-/* Legend (bottom-left of map area) */
+/* Legend (bottom-left of map area) - header frozen, body scrolls.
+   The header (title + counter + chevron) and the Show All/Hide All buttons
+   stay fixed at the top so you can always collapse the legend without
+   scrolling back up. Only the alert list body scrolls. */
 .alert-map-legend{
   position:absolute;bottom:10px;left:10px;z-index:1000;
   background:rgba(10,10,10,.92);
@@ -208,28 +196,61 @@ body{
   backdrop-filter:blur(12px);
   -webkit-backdrop-filter:blur(12px);
   max-height:calc(100% - 80px);
-  overflow-y:auto;max-width:240px;
+  max-width:240px;
+  display:flex;flex-direction:column;
+  overflow:hidden;  /* header stays fixed, only body scrolls */
 }
-.alert-map-legend::-webkit-scrollbar{width:6px}
-.alert-map-legend::-webkit-scrollbar-track{background:transparent}
-.alert-map-legend::-webkit-scrollbar-thumb{background:var(--bdr-a);border-radius:3px}
-.alert-map-legend-toggle{
-  display:flex;align-items:center;justify-content:space-between;gap:8px;
+/* Frozen header row: title + counter + chevron */
+.alert-map-legend-header{
+  display:flex;align-items:center;gap:8px;
   padding:8px 12px;cursor:pointer;
+  user-select:none;
+  flex-shrink:0;  /* don't shrink - stays fixed */
+  border-bottom:1px solid var(--bdr);
+}
+.alert-map-legend-title{
   font-size:10px;font-weight:700;color:var(--acc);
   text-transform:uppercase;letter-spacing:.06em;
-  user-select:none;
+  flex:0 0 auto;
 }
-.alert-map-legend-toggle i{transition:transform .2s}
-.alert-map-legend.collapsed .alert-map-legend-toggle i{transform:rotate(-90deg)}
-.alert-map-legend-body{padding:0 12px 10px 12px;display:block}
-.alert-map-legend.collapsed .alert-map-legend-body{display:none}
-.alert-map-legend.collapsed .alert-map-legend-actions{display:none!important}
-/* Two-button row (Show All / Hide All) at top of legend */
+.alert-map-legend-title i{margin-right:5px}
+/* Counter badge inside the header */
+.alert-map-legend-count{
+  font-size:10px;font-weight:600;color:var(--acc);
+  margin-left:auto;  /* push to right side of header */
+  white-space:nowrap;
+  padding:2px 6px;
+  background:rgba(255,115,0,.1);
+  border:1px solid rgba(255,115,0,.2);
+  border-radius:4px;
+}
+.alert-map-legend-count i{font-size:9px;margin-right:3px;opacity:.8}
+.alert-map-legend-chevron{
+  color:var(--t3);font-size:9px;
+  transition:transform .2s;
+  flex:0 0 auto;
+}
+.alert-map-legend.collapsed .alert-map-legend-chevron{transform:rotate(-90deg)}
+/* Show All / Hide All buttons - also frozen below header */
 .alert-map-legend-actions{
   display:flex;align-items:stretch;
   border-bottom:1px solid var(--bdr);
+  flex-shrink:0;  /* don't shrink - stays fixed */
 }
+/* Scrollable body - only this part scrolls */
+.alert-map-legend-body{
+  padding:4px 12px 10px 12px;
+  overflow-y:auto;
+  -webkit-overflow-scrolling:touch;
+  flex:1;
+  min-height:0;  /* allow flex child to shrink */
+}
+.alert-map-legend-body::-webkit-scrollbar{width:5px}
+.alert-map-legend-body::-webkit-scrollbar-track{background:transparent}
+.alert-map-legend-body::-webkit-scrollbar-thumb{background:var(--bdr-a);border-radius:3px}
+.alert-map-legend.collapsed .alert-map-legend-body{display:none}
+.alert-map-legend.collapsed .alert-map-legend-actions{display:none!important}
+.alert-map-legend.collapsed .alert-map-legend-header{border-bottom:none}
 .alert-map-legend-action{
   flex:1;display:flex;align-items:center;justify-content:center;gap:4px;
   padding:6px 8px;margin:0;
@@ -352,7 +373,6 @@ body{
   .app-header .actions button{padding:6px 8px}
   .alert-map-controls{max-width:160px;font-size:9px}
   .alert-map-legend{max-width:160px;font-size:9px}
-  .alert-map-count{font-size:9px;padding:4px 6px;max-width:calc(100vw - 20px)}
   .wf-feeds-grid{grid-template-columns:1fr;gap:12px}
   .wf-feed-body{max-height:400px}
 }
@@ -367,9 +387,8 @@ body{
   /* Mobile: Layers panel at top-left, compact and scrollable */
   .alert-map-controls{max-width:180px;max-height:calc(100vh - 160px);top:8px;left:8px;font-size:9px}
   .alert-map-controls-body{max-height:calc(100vh - 220px);padding:0 8px 6px 8px}
-  /* Alert count at top-right below zoom */
-  .alert-map-legend{max-width:180px;max-height:180px;bottom:8px;left:8px;font-size:9px}
-  .alert-map-count{font-size:9px;padding:4px 6px;top:68px;right:8px;max-width:calc(100vw - 100px)}
+  /* Legend at bottom-left, compact */
+  .alert-map-legend{max-width:180px;max-height:200px;bottom:8px;left:8px;font-size:9px}
   .hamburger-menu{min-width:180px}
   /* Mobile popup: constrain width to viewport and shrink content */
   .leaflet-popup-content-wrapper{max-width:calc(100vw - 30px)!important}
@@ -407,7 +426,6 @@ body{
 /* ── Landscape phone adjustments ── */
 @media (max-width:900px) and (orientation:landscape){
   .app-header .brand .titles .sub{display:none}
-  .alert-map-count{top:60px;right:8px}
   .wf-feeds-grid{grid-template-columns:repeat(2,1fr)}
   .wf-feed-body{max-height:300px}
 }
@@ -744,7 +762,6 @@ body.capturing .hamburger-menu{display:none!important}
 <div id="view-polygonmap" class="tab-view active">
 <div id="mapWrap">
   <div id="alertMap"></div>
-  <div class="alert-map-count" id="alertMapCount"><i class="fas fa-satellite-dish"></i> Loading alerts...</div>
 
   <div class="alert-map-controls collapsed" id="alertMapControls">
     <div class="alert-map-controls-toggle" onclick="var c=document.getElementById('alertMapControls');c.classList.toggle('collapsed')">
@@ -1199,10 +1216,16 @@ function initAlertMap(){
     crossOrigin:true
   }).addTo(alertMapInstance);
 
-  /* Build the legend container - body is populated by fAlertMap() */
+  /* Build the legend container - body is populated by fAlertMap().
+     The counter (alertMapCount) is now embedded inside the legend header
+     so we don't need a separate floating badge on the map. */
   var legend=document.getElementById('alertMapLegend');
   if(legend&&!legend.dataset.built){
-    legend.innerHTML='<div class="alert-map-legend-toggle" onclick="var l=document.getElementById(\'alertMapLegend\');l.classList.toggle(\'collapsed\')"><span><i class="fas fa-palette"></i> Active Alert Colors</span><i class="fas fa-chevron-down"></i></div>'+
+    legend.innerHTML='<div class="alert-map-legend-header" onclick="var l=document.getElementById(\'alertMapLegend\');l.classList.toggle(\'collapsed\')">'+
+      '<span class="alert-map-legend-title"><i class="fas fa-palette"></i> Active Alerts</span>'+
+      '<span class="alert-map-legend-count" id="alertMapCount"><i class="fas fa-satellite-dish"></i> Loading...</span>'+
+      '<i class="fas fa-chevron-down alert-map-legend-chevron"></i>'+
+      '</div>'+
       '<div class="alert-map-legend-actions" id="alertMapLegendActions" style="display:none">'+
         '<div class="alert-map-legend-action" onclick="resetAlertTypeHidden()"><i class="fas fa-eye"></i> Show All</div>'+
         '<div class="alert-map-legend-action hide-action" onclick="hideAllAlertTypes()"><i class="fas fa-eye-slash"></i> Hide All</div>'+
