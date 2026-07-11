@@ -1698,7 +1698,7 @@ async function screenshotAlert(idx){
     /* Composite dimensions */
     var compositeW=panelW+gap+mapTargetW;
     var compositeH=panelH;
-    var footerH=60;
+    var footerH=90;
     var finalCanvas=document.createElement('canvas');
     finalCanvas.width=compositeW;
     finalCanvas.height=compositeH+footerH;
@@ -1723,24 +1723,24 @@ async function screenshotAlert(idx){
     fctx.fillStyle='#ff7300';
     fctx.fillRect(mapX,mapTargetH+gap/2-1,mapTargetW,1);
 
-    /* Draw footer branding */
-    var logoSize=48;
+    /* Draw footer branding (larger - easier to see and read) */
+    var logoSize=72;
     var siteName='Skywarn Storm Spotters & Chasers United States';
     var stampStr=new Date().toLocaleString('en-US',{weekday:'short',year:'numeric',month:'short',day:'numeric',hour:'2-digit',minute:'2-digit',hour12:true});
-    fctx.font='bold 16px Inter,sans-serif';
+    fctx.font='bold 22px Inter,sans-serif';
     var nameW=fctx.measureText(siteName).width;
-    fctx.font='11px Inter,sans-serif';
+    fctx.font='14px Inter,sans-serif';
     var stampW=fctx.measureText(stampStr).width;
     var textW=Math.max(nameW,stampW);
-    var contentW=logoSize+12+textW;
+    var contentW=logoSize+16+textW;
     var barY=compositeH;
-    fctx.fillStyle='rgba(0,0,0,.8)';
+    fctx.fillStyle='rgba(0,0,0,.85)';
     fctx.fillRect(0,barY,finalCanvas.width,footerH);
     fctx.fillStyle='#ff7300';
     fctx.fillRect(0,barY-2,finalCanvas.width,2);
     var groupX=Math.floor((finalCanvas.width-contentW)/2);
     var logoX=groupX;
-    var logoY=barY+6;
+    var logoY=barY+9;
     if(LOGO_DATA_URL){
       var logoImg=new Image();
       await new Promise(function(resolve){
@@ -1749,14 +1749,14 @@ async function screenshotAlert(idx){
         logoImg.src=LOGO_DATA_URL;
       });
     }
-    var textX=logoX+logoSize+12;
+    var textX=logoX+logoSize+16;
     fctx.fillStyle='#ff7300';
-    fctx.font='bold 16px Inter,sans-serif';
+    fctx.font='bold 22px Inter,sans-serif';
     fctx.textBaseline='middle';
-    fctx.fillText(siteName,textX,barY+footerH/2-9);
+    fctx.fillText(siteName,textX,barY+footerH/2-13);
     fctx.fillStyle='#a0a0a0';
-    fctx.font='11px Inter,sans-serif';
-    fctx.fillText(stampStr,textX,barY+footerH/2+10);
+    fctx.font='14px Inter,sans-serif';
+    fctx.fillText(stampStr,textX,barY+footerH/2+15);
 
     /* Show preview */
     var dataUrl=finalCanvas.toDataURL('image/png');
@@ -3678,29 +3678,29 @@ async function captureScreenshot(){
     fctx.drawImage(mapCanvas,0,0);
 
     /* Draw a CENTERED branding bar at the bottom of the screenshot.
-       Larger than before: 48px logo, bold 16px site name, 11px timestamp.
+       Larger footer: 72px logo, bold 22px site name, 14px timestamp.
        The bar spans the full width with a semi-transparent black background
        and an orange top border line. Logo is on the left, text to the right
        of it, all horizontally centered as a group. */
-    var logoSize=48;
-    var padX=16,padY=10;
+    var logoSize=72;
+    var padX=16,padY=12;
     var siteName='Skywarn Storm Spotters & Chasers United States';
     var stampStr=new Date().toLocaleString('en-US',{
       weekday:'short',year:'numeric',month:'short',day:'numeric',
       hour:'2-digit',minute:'2-digit',hour12:true
     });
     /* Measure text widths at the larger font sizes */
-    fctx.font='bold 16px Inter,sans-serif';
+    fctx.font='bold 22px Inter,sans-serif';
     var nameW=fctx.measureText(siteName).width;
-    fctx.font='11px Inter,sans-serif';
+    fctx.font='14px Inter,sans-serif';
     var stampW=fctx.measureText(stampStr).width;
     var textW=Math.max(nameW,stampW);
     /* Total content width = logo + gap + text block */
-    var contentW=logoSize+12+textW;
+    var contentW=logoSize+16+textW;
     var barH=logoSize+padY*2;
     var barY=finalCanvas.height-barH;
     /* Draw full-width semi-transparent black bar at the bottom */
-    fctx.fillStyle='rgba(0,0,0,.8)';
+    fctx.fillStyle='rgba(0,0,0,.85)';
     fctx.fillRect(0,barY,finalCanvas.width,barH);
     /* Orange top border line */
     fctx.fillStyle='#ff7300';
@@ -3727,16 +3727,16 @@ async function captureScreenshot(){
       fctx.arc(logoX+logoSize/2,logoY+logoSize/2,logoSize/2,0,2*Math.PI);
       fctx.fill();
     }
-    /* Draw the site name to the right of the logo (bold, orange, 16px) */
-    var textX=logoX+logoSize+12;
+    /* Draw the site name to the right of the logo (bold, orange, 22px) */
+    var textX=logoX+logoSize+16;
     fctx.fillStyle='#ff7300';
-    fctx.font='bold 16px Inter,sans-serif';
+    fctx.font='bold 22px Inter,sans-serif';
     fctx.textBaseline='middle';
-    fctx.fillText(siteName,textX,barY+padY+logoSize/2-9);
-    /* Draw the timestamp below the site name (gray, 11px) */
+    fctx.fillText(siteName,textX,barY+padY+logoSize/2-13);
+    /* Draw the timestamp below the site name (gray, 14px) */
     fctx.fillStyle='#a0a0a0';
-    fctx.font='11px Inter,sans-serif';
-    fctx.fillText(stampStr,textX,barY+padY+logoSize/2+10);
+    fctx.font='14px Inter,sans-serif';
+    fctx.fillText(stampStr,textX,barY+padY+logoSize/2+15);
 
     /* Convert to PNG data URL */
     var dataUrl=finalCanvas.toDataURL('image/png');
