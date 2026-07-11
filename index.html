@@ -926,25 +926,11 @@ body.capturing .hamburger-menu{display:none!important}
 <div id="view-weatherfeeds" class="tab-view">
   <div class="wf-feeds-wrap">
     <div class="wf-feeds-grid" id="wfFeedsGrid">
-      <!-- Twitter: NWS Tornado - using iframe embed for reliability -->
+      <!-- Twitter: NWS Tornado - official X widget embed -->
       <div class="wf-feed-card">
         <div class="wf-feed-header"><i class="fab fa-x-twitter"></i> NWS Tornado (X/Twitter)</div>
         <div class="wf-feed-body" id="tw-nwstornado">
-          <iframe src="https://syndication.twitter.com/srv/timeline-profile/screen-name/NWStornado?dnt=true&embedId=twitter-widget-0&frame=false&hideBorder=true&hideFooter=true&hideHeader=true&hideScrollBar=false&lang=en&maxHeight=600px&theme=dark&transparent=true" style="width:100%;border:none;min-height:600px;background:transparent" allowfullscreen scrolling="yes"></iframe>
-        </div>
-      </div>
-      <!-- Twitter: NWS SPC -->
-      <div class="wf-feed-card">
-        <div class="wf-feed-header"><i class="fab fa-x-twitter"></i> NWS SPC (X/Twitter)</div>
-        <div class="wf-feed-body" id="tw-nwsspc">
-          <iframe src="https://syndication.twitter.com/srv/timeline-profile/screen-name/NWSPC?dnt=true&embedId=twitter-widget-0&frame=false&hideBorder=true&hideFooter=true&hideHeader=true&hideScrollBar=false&lang=en&maxHeight=600px&theme=dark&transparent=true" style="width:100%;border:none;min-height:600px;background:transparent" allowfullscreen scrolling="yes"></iframe>
-        </div>
-      </div>
-      <!-- Twitter: NWS -->
-      <div class="wf-feed-card">
-        <div class="wf-feed-header"><i class="fab fa-x-twitter"></i> NWS (X/Twitter)</div>
-        <div class="wf-feed-body" id="tw-nws">
-          <iframe src="https://syndication.twitter.com/srv/timeline-profile/screen-name/NWS?dnt=true&embedId=twitter-widget-0&frame=false&hideBorder=true&hideFooter=true&hideHeader=true&hideScrollBar=false&lang=en&maxHeight=600px&theme=dark&transparent=true" style="width:100%;border:none;min-height:600px;background:transparent" allowfullscreen scrolling="yes"></iframe>
+          <a class="twitter-timeline" data-theme="dark" data-chrome="noheader nofooter" data-tweet-limit="20" href="https://x.com/NWStornado?ref_src=twsrc%5Etfw">Posts by NWStornado</a>
         </div>
       </div>
       <!-- SPC Watches RSS -->
@@ -3169,14 +3155,9 @@ function updateRadarOpacity(){
    poll for the twttr SDK to be ready (since it loads async), then create
    each timeline. RSS feeds are fetched via fP() (CORS proxy fallback). */
 var weatherFeedsLoaded=false;
-/* Twitter account configs: elementId -> username. The X widget SDK
-   (platform.x.com/widgets.js) replaces the placeholder <a> element with
-   an iframe-based timeline. We use createTimeline() for reliability. */
-var TWITTER_FEEDS={
-  'tw-nwstornado':'NWStornado',
-  'tw-nwsspc':'NWSPC',
-  'tw-nws':'NWS'
-};
+/* Twitter widget is loaded via the official <a class="twitter-timeline">
+   anchor element in the HTML. The widgets.js script (platform.x.com)
+   auto-discovers and renders it. See loadTwitterFeeds() below. */
 function loadWeatherFeeds(){
   /* Load Twitter timelines (poll for SDK readiness) */
   loadTwitterFeeds();
@@ -3191,62 +3172,31 @@ function loadWeatherFeeds(){
   fetchRssFeed('https://www.weather.gov/rss_page.php?site_name=nws','rss-nws-alerts');
 }
 
-/* Load Twitter/X timeline widgets. The SDK (widgets.js) loads async, so we
-   poll for window.twttr to be available, then call createTimeline() for each
-   account. createTimeline() creates the timeline iframe directly - more
-   reliable than relying on the <a class="twitter-timeline"> auto-render. */
+/* Load Twitter/X timeline widget. The <a class="twitter-timeline"> anchor
+   is already in the HTML. The widgets.js script (loaded async in <head>)
+   auto-discovers these anchors and replaces them with iframe timelines.
+   We call twttr.widgets.load() to trigger rendering when the feeds tab
+   is opened (since the anchor may not have been visible when the script
+   initially loaded). We poll for twttr availability since it loads async. */
 function loadTwitterFeeds(){
   var attempts=0;
   var maxAttempts=20;  /* 20 x 500ms = 10s max wait */
   function tryLoad(){
-    if(typeof twttr!=='undefined'&&twttr&&twttr.widgets&&twttr.widgets.createTimeline){
-      /* SDK is ready - create each timeline */
-      Object.keys(TWITTER_FEEDS).forEach(function(elId){
-        var username=TWITTER_FEEDS[elId];
-        var container=document.getElementById(elId);
-        if(!container)return;
-        /* Show a loading placeholder while the iframe builds */
-        container.innerHTML='<div style="padding:20px;text-align:center;color:var(--t3);font-size:11px"><i class="fas fa-spinner fa-spin" style="margin-right:6px"></i>Loading @'+username+'...</div>';
-        /* createTimeline replaces the container content with an iframe */
-        twttr.widgets.createTimeline(
-          {
-            sourceType:'profile',
-            screenName:username
-          },
-          container,
-          {
-            theme:'dark',
-            chrome:'noheader nofooter',
-            tweetLimit:20,
-            dnt:true  /* Do Not Track - privacy */
-          }
-        ).then(function(el){
-          /* Success - the iframe element is returned */
-          if(el){
-            console.log('[Feeds] Twitter timeline loaded for @'+username);
-          }else{
-            container.innerHTML='<div style="padding:20px;text-align:center;color:var(--t3);font-size:11px">Timeline unavailable. <a href="https://x.com/'+username+'" target="_blank" style="color:var(--acc)">Open on X</a></div>';
-          }
-        }).catch(function(e){
-          console.warn('[Feeds] Twitter timeline error for @'+username,e);
-          container.innerHTML='<div style="padding:20px;text-align:center;color:var(--t3);font-size:11px">Timeline unavailable. <a href="https://x.com/'+username+'" target="_blank" style="color:var(--acc)">Open on X</a></div>';
-        });
-      });
+    if(typeof twttr!=='undefined'&&twttr&&twttr.widgets&&twttr.widgets.load){
+      /* SDK is ready - call load() to render the twitter-timeline anchor */
+      twttr.widgets.load(document.getElementById('tw-nwstornado'));
+      console.log('[Feeds] Twitter widget load triggered for @NWStornado');
     }else{
       /* SDK not loaded yet - retry */
-      attempt++;
-      if(attempt<maxAttempts){
+      attempts++;
+      if(attempts<maxAttempts){
         setTimeout(tryLoad,500);
       }else{
-        /* Timed out - show fallback links */
         console.warn('[Feeds] Twitter SDK not loaded after '+maxAttempts+' attempts');
-        Object.keys(TWITTER_FEEDS).forEach(function(elId){
-          var username=TWITTER_FEEDS[elId];
-          var container=document.getElementById(elId);
-          if(container){
-            container.innerHTML='<div style="padding:20px;text-align:center;color:var(--t3);font-size:11px">Twitter SDK not loaded. <a href="https://x.com/'+username+'" target="_blank" style="color:var(--acc)">Open @'+username+' on X</a></div>';
-          }
-        });
+        var container=document.getElementById('tw-nwstornado');
+        if(container){
+          container.innerHTML='<div style="padding:20px;text-align:center;color:var(--t3);font-size:11px">Twitter SDK not loaded. <a href="https://x.com/NWStornado" target="_blank" style="color:var(--acc)">Open @NWStornado on X</a></div>';
+        }
       }
     }
   }
