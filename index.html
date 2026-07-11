@@ -1512,15 +1512,14 @@ function renderAlertPopupContent(idx){
   return html;
 }
 
-/* Screenshot a single alert: creates a two-panel composite matching the
-   reference design style:
-   - LEFT panel: alert info (event, sender, headline, timestamps, areas,
-     full description, instructions) in Skywarn dark theme
-   - RIGHT panel: map zoomed OUT to show the state context (not tight on
-     the polygon) so you can see which state the alert is in
-   - Bottom: centered Skywarn branding bar (logo + site name + timestamp)
-   The map is captured at a wider zoom so the polygon is visible within
-   its state/region, similar to the reference screenshot. */
+/* Screenshot a single alert: creates a THREE-panel composite:
+   - LEFT: alert info (full details, no truncation)
+   - RIGHT-TOP: map zoomed IN on the polygon (tight bounds, streets visible)
+   - RIGHT-BOTTOM: map zoomed OUT (state context visible)
+   - Bottom: centered Skywarn branding bar
+   The map is captured TWICE at different zoom levels, then composited
+   together with the alert panel. This requires waiting for tile loads
+   between each zoom change. */
 async function screenshotAlert(idx){
   if(!alertPopupState||!alertMapInstance)return;
   if(typeof html2canvas==='undefined'){alert('Screenshot library not loaded');return}
@@ -1529,89 +1528,36 @@ async function screenshotAlert(idx){
   var a=alerts[idx];
   /* Close the popup so it doesn't appear in the map capture */
   alertMapInstance.closePopup();
-  /* Pan/zoom to show the polygon WITH state context (zoomed out).
-     We fit the polygon bounds but with extra padding so the surrounding
-     state/region is visible. Cap the zoom at 7 so we don't zoom in too
-     tight - this ensures you can always see the state context. */
+  /* Calculate the alert's bounds so we can zoom to it */
+  var alertBounds=null;
   if(a.geoms&&a.geoms.length>0){
     try{
-      var bounds=L.latLngBounds([]);
+      alertBounds=L.latLngBounds([]);
       a.geoms.forEach(function(g){
         var testLayer=L.geoJSON(g);
         if(testLayer.getBounds&&testLayer.getBounds().isValid()){
-          bounds.extend(testLayer.getBounds());
+          alertBounds.extend(testLayer.getBounds());
         }
         testLayer.remove();
       });
-      if(bounds.isValid()){
-        /* Large padding (150px) + maxZoom 7 keeps the view zoomed out
-           enough to see state boundaries and context. */
-        alertMapInstance.fitBounds(bounds,{padding:[150,150],maxZoom:7});
-      }
-    }catch(e){console.warn('[AlertShot] Could not pan to polygon:',e)}
+    }catch(e){console.warn('[AlertShot] Could not calculate bounds:',e)}
   }
-  /* Wait for map to settle (tiles load) */
-  await new Promise(function(resolve){
-    var done=false;
-    function finish(){if(!done){done=true;setTimeout(resolve,800)}}
-    if(!alertMapInstance._loaded){resolve();return}
-    alertMapInstance.once('load',finish);
-    setTimeout(finish,2000);
-  });
-  /* Hide UI overlays during capture */
-  document.body.classList.add('capturing');
-  await new Promise(function(r){requestAnimationFrame(function(){requestAnimationFrame(r)})});
-  try{
-    /* Build the alert info panel (LEFT side) as an off-screen div.
-       Full content, no max-height - entire description visible.
-       Styled in Skywarn dark theme with orange accents. */
-    var panel=document.createElement('div');
-    panel.style.cssText='position:absolute;left:-9999px;top:0;width:320px;background:#0a0a0a;border:1px solid '+a.color+';border-radius:8px;padding:16px;font-family:Inter,sans-serif;font-size:11px;color:#f0f0f0;line-height:1.5;box-shadow:0 4px 20px rgba(0,0,0,.5)';
-    var panelHtml='';
-    /* Header bar with alert color */
-    panelHtml+='<div style="background:'+a.color+';margin:-16px -16px 12px -16px;padding:12px 16px;border-radius:7px 7px 0 0;font-size:15px;font-weight:700;color:#000">'+a.event+'</div>';
-    /* Sender (NWS office) */
-    if(a.senderName){
-      panelHtml+='<div style="font-size:10px;color:#606060;margin-bottom:10px"><i class="fas fa-satellite-dish" style="margin-right:4px"></i>'+a.senderName+'</div>';
-    }
-    /* Headline */
-    if(a.headline){
-      panelHtml+='<div style="background:rgba(255,255,255,.04);border-left:3px solid '+a.color+';padding:8px 10px;margin-bottom:10px;border-radius:3px;font-size:11px;font-weight:600;color:#f0f0f0;line-height:1.4">'+a.headline+'</div>';
-    }
-    /* Timestamps */
-    panelHtml+='<div style="margin-bottom:10px">';
-    panelHtml+='<div style="font-size:9px;color:#ff7300;text-transform:uppercase;letter-spacing:.04em;margin-bottom:4px;font-weight:700">Timing</div>';
-    panelHtml+='<table style="width:100%;font-size:10px;border-collapse:collapse">';
-    panelHtml+='<tr><td style="padding:3px 8px 3px 0;color:#606060;white-space:nowrap;vertical-align:top"><i class="fas fa-paper-plane" style="margin-right:4px"></i>Issued</td><td style="padding:3px 0;color:#a0a0a0">'+fmtNwsTime(a.sent)+'</td></tr>';
-    if(a.onset&&a.onset!==a.sent){
-      panelHtml+='<tr><td style="padding:3px 8px 3px 0;color:#606060;white-space:nowrap;vertical-align:top"><i class="fas fa-clock" style="margin-right:4px"></i>Onset</td><td style="padding:3px 0;color:#a0a0a0">'+fmtNwsTime(a.onset)+'</td></tr>';
-    }
-    panelHtml+='<tr><td style="padding:3px 8px 3px 0;color:#606060;white-space:nowrap;vertical-align:top"><i class="fas fa-hourglass-end" style="margin-right:4px"></i>Expires</td><td style="padding:3px 0;color:#a0a0a0">'+fmtNwsTime(a.ends)+'</td></tr>';
-    panelHtml+='</table></div>';
-    /* Affected areas */
-    if(a.areaDesc&&a.areaDesc!=='Unknown'){
-      panelHtml+='<div style="margin-bottom:10px"><div style="font-size:9px;color:#ff7300;text-transform:uppercase;letter-spacing:.04em;margin-bottom:4px;font-weight:700"><i class="fas fa-map-marker-alt" style="margin-right:4px"></i>Affected Areas</div><div style="font-size:10px;color:#a0a0a0;line-height:1.5">'+a.areaDesc.replace(/;/g,';<br>')+'</div></div>';
-    }
-    /* Full description (no max-height) */
-    if(a.description){
-      panelHtml+='<div style="margin-bottom:10px"><div style="font-size:9px;color:#ff7300;text-transform:uppercase;letter-spacing:.04em;margin-bottom:4px;font-weight:700"><i class="fas fa-file-lines" style="margin-right:4px"></i>Description</div><div style="font-size:10px;color:#f0f0f0;line-height:1.55;background:rgba(0,0,0,.3);padding:8px 10px;border-radius:4px;border:1px solid rgba(255,115,0,.18);white-space:pre-wrap">'+a.description+'</div></div>';
-    }
-    /* Instructions */
-    if(a.instruction){
-      panelHtml+='<div style="margin-bottom:10px"><div style="font-size:9px;color:#fbbf24;text-transform:uppercase;letter-spacing:.04em;margin-bottom:4px;font-weight:700"><i class="fas fa-triangle-exclamation" style="margin-right:4px"></i>Precautionary/Preparedness Actions</div><div style="font-size:10px;color:#f0f0f0;line-height:1.55;background:rgba(251,191,36,.06);padding:8px 10px;border-radius:4px;border:1px solid rgba(251,191,36,.2);white-space:pre-wrap">'+a.instruction+'</div></div>';
-    }
-    panel.innerHTML=panelHtml;
-    document.body.appendChild(panel);
-    /* Capture the alert panel */
-    var panelCanvas=await html2canvas(panel,{
-      backgroundColor:null,
-      scale:window.devicePixelRatio||1,
-      logging:false
+
+  /* Helper: wait for map tiles to load after a zoom/pan change */
+  function waitForMapLoad(){
+    return new Promise(function(resolve){
+      var done=false;
+      function finish(){if(!done){done=true;setTimeout(resolve,700)}}
+      if(!alertMapInstance._loaded){resolve();return}
+      alertMapInstance.once('load',finish);
+      setTimeout(finish,2500);  /* hard fallback */
     });
-    document.body.removeChild(panel);
-    /* Capture the map (zoomed out with state context) */
+  }
+
+  /* Helper: capture the current map view */
+  async function captureMap(){
     var mapEl=document.getElementById('alertMap');
-    var mapCanvas=await html2canvas(mapEl,{
+    return await html2canvas(mapEl,{
       useCORS:true,
       allowTaint:true,
       backgroundColor:'#050505',
@@ -1624,19 +1570,91 @@ async function screenshotAlert(idx){
       windowHeight:mapEl.offsetHeight,
       x:0,y:0,scrollX:0,scrollY:0
     });
-    if(!mapCanvas)throw new Error('Map capture failed');
-    /* Build composite: LEFT = alert panel, RIGHT = map.
-       Match the reference layout: info on left, map on right. */
+  }
+
+  var mapCanvasZoomedIn=null;
+  var mapCanvasZoomedOut=null;
+
+  try{
+    /* STEP 1: Zoom IN on the polygon (tight bounds, streets visible).
+       maxZoom 11 allows enough zoom to see roads/streets. */
+    if(alertBounds&&alertBounds.isValid()){
+      alertMapInstance.fitBounds(alertBounds,{padding:[40,40],maxZoom:11});
+    }
+    await waitForMapLoad();
+    document.body.classList.add('capturing');
+    await new Promise(function(r){requestAnimationFrame(function(){requestAnimationFrame(r)})});
+    mapCanvasZoomedIn=await captureMap();
+    document.body.classList.remove('capturing');
+    if(!mapCanvasZoomedIn)throw new Error('Zoomed-in map capture failed');
+
+    /* STEP 2: Zoom OUT for state context (maxZoom 7, large padding) */
+    if(alertBounds&&alertBounds.isValid()){
+      alertMapInstance.fitBounds(alertBounds,{padding:[150,150],maxZoom:7});
+    }
+    await waitForMapLoad();
+    document.body.classList.add('capturing');
+    await new Promise(function(r){requestAnimationFrame(function(){requestAnimationFrame(r)})});
+    mapCanvasZoomedOut=await captureMap();
+    document.body.classList.remove('capturing');
+    if(!mapCanvasZoomedOut)throw new Error('Zoomed-out map capture failed');
+
+    /* STEP 3: Build the alert info panel (LEFT side) */
+    var panel=document.createElement('div');
+    panel.style.cssText='position:absolute;left:-9999px;top:0;width:320px;background:#0a0a0a;border:1px solid '+a.color+';border-radius:8px;padding:16px;font-family:Inter,sans-serif;font-size:11px;color:#f0f0f0;line-height:1.5;box-shadow:0 4px 20px rgba(0,0,0,.5)';
+    var panelHtml='';
+    panelHtml+='<div style="background:'+a.color+';margin:-16px -16px 12px -16px;padding:12px 16px;border-radius:7px 7px 0 0;font-size:15px;font-weight:700;color:#000">'+a.event+'</div>';
+    if(a.senderName){
+      panelHtml+='<div style="font-size:10px;color:#606060;margin-bottom:10px"><i class="fas fa-satellite-dish" style="margin-right:4px"></i>'+a.senderName+'</div>';
+    }
+    if(a.headline){
+      panelHtml+='<div style="background:rgba(255,255,255,.04);border-left:3px solid '+a.color+';padding:8px 10px;margin-bottom:10px;border-radius:3px;font-size:11px;font-weight:600;color:#f0f0f0;line-height:1.4">'+a.headline+'</div>';
+    }
+    panelHtml+='<div style="margin-bottom:10px">';
+    panelHtml+='<div style="font-size:9px;color:#ff7300;text-transform:uppercase;letter-spacing:.04em;margin-bottom:4px;font-weight:700">Timing</div>';
+    panelHtml+='<table style="width:100%;font-size:10px;border-collapse:collapse">';
+    panelHtml+='<tr><td style="padding:3px 8px 3px 0;color:#606060;white-space:nowrap;vertical-align:top"><i class="fas fa-paper-plane" style="margin-right:4px"></i>Issued</td><td style="padding:3px 0;color:#a0a0a0">'+fmtNwsTime(a.sent)+'</td></tr>';
+    if(a.onset&&a.onset!==a.sent){
+      panelHtml+='<tr><td style="padding:3px 8px 3px 0;color:#606060;white-space:nowrap;vertical-align:top"><i class="fas fa-clock" style="margin-right:4px"></i>Onset</td><td style="padding:3px 0;color:#a0a0a0">'+fmtNwsTime(a.onset)+'</td></tr>';
+    }
+    panelHtml+='<tr><td style="padding:3px 8px 3px 0;color:#606060;white-space:nowrap;vertical-align:top"><i class="fas fa-hourglass-end" style="margin-right:4px"></i>Expires</td><td style="padding:3px 0;color:#a0a0a0">'+fmtNwsTime(a.ends)+'</td></tr>';
+    panelHtml+='</table></div>';
+    if(a.areaDesc&&a.areaDesc!=='Unknown'){
+      panelHtml+='<div style="margin-bottom:10px"><div style="font-size:9px;color:#ff7300;text-transform:uppercase;letter-spacing:.04em;margin-bottom:4px;font-weight:700"><i class="fas fa-map-marker-alt" style="margin-right:4px"></i>Affected Areas</div><div style="font-size:10px;color:#a0a0a0;line-height:1.5">'+a.areaDesc.replace(/;/g,';<br>')+'</div></div>';
+    }
+    if(a.description){
+      panelHtml+='<div style="margin-bottom:10px"><div style="font-size:9px;color:#ff7300;text-transform:uppercase;letter-spacing:.04em;margin-bottom:4px;font-weight:700"><i class="fas fa-file-lines" style="margin-right:4px"></i>Description</div><div style="font-size:10px;color:#f0f0f0;line-height:1.55;background:rgba(0,0,0,.3);padding:8px 10px;border-radius:4px;border:1px solid rgba(255,115,0,.18);white-space:pre-wrap">'+a.description+'</div></div>';
+    }
+    if(a.instruction){
+      panelHtml+='<div style="margin-bottom:10px"><div style="font-size:9px;color:#fbbf24;text-transform:uppercase;letter-spacing:.04em;margin-bottom:4px;font-weight:700"><i class="fas fa-triangle-exclamation" style="margin-right:4px"></i>Precautionary/Preparedness Actions</div><div style="font-size:10px;color:#f0f0f0;line-height:1.55;background:rgba(251,191,36,.06);padding:8px 10px;border-radius:4px;border:1px solid rgba(251,191,36,.2);white-space:pre-wrap">'+a.instruction+'</div></div>';
+    }
+    panel.innerHTML=panelHtml;
+    document.body.appendChild(panel);
+    var panelCanvas=await html2canvas(panel,{
+      backgroundColor:null,
+      scale:window.devicePixelRatio||1,
+      logging:false
+    });
+    document.body.removeChild(panel);
+
+    /* STEP 4: Composite all three panels together.
+       Layout:
+       - LEFT: alert panel (full height)
+       - RIGHT-TOP: zoomed-in map (polygon detail, streets)
+       - RIGHT-BOTTOM: zoomed-out map (state context) */
     await preloadLogoDataUrl();
     var panelW=panelCanvas.width;
     var panelH=panelCanvas.height;
-    var mapW=mapCanvas.width;
-    var mapH=mapCanvas.height;
-    /* The composite is: panel on left + gap + map on right.
-       Map is cropped/resized to match panel height. */
-    var gap=16;
-    var compositeW=panelW+gap+mapW;
-    var compositeH=Math.max(panelH,mapH);
+    /* Each map canvas is half the panel height (minus a gap) */
+    var gap=10;
+    var mapTargetH=Math.floor((panelH-gap)/2);
+    var mapW=mapCanvasZoomedIn.width;
+    /* Scale map width proportionally to match mapTargetH */
+    var mapScale=mapTargetH/mapCanvasZoomedIn.height;
+    var mapTargetW=Math.floor(mapW*mapScale);
+    /* Composite dimensions */
+    var compositeW=panelW+gap+mapTargetW;
+    var compositeH=panelH;
     var footerH=60;
     var finalCanvas=document.createElement('canvas');
     finalCanvas.width=compositeW;
@@ -1645,24 +1663,24 @@ async function screenshotAlert(idx){
     /* Fill background */
     fctx.fillStyle='#050505';
     fctx.fillRect(0,0,finalCanvas.width,finalCanvas.height);
-    /* Draw panel on the LEFT, vertically centered */
-    var panelY=Math.floor((compositeH-panelH)/2);
-    if(panelY<0)panelY=0;
-    fctx.drawImage(panelCanvas,0,panelY);
-    /* Draw map on the RIGHT, vertically centered.
-       If map is taller than panel, crop to composite height.
-       If shorter, center vertically. */
+    /* Draw alert panel on LEFT */
+    fctx.drawImage(panelCanvas,0,0);
+    /* Draw zoomed-in map on RIGHT-TOP (scaled to fit) */
     var mapX=panelW+gap;
-    var mapY=Math.floor((compositeH-mapH)/2);
-    if(mapY<0)mapY=0;
-    /* If map is taller than composite, crop the top/bottom equally */
-    if(mapH>compositeH){
-      var cropY=Math.floor((mapH-compositeH)/2);
-      fctx.drawImage(mapCanvas,0,cropY,mapW,compositeH,mapX,0,mapW,compositeH);
-    }else{
-      fctx.drawImage(mapCanvas,mapX,mapY);
-    }
-    /* Draw footer branding (centered, like the main screenshot) */
+    fctx.drawImage(mapCanvasZoomedIn,0,0,mapCanvasZoomedIn.width,mapCanvasZoomedIn.height,mapX,0,mapTargetW,mapTargetH);
+    /* Draw zoomed-out map on RIGHT-BOTTOM (scaled to fit) */
+    fctx.drawImage(mapCanvasZoomedOut,0,0,mapCanvasZoomedOut.width,mapCanvasZoomedOut.height,mapX,mapTargetH+gap,mapTargetW,mapTargetH);
+    /* Draw labels above each map section */
+    fctx.fillStyle='rgba(255,115,0,.8)';
+    fctx.font='bold 10px Inter,sans-serif';
+    fctx.textBaseline='top';
+    fctx.fillText('Polygon Detail',mapX+4,2);
+    fctx.fillText('State Context',mapX+4,mapTargetH+gap+2);
+    /* Draw separator line between the two map sections */
+    fctx.fillStyle='#ff7300';
+    fctx.fillRect(mapX,mapTargetH+gap/2-1,mapTargetW,1);
+
+    /* Draw footer branding */
     var logoSize=48;
     var siteName='Skywarn Storm Spotters & Chasers United States';
     var stampStr=new Date().toLocaleString('en-US',{weekday:'short',year:'numeric',month:'short',day:'numeric',hour:'2-digit',minute:'2-digit',hour12:true});
@@ -1696,6 +1714,7 @@ async function screenshotAlert(idx){
     fctx.fillStyle='#a0a0a0';
     fctx.font='11px Inter,sans-serif';
     fctx.fillText(stampStr,textX,barY+footerH/2+10);
+
     /* Show preview */
     var dataUrl=finalCanvas.toDataURL('image/png');
     var previewImg=document.getElementById('shotPreviewImg');
