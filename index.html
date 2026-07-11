@@ -151,6 +151,8 @@ body{
   backdrop-filter:blur(12px);
   -webkit-backdrop-filter:blur(12px);
   max-width:230px;
+  max-height:calc(100% - 20px);
+  display:flex;flex-direction:column;
   font-size:11px;
 }
 .alert-map-controls-toggle{
@@ -165,7 +167,13 @@ body{
 .alert-map-controls-body{
   padding:0 12px 10px 12px;display:block;
   border-top:1px solid var(--bdr);
+  overflow-y:auto;
+  flex:1;
+  -webkit-overflow-scrolling:touch;
 }
+.alert-map-controls-body::-webkit-scrollbar{width:5px}
+.alert-map-controls-body::-webkit-scrollbar-track{background:transparent}
+.alert-map-controls-body::-webkit-scrollbar-thumb{background:var(--bdr-a);border-radius:3px}
 .alert-map-controls.collapsed .alert-map-controls-body{display:none}
 .alert-map-controls label{
   display:flex;align-items:center;gap:6px;cursor:pointer;
@@ -356,16 +364,18 @@ body{
   .app-header .actions .stat{display:none}
   .app-header .actions .btn-label{display:none}
   .app-header .actions button{padding:7px 10px}
-  .alert-map-controls{max-width:180px;top:8px;right:8px}
-  .alert-map-legend{max-width:180px;bottom:8px;left:8px}
-  .alert-map-count{font-size:10px;padding:5px 8px;top:68px;left:8px}
+  /* Mobile: panels are scrollable and sized to fit the screen */
+  .alert-map-controls{max-width:calc(100vw - 20px);max-height:calc(100vh - 160px);top:8px;right:10px;left:10px;font-size:10px}
+  .alert-map-controls-body{max-height:calc(100vh - 220px);padding:0 10px 8px 10px}
+  .alert-map-legend{max-width:calc(100vw - 20px);max-height:200px;bottom:8px;left:10px;right:10px;font-size:9px}
+  .alert-map-count{font-size:10px;padding:5px 8px;top:68px;left:8px;max-width:calc(100vw - 16px)}
   .hamburger-menu{min-width:180px}
   /* Mobile popup: constrain width to viewport and shrink content */
   .leaflet-popup-content-wrapper{max-width:calc(100vw - 30px)!important}
   .leaflet-popup-content{max-width:calc(100vw - 50px)!important;font-size:10px!important;margin:8px 10px!important}
   .leaflet-popup-content h3{font-size:12px!important}
   .leaflet-popup-content table{font-size:9px!important}
-  .leaflet-popup-content .shot-desc-box{max-height:180px!important;font-size:9px!important}
+  .leaflet-popup-content .shot-desc-box{max-height:150px!important;font-size:9px!important}
   /* Single-column feeds on mobile */
   .wf-feeds-grid{grid-template-columns:1fr}
   .wf-feed-body{max-height:500px}
@@ -2448,21 +2458,29 @@ async function toggleCameraLayer(){
    No API key required. CORS-friendly. Auto-refreshes every 5 minutes.
    https://www.rainviewer.com/api/weather-radar-api-v2.html */
 
-var radarLayers=[];      /* array of L.tileLayer, one per frame - preloaded for instant switching */
 var radarFrames=[];      /* array of {time, path} from RainViewer API */
 var radarCurrentFrame=0;  /* index into radarFrames, 0 = oldest */
 var radarPlaying=false;
 var radarAnimTimer=null;
 var radarRefreshTimer=null;
 var radarType='reflectivity';
-var radarBaseOpacity=0.7;  /* user's chosen opacity (from slider) */
-var radarBuiltType=null;   /* which type the layers were built for (so we rebuild if type changes) */
-var radarLayerLoaded=[];   /* tracks which layers have finished loading tiles for the current view */
-var radarMapMoveHandler=null;  /* tracks map zoom/move to reset load state */
+var radarBaseOpacity=0.7;
+var radarBuiltType=null;
+/* 3-LAYER ROLLING BUFFER: instead of creating all 13 layers at once (which
+   overloads the browser's 6-connection-per-host limit and causes slow tile
+   loading + glitching), we keep only 3 layers on the map at any time:
+   - radarLayerPrev: the frame before current (for smooth backward stepping)
+   - radarLayerCurrent: the currently displayed frame
+   - radarLayerNext: the frame after current (preloading for smooth forward play)
+   When advancing, we rotate: old prev is removed, current→prev, next→current,
+   and a new next is created. This limits concurrent tile requests to ~30
+   instead of ~130, making animation smooth and glitch-free. */
+var radarLayerPrev=null;
+var radarLayerCurrent=null;
+var radarLayerNext=null;
+var radarMapMoveHandler=null;
 
-/* Fetch ALL radar frames from RainViewer (not just the latest). The API
-   returns up to 13 past frames. We store them all so the user can
-   animate through them. Results cached in radarFrames. */
+/* Fetch ALL radar frames from RainViewer. */
 async function fetchRadarFrames(){
   if(radarFrames.length>0)return radarFrames;
   try{
@@ -2480,8 +2498,7 @@ async function fetchRadarFrames(){
   return [];
 }
 
-/* Build the RainViewer tile URL for a given type and path. Uses 256px tiles
-   with no zoomOffset for correct alignment at fractional zoom levels. */
+/* Build the RainViewer tile URL for a given type and path. */
 function buildRadarTileUrl(type,path){
   var size=256;
   var color,smooth,snow;
@@ -2493,61 +2510,113 @@ function buildRadarTileUrl(type,path){
   return 'https://tilecache.rainviewer.com'+path+'/'+size+'/{z}/{x}/{y}/'+color+'/'+smooth+'_'+snow+'.png';
 }
 
-/* Show the radar frame at the given index. Uses DOUBLE-BUFFERING to prevent
-   flashing: the old frame stays visible until the new frame's tiles are
-   fully loaded, then we swap opacities instantly. This eliminates the blank
-   gap that causes flashing when tiles haven't finished loading yet.
+/* Create a single radar tile layer with the standard options. */
+function createRadarTileLayer(type,frame){
+  if(!frame)return null;
+  var url=buildRadarTileUrl(type,frame.path);
+  return L.tileLayer(url,{
+    opacity:0,
+    maxZoom:18,
+    maxNativeZoom:20,
+    attribution:'Radar: <a href="https://www.rainviewer.com/">RainViewer</a>',
+    crossOrigin:true
+  });
+}
 
-   If the target frame's tiles are already loaded, the swap is instant.
-   If they're still loading, the old frame stays visible until the 'load'
-   event fires on the target layer, then the swap happens. This means the
-   animation might slow down during tile loading (waiting for tiles), but
-   it will NEVER flash or show blank areas. */
+/* Show the radar frame at the given index using the 3-layer rolling buffer.
+   - If the target is the current frame, do nothing.
+   - If the target is the next or prev frame, just swap opacities (instant).
+   - If the target is further away, rebuild the 3-layer buffer around it.
+   The old frame stays visible until the new frame's tiles are loaded
+   (double-buffering via the 'load' event), preventing flashing. */
 function radarShowFrame(idx){
-  if(radarFrames.length===0||radarLayers.length===0)return;
+  if(radarFrames.length===0)return;
   if(idx<0)idx=0;
-  if(idx>=radarLayers.length)idx=radarLayers.length-1;
-  /* Update UI regardless of whether tiles are loaded */
+  if(idx>=radarFrames.length)idx=radarFrames.length-1;
   radarUpdateUI(idx);
-  /* If the target frame is the same as current, do nothing */
-  if(idx===radarCurrentFrame&&radarLayers[radarCurrentFrame]){
-    radarLayers[radarCurrentFrame].setOpacity(radarBaseOpacity);
+  /* Same frame - just ensure it's visible */
+  if(idx===radarCurrentFrame){
+    if(radarLayerCurrent)radarLayerCurrent.setOpacity(radarBaseOpacity);
     return;
   }
   var oldIdx=radarCurrentFrame;
-  var newLayer=radarLayers[idx];
-  var oldLayer=radarLayers[oldIdx];
-  if(!newLayer)return;
-  /* Check if the new frame's tiles are loaded */
-  if(radarLayerLoaded[idx]){
-    /* Tiles are ready - swap instantly */
-    doRadarSwap(idx,oldIdx);
-  }else{
-    /* Tiles not ready - wait for load event, then swap.
-       The old frame stays visible (no flashing). */
-    newLayer.once('load',function(){
-      /* Only swap if we haven't moved to a different frame in the meantime */
-      if(radarCurrentFrame===oldIdx){
-        doRadarSwap(idx,oldIdx);
-      }
-    });
-  }
-  radarCurrentFrame=idx;
-}
-
-/* Actually perform the opacity swap: hide old frame, show new frame. */
-function doRadarSwap(newIdx,oldIdx){
-  /* Hide ALL layers except the target, then show the target */
-  for(var i=0;i<radarLayers.length;i++){
-    if(i===newIdx){
-      radarLayers[i].setOpacity(radarBaseOpacity);
-    }else{
-      radarLayers[i].setOpacity(0);
+  /* If target is the preloaded next frame, just rotate the buffer forward */
+  if(idx===oldIdx+1&&radarLayerNext){
+    /* Rotate: prev→remove, current→prev, next→current, create new next */
+    if(radarLayerPrev){
+      alertMapInstance.removeLayer(radarLayerPrev);
     }
+    radarLayerPrev=radarLayerCurrent;
+    radarLayerCurrent=radarLayerNext;
+    radarLayerNext=null;
+    /* Show current immediately (it was preloaded), hide prev */
+    if(radarLayerCurrent)radarLayerCurrent.setOpacity(radarBaseOpacity);
+    if(radarLayerPrev)radarLayerPrev.setOpacity(0);
+    /* Preload the new next frame */
+    var nextIdx=idx+1;
+    if(nextIdx<radarFrames.length){
+      radarLayerNext=createRadarTileLayer(radarType,radarFrames[nextIdx]);
+      if(radarLayerNext)radarLayerNext.addTo(alertMapInstance);
+    }
+    radarCurrentFrame=idx;
+    return;
+  }
+  /* If target is the preloaded prev frame, rotate backward */
+  if(idx===oldIdx-1&&radarLayerPrev){
+    if(radarLayerNext){
+      alertMapInstance.removeLayer(radarLayerNext);
+    }
+    radarLayerNext=radarLayerCurrent;
+    radarLayerCurrent=radarLayerPrev;
+    radarLayerPrev=null;
+    if(radarLayerCurrent)radarLayerCurrent.setOpacity(radarBaseOpacity);
+    if(radarLayerNext)radarLayerNext.setOpacity(0);
+    var prevIdx=idx-1;
+    if(prevIdx>=0){
+      radarLayerPrev=createRadarTileLayer(radarType,radarFrames[prevIdx]);
+      if(radarLayerPrev)radarLayerPrev.addTo(alertMapInstance);
+    }
+    radarCurrentFrame=idx;
+    return;
+  }
+  /* Target is far from current - rebuild the 3-layer buffer.
+     Keep old current visible until new current's tiles load. */
+  var newCurrent=createRadarTileLayer(radarType,radarFrames[idx]);
+  if(!newCurrent)return;
+  newCurrent.addTo(alertMapInstance);
+  /* Wait for new current to load, then swap */
+  newCurrent.once('load',function(){
+    /* Hide all old layers, show new current */
+    if(radarLayerCurrent)radarLayerCurrent.setOpacity(0);
+    newCurrent.setOpacity(radarBaseOpacity);
+    /* Remove old layers after the swap */
+    if(radarLayerPrev){alertMapInstance.removeLayer(radarLayerPrev);radarLayerPrev=null}
+    if(radarLayerNext){alertMapInstance.removeLayer(radarLayerNext);radarLayerNext=null}
+    /* Old current is no longer needed (it was the previous frame's view) */
+    if(radarLayerCurrent&&radarLayerCurrent!==newCurrent){
+      alertMapInstance.removeLayer(radarLayerCurrent);
+    }
+    radarLayerPrev=null;
+    radarLayerCurrent=newCurrent;
+    /* Preload next and prev */
+    if(idx+1<radarFrames.length){
+      radarLayerNext=createRadarTileLayer(radarType,radarFrames[idx+1]);
+      if(radarLayerNext)radarLayerNext.addTo(alertMapInstance);
+    }
+    if(idx-1>=0){
+      radarLayerPrev=createRadarTileLayer(radarType,radarFrames[idx-1]);
+      if(radarLayerPrev)radarLayerPrev.addTo(alertMapInstance);
+    }
+    radarCurrentFrame=idx;
+  });
+  /* If tiles are already cached, 'load' may fire synchronously - force it */
+  if(newCurrent._loaded){
+    newCurrent.setOpacity(radarBaseOpacity);
+    if(radarLayerCurrent)radarLayerCurrent.setOpacity(0);
   }
 }
 
-/* Update the animation UI elements (frame label, timeline, time display). */
+/* Update the animation UI elements. */
 function radarUpdateUI(idx){
   var labelEl=document.getElementById('amRadarFrameLabel');
   if(labelEl)labelEl.textContent=(idx+1)+'/'+radarFrames.length;
@@ -2578,11 +2647,7 @@ function radarSeekTo(idx){
   radarShowFrame(parseInt(idx,10));
 }
 
-/* Toggle play/pause of the radar animation. When playing, advances one
-   frame every 500ms, wrapping around when it reaches the end.
-   Uses 500ms (not faster) to give tiles time to load between frames.
-   The double-buffering in radarShowFrame prevents flashing even if tiles
-   aren't ready - it just waits for the load event. */
+/* Toggle play/pause of the radar animation. 500ms per frame. */
 function radarTogglePlay(){
   radarPlaying=!radarPlaying;
   var btn=document.getElementById('amRadarPlayBtn');
@@ -2601,69 +2666,42 @@ function radarTogglePlay(){
   }
 }
 
-/* Called when the radar type dropdown changes. Rebuilds all 13 layers with
-   the new color scheme (different tile URLs), then shows the current frame. */
+/* Called when the radar type dropdown changes. Rebuilds layers with new type. */
 function onRadarTypeChanged(){
   var typeSel=document.getElementById('amRadarType');
   if(!typeSel)return;
   var newType=typeSel.value;
   if(newType===radarBuiltType)return;
-  if(radarLayers.length>0){
-    rebuildRadarLayers(newType);
+  radarType=newType;
+  radarBuiltType=newType;
+  /* Rebuild the 3-layer buffer with the new color scheme */
+  if(radarLayerCurrent){
+    var idx=radarCurrentFrame;
+    var newLayer=createRadarTileLayer(newType,radarFrames[idx]);
+    if(newLayer){
+      newLayer.addTo(alertMapInstance);
+      newLayer.once('load',function(){
+        if(radarLayerCurrent)radarLayerCurrent.setOpacity(0);
+        newLayer.setOpacity(radarBaseOpacity);
+        if(radarLayerCurrent)alertMapInstance.removeLayer(radarLayerCurrent);
+        radarLayerCurrent=newLayer;
+        /* Rebuild prev and next */
+        if(radarLayerPrev){alertMapInstance.removeLayer(radarLayerPrev);radarLayerPrev=null}
+        if(radarLayerNext){alertMapInstance.removeLayer(radarLayerNext);radarLayerNext=null}
+        if(idx-1>=0){
+          radarLayerPrev=createRadarTileLayer(newType,radarFrames[idx-1]);
+          if(radarLayerPrev)radarLayerPrev.addTo(alertMapInstance);
+        }
+        if(idx+1<radarFrames.length){
+          radarLayerNext=createRadarTileLayer(newType,radarFrames[idx+1]);
+          if(radarLayerNext)radarLayerNext.addTo(alertMapInstance);
+        }
+      });
+    }
   }
 }
 
-/* Rebuild all 13 tile layers with a new type (color scheme). Removes old
-   layers, creates new ones with the new URLs, and shows the current frame. */
-function rebuildRadarLayers(type){
-  radarLayers.forEach(function(l){alertMapInstance.removeLayer(l)});
-  radarLayers=[];
-  radarLayerLoaded=[];
-  radarBuiltType=type;
-  radarType=type;
-  radarFrames.forEach(function(frame,idx){
-    var url=buildRadarTileUrl(type,frame.path);
-    var layer=L.tileLayer(url,{
-      opacity:0,
-      maxZoom:18,
-      maxNativeZoom:20,
-      attribution:'Radar: <a href="https://www.rainviewer.com/">RainViewer</a>',
-      crossOrigin:true
-    }).addTo(alertMapInstance);
-    /* Track when this layer's tiles finish loading */
-    (function(layerIdx){
-      layer.on('load',function(){radarLayerLoaded[layerIdx]=true});
-      layer.on('loading',function(){radarLayerLoaded[layerIdx]=false});
-    })(idx);
-    radarLayers.push(layer);
-  });
-  radarShowFrame(radarCurrentFrame);
-}
-
-/* Create a single radar tile layer and set up its load tracking. Returns
-   the layer. Used by toggleRadarOverlay and the auto-refresh. */
-function createRadarLayer(type,frame,idx){
-  var url=buildRadarTileUrl(type,frame.path);
-  var layer=L.tileLayer(url,{
-    opacity:0,
-    maxZoom:18,
-    maxNativeZoom:20,
-    attribution:'Radar: <a href="https://www.rainviewer.com/">RainViewer</a>',
-    crossOrigin:true
-  }).addTo(alertMapInstance);
-  /* Track tile load state for double-buffering */
-  (function(layerIdx){
-    layer.on('load',function(){radarLayerLoaded[layerIdx]=true});
-    layer.on('loading',function(){radarLayerLoaded[layerIdx]=false});
-  })(idx);
-  return layer;
-}
-
-/* Toggle the radar overlay on/off. Fetches all frames, creates all 13 tile
-   layers at once (preloading them), and shows the latest frame.
-   Uses double-buffering: the old frame stays visible until the new frame's
-   tiles are loaded, preventing flashing. Map zoom/move events reset the
-   load state so the system knows tiles need to reload. */
+/* Toggle the radar overlay on/off. Uses the 3-layer rolling buffer. */
 async function toggleRadarOverlay(){
   if(!alertMapInstance)initAlertMap();
   if(!alertMapInstance)return;
@@ -2671,12 +2709,10 @@ async function toggleRadarOverlay(){
   var typeSel=document.getElementById('amRadarType');
   var opacityEl=document.getElementById('amRadarOpacity');
   /* Remove existing radar layers and stop animation */
-  if(radarLayers.length>0){
-    radarLayers.forEach(function(l){alertMapInstance.removeLayer(l)});
-    radarLayers=[];
-  }
+  if(radarLayerPrev){alertMapInstance.removeLayer(radarLayerPrev);radarLayerPrev=null}
+  if(radarLayerCurrent){alertMapInstance.removeLayer(radarLayerCurrent);radarLayerCurrent=null}
+  if(radarLayerNext){alertMapInstance.removeLayer(radarLayerNext);radarLayerNext=null}
   if(radarPlaying)radarTogglePlay();
-  /* Remove old map move handler */
   if(radarMapMoveHandler){
     alertMapInstance.off('zoomstart',radarMapMoveHandler);
     alertMapInstance.off('movestart',radarMapMoveHandler);
@@ -2689,7 +2725,7 @@ async function toggleRadarOverlay(){
   /* Fetch all radar frames */
   var frames=await fetchRadarFrames();
   if(frames.length===0){
-    console.warn('[Radar] No frames available - RainViewer API may be down');
+    console.warn('[Radar] No frames available');
     if(cb)cb.checked=false;
     return;
   }
@@ -2697,51 +2733,63 @@ async function toggleRadarOverlay(){
   radarType=type;
   radarBuiltType=type;
   radarBaseOpacity=opacityEl?(parseInt(opacityEl.value,10)/100):0.7;
-  radarLayerLoaded=[];
-  /* Create all 13 tile layers at once. They all start at opacity 0 (hidden).
-     Adding them to the map triggers tile loading in the background. */
-  frames.forEach(function(frame,idx){
-    radarLayers.push(createRadarLayer(type,frame,idx));
-  });
-  console.log('[Radar] Preloaded',radarLayers.length,'tile layers with double-buffering');
-  /* Set up map zoom/move handler to reset load state. When the map moves,
-     all layers need to reload tiles for the new viewport. We mark all
-     layers as unloaded so the double-buffering system knows to wait. */
+  /* Start on the latest frame (most recent) */
+  var startIdx=frames.length-1;
+  radarCurrentFrame=startIdx;
+  /* Create the current layer and show it */
+  radarLayerCurrent=createRadarTileLayer(type,frames[startIdx]);
+  if(radarLayerCurrent){
+    radarLayerCurrent.addTo(alertMapInstance);
+    radarLayerCurrent.setOpacity(radarBaseOpacity);
+  }
+  /* Preload prev (if exists) */
+  if(startIdx-1>=0){
+    radarLayerPrev=createRadarTileLayer(type,frames[startIdx-1]);
+    if(radarLayerPrev)radarLayerPrev.addTo(alertMapInstance);
+  }
+  radarUpdateUI(startIdx);
+  console.log('[Radar] 3-layer rolling buffer initialized at frame',startIdx+1,'/',frames.length);
+  /* Set up map zoom/move handler to mark tiles as needing reload */
   radarMapMoveHandler=function(){
-    for(var i=0;i<radarLayerLoaded.length;i++){
-      radarLayerLoaded[i]=false;
-    }
-    console.log('[Radar] Map moved - resetting tile load state');
+    console.log('[Radar] Map moved - tiles will reload');
   };
   alertMapInstance.on('zoomstart',radarMapMoveHandler);
   alertMapInstance.on('movestart',radarMapMoveHandler);
-  /* Start on the latest frame (most recent) */
-  radarShowFrame(frames.length-1);
   /* Auto-refresh every 5 minutes */
   if(radarRefreshTimer)clearInterval(radarRefreshTimer);
   radarRefreshTimer=setInterval(async function(){
     radarFrames=[];
     var newFrames=await fetchRadarFrames();
     if(newFrames.length>0&&cb&&cb.checked){
-      radarLayers.forEach(function(l){alertMapInstance.removeLayer(l)});
-      radarLayers=[];
-      radarLayerLoaded=[];
-      newFrames.forEach(function(frame,idx){
-        radarLayers.push(createRadarLayer(radarType,frame,idx));
-      });
-      radarShowFrame(radarLayers.length-1);
+      /* Remove old layers */
+      if(radarLayerPrev){alertMapInstance.removeLayer(radarLayerPrev);radarLayerPrev=null}
+      if(radarLayerCurrent){alertMapInstance.removeLayer(radarLayerCurrent);radarLayerCurrent=null}
+      if(radarLayerNext){alertMapInstance.removeLayer(radarLayerNext);radarLayerNext=null}
+      /* Rebuild on latest */
+      var idx=newFrames.length-1;
+      radarCurrentFrame=idx;
+      radarLayerCurrent=createRadarTileLayer(radarType,newFrames[idx]);
+      if(radarLayerCurrent){
+        radarLayerCurrent.addTo(alertMapInstance);
+        radarLayerCurrent.setOpacity(radarBaseOpacity);
+      }
+      if(idx-1>=0){
+        radarLayerPrev=createRadarTileLayer(radarType,newFrames[idx-1]);
+        if(radarLayerPrev)radarLayerPrev.addTo(alertMapInstance);
+      }
+      radarUpdateUI(idx);
       console.log('[Radar] Auto-refreshed to',newFrames.length,'frames');
     }
   },5*60*1000);
 }
 
-/* Update just the opacity of the currently visible radar layer. */
+/* Update the opacity of the current radar layer. */
 function updateRadarOpacity(){
   var opacityEl=document.getElementById('amRadarOpacity');
   if(!opacityEl)return;
   radarBaseOpacity=parseInt(opacityEl.value,10)/100;
-  if(radarLayers.length>0&&radarLayers[radarCurrentFrame]){
-    radarLayers[radarCurrentFrame].setOpacity(radarBaseOpacity);
+  if(radarLayerCurrent){
+    radarLayerCurrent.setOpacity(radarBaseOpacity);
   }
 }
 
