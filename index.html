@@ -926,25 +926,25 @@ body.capturing .hamburger-menu{display:none!important}
 <div id="view-weatherfeeds" class="tab-view">
   <div class="wf-feeds-wrap">
     <div class="wf-feeds-grid" id="wfFeedsGrid">
-      <!-- Twitter: NWS Tornado -->
+      <!-- Twitter: NWS Tornado - using iframe embed for reliability -->
       <div class="wf-feed-card">
         <div class="wf-feed-header"><i class="fab fa-x-twitter"></i> NWS Tornado (X/Twitter)</div>
         <div class="wf-feed-body" id="tw-nwstornado">
-          <div style="padding:20px;text-align:center;color:var(--t3);font-size:11px"><i class="fas fa-spinner fa-spin" style="margin-right:6px"></i>Loading...</div>
+          <iframe src="https://syndication.twitter.com/srv/timeline-profile/screen-name/NWStornado?dnt=true&embedId=twitter-widget-0&frame=false&hideBorder=true&hideFooter=true&hideHeader=true&hideScrollBar=false&lang=en&maxHeight=600px&theme=dark&transparent=true" style="width:100%;border:none;min-height:600px;background:transparent" allowfullscreen scrolling="yes"></iframe>
         </div>
       </div>
-      <!-- Twitter: NWS Storm Prediction Center -->
+      <!-- Twitter: NWS SPC -->
       <div class="wf-feed-card">
         <div class="wf-feed-header"><i class="fab fa-x-twitter"></i> NWS SPC (X/Twitter)</div>
         <div class="wf-feed-body" id="tw-nwsspc">
-          <div style="padding:20px;text-align:center;color:var(--t3);font-size:11px"><i class="fas fa-spinner fa-spin" style="margin-right:6px"></i>Loading...</div>
+          <iframe src="https://syndication.twitter.com/srv/timeline-profile/screen-name/NWSPC?dnt=true&embedId=twitter-widget-0&frame=false&hideBorder=true&hideFooter=true&hideHeader=true&hideScrollBar=false&lang=en&maxHeight=600px&theme=dark&transparent=true" style="width:100%;border:none;min-height:600px;background:transparent" allowfullscreen scrolling="yes"></iframe>
         </div>
       </div>
       <!-- Twitter: NWS -->
       <div class="wf-feed-card">
         <div class="wf-feed-header"><i class="fab fa-x-twitter"></i> NWS (X/Twitter)</div>
         <div class="wf-feed-body" id="tw-nws">
-          <div style="padding:20px;text-align:center;color:var(--t3);font-size:11px"><i class="fas fa-spinner fa-spin" style="margin-right:6px"></i>Loading...</div>
+          <iframe src="https://syndication.twitter.com/srv/timeline-profile/screen-name/NWS?dnt=true&embedId=twitter-widget-0&frame=false&hideBorder=true&hideFooter=true&hideHeader=true&hideScrollBar=false&lang=en&maxHeight=600px&theme=dark&transparent=true" style="width:100%;border:none;min-height:600px;background:transparent" allowfullscreen scrolling="yes"></iframe>
         </div>
       </div>
       <!-- SPC Watches RSS -->
@@ -964,7 +964,7 @@ body.capturing .hamburger-menu{display:none!important}
       </div>
       <!-- NWS All Active Alerts RSS -->
       <div class="wf-feed-card">
-        <div class="wf-feed-header"><i class="fas fa-triangle-exclamation"></i> NWS Active Alerts</div>
+        <div class="wf-feed-header"><i class="fas fa-newspaper"></i> NWS Headlines</div>
         <div class="wf-feed-body" id="rss-nws-alerts"><div class="wf-rss-empty">Loading...</div></div>
       </div>
     </div>
@@ -3187,8 +3187,8 @@ function loadWeatherFeeds(){
   fetchRssFeed('https://www.spc.noaa.gov/products/spcwwrss.xml','rss-spc-watches');
   fetchRssFeed('https://www.spc.noaa.gov/products/spcmdrss.xml','rss-spc-meso');
   fetchRssFeed('https://www.spc.noaa.gov/products/spcacrss.xml','rss-spc-outlooks');
-  /* NWS alerts - use the Atom feed */
-  fetchRssFeed('https://www.weather.gov/alerts/feed','rss-nws-alerts');
+  /* NWS news/headlines feed (correct URL - the old alerts/feed returned HTML) */
+  fetchRssFeed('https://www.weather.gov/rss_page.php?site_name=nws','rss-nws-alerts');
 }
 
 /* Load Twitter/X timeline widgets. The SDK (widgets.js) loads async, so we
@@ -3290,17 +3290,27 @@ async function fetchRssFeed(url,elementId){
           timeStr=d.toLocaleString('en-US',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit',hour12:true});
         }catch(e){timeStr=pubDate}
       }
-      /* Strip HTML from description for the summary */
+      /* Extract image URL from the description HTML (SPC feeds embed
+         images like <img src="https://www.spc.noaa.gov/products/watch/ww0484_radar.gif">).
+         We parse the description as HTML and look for <img> tags. */
+      var imgUrl='';
       var summary='';
       if(desc){
         var tmp=document.createElement('div');
         tmp.innerHTML=desc;
+        /* Find the first image */
+        var imgEl=tmp.querySelector('img');
+        if(imgEl&&imgEl.src){
+          imgUrl=imgEl.src;
+        }
+        /* Strip HTML for the text summary */
         summary=tmp.textContent||tmp.innerText||'';
         if(summary.length>200)summary=summary.substring(0,200)+'...';
       }
       html+='<div class="wf-rss-item" onclick="window.open(\''+link.replace(/'/g,"\\'")+'\',\'_blank\')">'+
         '<div class="wf-rss-title">'+escapeHtml(title)+'</div>'+
         (timeStr?'<div class="wf-rss-time">'+timeStr+'</div>':'')+
+        (imgUrl?'<img src="'+imgUrl+'" style="width:100%;max-width:300px;height:auto;border-radius:4px;margin:4px 0;border:1px solid var(--bdr);display:block" loading="lazy" onerror="this.style.display=\'none\'">':'')+
         (summary?'<div class="wf-rss-summary">'+escapeHtml(summary)+'</div>':'')+
         '</div>';
     }
