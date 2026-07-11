@@ -126,11 +126,11 @@ body{
   background:#050505;
 }
 #alertMap{height:100%;width:100%;background:#050505;z-index:1;touch-action:none}
-/* Alert count badge (top-left of map area, positioned below the Leaflet
-   zoom control so it doesn't cover the + / - buttons) */
+/* Alert count badge (top-right of map area, below the Leaflet zoom controls
+   which are now at topright) */
 .alert-map-count{
-  position:absolute;top:75px;left:10px;z-index:1000;
-  background:rgba(10,10,10,.92);
+  position:absolute;top:75px;right:10px;z-index:1000;
+  background:rgba(10,10,10,.85);
   border:1px solid var(--acc);
   border-radius:var(--rs);
   padding:6px 12px;
@@ -141,19 +141,19 @@ body{
   max-width:calc(100% - 20px);
 }
 .alert-map-count i{font-size:10px;opacity:.8}
-/* Controls panel (top-right of map area) */
+/* Controls panel (top-LEFT of map area, collapsed by default, transparent) */
 .alert-map-controls{
-  position:absolute;top:10px;right:10px;z-index:1000;
-  background:rgba(10,10,10,.92);
+  position:absolute;top:10px;left:10px;z-index:1000;
+  background:rgba(10,10,10,.75);
   border:1px solid var(--bdr);
   border-radius:var(--rs);
   padding:0;
   backdrop-filter:blur(12px);
   -webkit-backdrop-filter:blur(12px);
-  max-width:230px;
+  max-width:200px;
   max-height:calc(100% - 20px);
   display:flex;flex-direction:column;
-  font-size:11px;
+  font-size:10px;
 }
 .alert-map-controls-toggle{
   display:flex;align-items:center;justify-content:space-between;gap:8px;
@@ -364,11 +364,12 @@ body{
   .app-header .actions .stat{display:none}
   .app-header .actions .btn-label{display:none}
   .app-header .actions button{padding:7px 10px}
-  /* Mobile: panels are scrollable and sized to fit the screen */
-  .alert-map-controls{max-width:calc(100vw - 20px);max-height:calc(100vh - 160px);top:8px;right:10px;left:10px;font-size:10px}
-  .alert-map-controls-body{max-height:calc(100vh - 220px);padding:0 10px 8px 10px}
-  .alert-map-legend{max-width:calc(100vw - 20px);max-height:200px;bottom:8px;left:10px;right:10px;font-size:9px}
-  .alert-map-count{font-size:10px;padding:5px 8px;top:68px;left:8px;max-width:calc(100vw - 16px)}
+  /* Mobile: Layers panel at top-left, compact and scrollable */
+  .alert-map-controls{max-width:180px;max-height:calc(100vh - 160px);top:8px;left:8px;font-size:9px}
+  .alert-map-controls-body{max-height:calc(100vh - 220px);padding:0 8px 6px 8px}
+  /* Alert count at top-right below zoom */
+  .alert-map-legend{max-width:180px;max-height:180px;bottom:8px;left:8px;font-size:9px}
+  .alert-map-count{font-size:9px;padding:4px 6px;top:68px;right:8px;max-width:calc(100vw - 100px)}
   .hamburger-menu{min-width:180px}
   /* Mobile popup: constrain width to viewport and shrink content */
   .leaflet-popup-content-wrapper{max-width:calc(100vw - 30px)!important}
@@ -406,7 +407,7 @@ body{
 /* ── Landscape phone adjustments ── */
 @media (max-width:900px) and (orientation:landscape){
   .app-header .brand .titles .sub{display:none}
-  .alert-map-count{top:60px}
+  .alert-map-count{top:60px;right:8px}
   .wf-feeds-grid{grid-template-columns:repeat(2,1fr)}
   .wf-feed-body{max-height:300px}
 }
@@ -745,7 +746,7 @@ body.capturing .hamburger-menu{display:none!important}
   <div id="alertMap"></div>
   <div class="alert-map-count" id="alertMapCount"><i class="fas fa-satellite-dish"></i> Loading alerts...</div>
 
-  <div class="alert-map-controls" id="alertMapControls">
+  <div class="alert-map-controls collapsed" id="alertMapControls">
     <div class="alert-map-controls-toggle" onclick="var c=document.getElementById('alertMapControls');c.classList.toggle('collapsed')">
       <span><i class="fas fa-sliders"></i> Layers &amp; Filters</span>
       <i class="fas fa-chevron-down"></i>
@@ -1177,8 +1178,12 @@ function initAlertMap(){
     zoomSnap:0.25,
     zoomDelta:0.25,
     wheelPxPerZoomLevel:120,
-    worldCopyJump:true
+    worldCopyJump:true,
+    zoomControl:false  /* disable default; we add it at topright below */
   }).setView([39.0,-98.0],4);
+  /* Place zoom controls at top-right so they don't conflict with the
+     Layers & Filters panel which is at top-left. */
+  L.control.zoom({position:'topright'}).addTo(alertMapInstance);
 
   /* Capture last click position for popup overlap detection */
   alertMapInstance.on('click',function(e){
