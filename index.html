@@ -758,6 +758,10 @@ body.capturing .hamburger-menu{display:none!important}
     <i class="fas fa-rotate"></i>
     <span>Refresh Data</span>
   </div>
+  <div class="hamburger-menu-item" onclick="hardRefreshApp()">
+    <i class="fas fa-arrows-rotate"></i>
+    <span>Update App (Hard Refresh)</span>
+  </div>
   <div class="hamburger-menu-item" onclick="captureScreenshot()">
     <i class="fas fa-camera"></i>
     <span>Screenshot</span>
@@ -2422,6 +2426,68 @@ function manualRefresh(){
   ZONE_GEOMETRY_CACHE={};
   fAlertMap();
 }
+
+/* ── Hard refresh: clears all caches and reloads the app from the server ──
+   This is used to force-update the PWA when new code changes have been
+   pushed to GitHub Pages. The service worker caches static assets, so a
+   normal page reload may serve old cached files. This function:
+   1. Clears ALL Cache API caches (service worker caches)
+   2. Unregisters the service worker
+   3. Clears localStorage (zone cache, alert visibility settings, etc.)
+   4. Reloads the page from the server (bypassing all caches)
+   After this, the latest version of the app is fetched fresh from the server. */
+async function hardRefreshApp(){
+  /* Close the hamburger menu */
+  var menu=document.getElementById('hamburgerMenu');
+  var btn=document.getElementById('hamburgerBtn');
+  if(menu)menu.classList.remove('visible');
+  if(btn)btn.classList.remove('open');
+  /* Show a brief message */
+  var countEl=document.getElementById('alertMapCount');
+  if(countEl)countEl.innerHTML='<i class="fas fa-arrows-rotate fa-spin"></i> Updating app...';
+  /* Step 1: Clear all Cache API caches */
+  try{
+    if('caches' in window){
+      var cacheNames=await caches.keys();
+      await Promise.all(cacheNames.map(function(name){
+        console.log('[HardRefresh] Deleting cache:',name);
+        return caches.delete(name);
+      }));
+    }
+  }catch(e){console.warn('[HardRefresh] Cache clear error:',e)}
+  /* Step 2: Unregister the service worker */
+  try{
+    if('serviceWorker' in navigator){
+      var registrations=await navigator.serviceWorker.getRegistrations();
+      await Promise.all(registrations.map(function(reg){
+        console.log('[HardRefresh] Unregistering service worker');
+        return reg.unregister();
+      }));
+    }
+  }catch(e){console.warn('[HardRefresh] SW unregister error:',e)}
+  /* Step 3: Clear localStorage caches (but keep alert visibility preferences) */
+  try{
+    /* Save alert visibility settings so they survive the hard refresh */
+    var savedHidden=localStorage.getItem('us_nws_alert_hidden_types');
+    var savedZoneCache=localStorage.getItem('us_nws_zone_geom_v1');
+    var savedSpcCache=localStorage.getItem('us_nws_spc_geojson_v1');
+    /* Clear everything */
+    localStorage.clear();
+    /* Restore visibility settings (user preferences should survive) */
+    if(savedHidden)localStorage.setItem('us_nws_alert_hidden_types',savedHidden);
+    /* Don't restore zone/spc caches - we want fresh data */
+  }catch(e){console.warn('[HardRefresh] localStorage clear error:',e)}
+  /* Step 4: Reload from server (bypass cache).
+     Using location.reload() which in most browsers fetches from server
+     when the service worker is unregistered. Adding a cache-busting
+     query param as extra insurance. */
+  console.log('[HardRefresh] Reloading page from server...');
+  /* Small delay so the console messages are visible */
+  setTimeout(function(){
+    window.location.href=window.location.origin+window.location.pathname+'?v='+Date.now();
+  },300);
+}
+window.hardRefreshApp=hardRefreshApp;
 
 /* ── Live indicator pulse ───────────────────────────────────────────────── */
 function updateLiveTime(){
