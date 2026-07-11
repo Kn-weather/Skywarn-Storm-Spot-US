@@ -391,11 +391,11 @@ body{
   .alert-map-legend{max-width:180px;max-height:200px;bottom:8px;left:8px;font-size:9px}
   .hamburger-menu{min-width:180px}
   /* Mobile popup: constrain width to viewport and shrink content */
-  .leaflet-popup-content-wrapper{max-width:calc(100vw - 30px)!important}
-  .leaflet-popup-content{max-width:calc(100vw - 50px)!important;font-size:10px!important;margin:8px 10px!important}
-  .leaflet-popup-content h3{font-size:12px!important}
-  .leaflet-popup-content table{font-size:9px!important}
-  .leaflet-popup-content .shot-desc-box{max-height:150px!important;font-size:9px!important}
+  .leaflet-popup-content-wrapper{max-width:calc(100vw - 20px)!important}
+  .leaflet-popup-content{max-width:calc(100vw - 30px)!important;font-size:9px!important;margin:6px 8px!important}
+  .leaflet-popup-content h3{font-size:11px!important}
+  .leaflet-popup-content table{font-size:8px!important}
+  .leaflet-popup-content .shot-desc-box{max-height:100px!important;font-size:8px!important}
   /* Single-column feeds on mobile */
   .wf-feeds-grid{grid-template-columns:1fr}
   .wf-feed-body{max-height:500px}
@@ -1448,56 +1448,56 @@ function renderAlertPopupContent(idx){
   alertPopupState.currentIndex=idx;
   var a=alerts[idx];
   var color=a.color;
-  var html='<div style="font-family:Inter,sans-serif;font-size:11px;max-width:380px">'+
+  /* Compact popup: ~220px max-width (about half the previous 380px).
+     All font sizes and spacing reduced to fit more content in less space
+     while keeping every section (event, sender, headline, timestamps,
+     areas, description, instructions). */
+  var html='<div style="font-family:Inter,sans-serif;font-size:9px;max-width:220px;line-height:1.35">'+
     /* Header: colored event name */
-    '<h3 style="font-size:14px;color:'+color+';margin-bottom:4px;font-weight:700">'+a.event+'</h3>';
+    '<h3 style="font-size:11px;color:'+color+';margin-bottom:2px;font-weight:700;line-height:1.2">'+a.event+'</h3>';
   /* Sender (NWS office) */
   if(a.senderName){
-    html+='<div style="font-size:10px;color:var(--t3);margin-bottom:8px"><i class="fas fa-satellite-dish" style="margin-right:4px"></i>'+a.senderName+'</div>';
+    html+='<div style="font-size:8px;color:var(--t3);margin-bottom:4px"><i class="fas fa-satellite-dish" style="margin-right:3px"></i>'+a.senderName+'</div>';
   }
-  /* Prev/next navigation if multiple alerts overlap. The buttons use
-     event.stopPropagation() to prevent the click from bubbling up to
-     Leaflet's map handler (which would close the popup). The
-     event.preventDefault() + return false prevents any form-submission
-     default behavior. */
+  /* Prev/next navigation if multiple alerts overlap. */
   if(alerts.length>1){
-    html+='<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;padding:4px 8px;background:rgba(255,115,0,.1);border-radius:4px">'+
-      '<button type="button" onclick="event.stopPropagation();event.preventDefault();cycleAlertPopup(-1);return false;" style="background:rgba(255,115,0,.12);border:1px solid var(--bdr-a);color:var(--acc);width:24px;height:24px;border-radius:4px;cursor:pointer;font-size:10px;display:flex;align-items:center;justify-content:center"><i class="fas fa-chevron-left"></i></button>'+
-      '<span style="font-size:9px;color:var(--t2);font-weight:600">'+(idx+1)+' of '+alerts.length+' alerts</span>'+
-      '<button type="button" onclick="event.stopPropagation();event.preventDefault();cycleAlertPopup(1);return false;" style="background:rgba(255,115,0,.12);border:1px solid var(--bdr-a);color:var(--acc);width:24px;height:24px;border-radius:4px;cursor:pointer;font-size:10px;display:flex;align-items:center;justify-content:center"><i class="fas fa-chevron-right"></i></button>'+
+    html+='<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;padding:2px 6px;background:rgba(255,115,0,.1);border-radius:3px">'+
+      '<button type="button" onclick="event.stopPropagation();event.preventDefault();cycleAlertPopup(-1);return false;" style="background:rgba(255,115,0,.12);border:1px solid var(--bdr-a);color:var(--acc);width:20px;height:20px;border-radius:3px;cursor:pointer;font-size:8px;display:flex;align-items:center;justify-content:center;padding:0"><i class="fas fa-chevron-left"></i></button>'+
+      '<span style="font-size:8px;color:var(--t2);font-weight:600">'+(idx+1)+'/'+alerts.length+'</span>'+
+      '<button type="button" onclick="event.stopPropagation();event.preventDefault();cycleAlertPopup(1);return false;" style="background:rgba(255,115,0,.12);border:1px solid var(--bdr-a);color:var(--acc);width:20px;height:20px;border-radius:3px;cursor:pointer;font-size:8px;display:flex;align-items:center;justify-content:center;padding:0"><i class="fas fa-chevron-right"></i></button>'+
       '</div>';
   }
   /* Headline (NWS-formatted, usually bold/caps) */
   if(a.headline){
-    html+='<div style="background:rgba(255,255,255,.04);border-left:3px solid '+color+';padding:6px 8px;margin-bottom:8px;border-radius:3px;font-size:10px;font-weight:600;color:var(--t1);line-height:1.4">'+a.headline+'</div>';
+    html+='<div style="background:rgba(255,255,255,.04);border-left:2px solid '+color+';padding:4px 6px;margin-bottom:4px;border-radius:2px;font-size:8px;font-weight:600;color:var(--t1);line-height:1.3">'+a.headline+'</div>';
   }
   /* Timestamps table: Issued, Effective, Expires */
-  html+='<table style="width:100%;font-size:10px;border-collapse:collapse;margin-bottom:8px">'+
-    '<tr><td style="padding:2px 6px 2px 0;color:var(--t3);white-space:nowrap;vertical-align:top"><i class="fas fa-paper-plane" style="margin-right:4px;width:10px"></i>Issued</td><td style="padding:2px 0;color:var(--t2)">'+fmtNwsTime(a.sent)+'</td></tr>';
+  html+='<table style="width:100%;font-size:8px;border-collapse:collapse;margin-bottom:4px">'+
+    '<tr><td style="padding:1px 4px 1px 0;color:var(--t3);white-space:nowrap;vertical-align:top"><i class="fas fa-paper-plane" style="margin-right:3px;width:8px"></i>Issued</td><td style="padding:1px 0;color:var(--t2)">'+fmtNwsTime(a.sent)+'</td></tr>';
   if(a.onset&&a.onset!==a.sent){
-    html+='<tr><td style="padding:2px 6px 2px 0;color:var(--t3);white-space:nowrap;vertical-align:top"><i class="fas fa-clock" style="margin-right:4px;width:10px"></i>Onset</td><td style="padding:2px 0;color:var(--t2)">'+fmtNwsTime(a.onset)+'</td></tr>';
+    html+='<tr><td style="padding:1px 4px 1px 0;color:var(--t3);white-space:nowrap;vertical-align:top"><i class="fas fa-clock" style="margin-right:3px;width:8px"></i>Onset</td><td style="padding:1px 0;color:var(--t2)">'+fmtNwsTime(a.onset)+'</td></tr>';
   }
-  html+='<tr><td style="padding:2px 6px 2px 0;color:var(--t3);white-space:nowrap;vertical-align:top"><i class="fas fa-hourglass-end" style="margin-right:4px;width:10px"></i>Expires</td><td style="padding:2px 0;color:var(--t2)">'+fmtNwsTime(a.ends)+'</td></tr>'+
+  html+='<tr><td style="padding:1px 4px 1px 0;color:var(--t3);white-space:nowrap;vertical-align:top"><i class="fas fa-hourglass-end" style="margin-right:3px;width:8px"></i>Expires</td><td style="padding:1px 0;color:var(--t2)">'+fmtNwsTime(a.ends)+'</td></tr>'+
     '</table>';
   /* Affected areas */
   if(a.areaDesc&&a.areaDesc!=='Unknown'){
-    html+='<div style="margin-bottom:8px">'+
-      '<div style="font-size:9px;color:var(--t3);text-transform:uppercase;letter-spacing:.04em;margin-bottom:3px"><i class="fas fa-map-marker-alt" style="margin-right:4px"></i>Affected Areas</div>'+
-      '<div style="font-size:10px;color:var(--t2);line-height:1.5">'+a.areaDesc.replace(/;/g,';<br>')+'</div>'+
+    html+='<div style="margin-bottom:4px">'+
+      '<div style="font-size:7px;color:var(--t3);text-transform:uppercase;letter-spacing:.04em;margin-bottom:2px"><i class="fas fa-map-marker-alt" style="margin-right:3px"></i>Affected Areas</div>'+
+      '<div style="font-size:8px;color:var(--t2);line-height:1.4">'+a.areaDesc.replace(/;/g,';<br>')+'</div>'+
       '</div>';
   }
-  /* Full NWS description text (the big block with the actual weather info) */
+  /* Full NWS description text */
   if(a.description){
-    html+='<div style="margin-bottom:8px">'+
-      '<div style="font-size:9px;color:var(--t3);text-transform:uppercase;letter-spacing:.04em;margin-bottom:3px"><i class="fas fa-file-lines" style="margin-right:4px"></i>Description</div>'+
-      '<div class="shot-desc-box" style="font-size:10px;color:var(--t1);line-height:1.55;background:rgba(0,0,0,.2);padding:8px;border-radius:4px;border:1px solid var(--bdr);white-space:pre-wrap;max-height:300px;overflow-y:auto">'+a.description+'</div>'+
+    html+='<div style="margin-bottom:4px">'+
+      '<div style="font-size:7px;color:var(--t3);text-transform:uppercase;letter-spacing:.04em;margin-bottom:2px"><i class="fas fa-file-lines" style="margin-right:3px"></i>Description</div>'+
+      '<div class="shot-desc-box" style="font-size:8px;color:var(--t1);line-height:1.4;background:rgba(0,0,0,.2);padding:5px 6px;border-radius:3px;border:1px solid var(--bdr);white-space:pre-wrap;max-height:120px;overflow-y:auto">'+a.description+'</div>'+
       '</div>';
   }
   /* NWS recommended actions / instructions */
   if(a.instruction){
-    html+='<div style="margin-bottom:8px">'+
-      '<div style="font-size:9px;color:#fbbf24;text-transform:uppercase;letter-spacing:.04em;margin-bottom:3px"><i class="fas fa-triangle-exclamation" style="margin-right:4px"></i>Precautionary/Preparedness Actions</div>'+
-      '<div style="font-size:10px;color:var(--t1);line-height:1.55;background:rgba(251,191,36,.06);padding:8px;border-radius:4px;border:1px solid rgba(251,191,36,.2);white-space:pre-wrap">'+a.instruction+'</div>'+
+    html+='<div style="margin-bottom:4px">'+
+      '<div style="font-size:7px;color:#fbbf24;text-transform:uppercase;letter-spacing:.04em;margin-bottom:2px"><i class="fas fa-triangle-exclamation" style="margin-right:3px"></i>Precautionary/Preparedness Actions</div>'+
+      '<div style="font-size:8px;color:var(--t1);line-height:1.4;background:rgba(251,191,36,.06);padding:5px 6px;border-radius:3px;border:1px solid rgba(251,191,36,.2);white-space:pre-wrap">'+a.instruction+'</div>'+
       '</div>';
   }
   html+='</div>';
@@ -2027,7 +2027,7 @@ async function fAlertMap(){
           layer.on('click',function(e){
             var ll=e.latlng;
             var html=buildAlertPopup(ll);
-            L.popup({maxWidth:380,minWidth:280})
+            L.popup({maxWidth:240,minWidth:180})
               .setLatLng(ll)
               .setContent(html)
               .openOn(alertMapInstance);
