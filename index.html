@@ -123,9 +123,9 @@ body{
 /* Map container fills viewport below header */
 #mapWrap{
   position:fixed;top:calc(53px + env(safe-area-inset-top));left:0;right:0;bottom:0;
-  background:#050505;
+  background:#e0e0e0;
 }
-#alertMap{height:100%;width:100%;background:#050505;z-index:1;touch-action:none}
+#alertMap{height:100%;width:100%;background:#e0e0e0;z-index:1;touch-action:none}
 /* Controls panel (top-LEFT of map area, collapsed by default, transparent) */
 .alert-map-controls{
   position:absolute;top:10px;left:10px;z-index:1000;
@@ -1217,24 +1217,22 @@ function initAlertMap(){
     alertMapInstance._lastClickLatLng=e.latlng;
   });
 
-  /* CARTO dark basemap - matches original site aesthetic and supports CORS
-     for canvas rendering. */
-  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png',{
+  /* CARTO Voyager basemap - light gray theme that's easier to read in
+     screenshots than the dark black theme. CORS-enabled for canvas capture. */
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png',{
     maxZoom:18,
     attribution:'&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a> | Alerts: <a href="https://api.weather.gov">NWS</a>',
     subdomains:'abcd',
     crossOrigin:true
   }).addTo(alertMapInstance);
 
-  /* CARTO labels-only overlay - shows city/town names on top of the dark
-     basemap. This increases label density so more cities and towns are
-     visible, especially when zoomed in. The labels layer is transparent
-     except for text, so it overlays cleanly on the base map. */
-  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_only_labels/{z}/{x}/{y}.png',{
+  /* CARTO Voyager labels-only overlay - shows city/town names on top of the
+     base map. Increases label density so more cities and towns are visible. */
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager_only_labels/{z}/{x}/{y}.png',{
     maxZoom:18,
     subdomains:'abcd',
     crossOrigin:true,
-    zIndex:400  /* render above base tiles (which are zIndex 200) */
+    zIndex:400
   }).addTo(alertMapInstance);
 
   /* Build the legend container - body is populated by fAlertMap().
@@ -1579,7 +1577,7 @@ async function screenshotAlert(idx){
     return await html2canvas(mapEl,{
       useCORS:true,
       allowTaint:true,
-      backgroundColor:'#050505',
+      backgroundColor:'#e0e0e0',
       scale:2,  /* 2x resolution - prevents blur when scaled down */
       logging:false,
       imageTimeout:15000,  /* wait up to 15s for tiles (including labels) */
@@ -1704,7 +1702,7 @@ async function screenshotAlert(idx){
     finalCanvas.height=compositeH+footerH;
     var fctx=finalCanvas.getContext('2d');
     /* Fill background */
-    fctx.fillStyle='#050505';
+    fctx.fillStyle='#e0e0e0';
     fctx.fillRect(0,0,finalCanvas.width,finalCanvas.height);
     /* Draw alert panel on LEFT */
     fctx.drawImage(panelCanvas,0,0);
@@ -3648,7 +3646,7 @@ async function captureScreenshot(){
       mapCanvas=await html2canvas(mapEl,{
         useCORS:true,
         allowTaint:true,
-        backgroundColor:'#050505',
+        backgroundColor:'#e0e0e0',
         scale:window.devicePixelRatio||1,
         logging:false,
         imageTimeout:10000,
