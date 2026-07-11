@@ -1226,6 +1226,17 @@ function initAlertMap(){
     crossOrigin:true
   }).addTo(alertMapInstance);
 
+  /* CARTO labels-only overlay - shows city/town names on top of the dark
+     basemap. This increases label density so more cities and towns are
+     visible, especially when zoomed in. The labels layer is transparent
+     except for text, so it overlays cleanly on the base map. */
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_only_labels/{z}/{x}/{y}.png',{
+    maxZoom:18,
+    subdomains:'abcd',
+    crossOrigin:true,
+    zIndex:400  /* render above base tiles (which are zIndex 200) */
+  }).addTo(alertMapInstance);
+
   /* Build the legend container - body is populated by fAlertMap().
      The counter (alertMapCount) is now embedded inside the legend header
      so we don't need a separate floating badge on the map. */
@@ -1547,27 +1558,31 @@ async function screenshotAlert(idx){
     }catch(e){console.warn('[AlertShot] Could not calculate bounds:',e)}
   }
 
-  /* Helper: wait for map tiles to load after a zoom/pan change */
+  /* Helper: wait for map tiles to load after a zoom/pan change.
+     Uses a longer settle delay (1.2s) to ensure all tiles including the
+     labels overlay are fully rendered before capture. */
   function waitForMapLoad(){
     return new Promise(function(resolve){
       var done=false;
-      function finish(){if(!done){done=true;setTimeout(resolve,700)}}
+      function finish(){if(!done){done=true;setTimeout(resolve,1200)}}
       if(!alertMapInstance._loaded){resolve();return}
       alertMapInstance.once('load',finish);
-      setTimeout(finish,2500);  /* hard fallback */
+      setTimeout(finish,3500);  /* hard fallback - wait longer for label tiles */
     });
   }
 
-  /* Helper: capture the current map view */
+  /* Helper: capture the current map view at 2x resolution for sharpness.
+     The map is later scaled down to fit the panel, so capturing at 2x
+     prevents blurriness. */
   async function captureMap(){
     var mapEl=document.getElementById('alertMap');
     return await html2canvas(mapEl,{
       useCORS:true,
       allowTaint:true,
       backgroundColor:'#050505',
-      scale:window.devicePixelRatio||1,
+      scale:2,  /* 2x resolution - prevents blur when scaled down */
       logging:false,
-      imageTimeout:10000,
+      imageTimeout:15000,  /* wait up to 15s for tiles (including labels) */
       width:mapEl.offsetWidth,
       height:mapEl.offsetHeight,
       windowWidth:mapEl.offsetWidth,
