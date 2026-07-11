@@ -24,7 +24,7 @@
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
-<script async src="https://platform.x.com/widgets.js" charset="utf-8"></script>
+<script src="https://platform.x.com/widgets.js" charset="utf-8"></script>
 <style>
 :root{
   --bg:#0a0a0a;
@@ -926,11 +926,11 @@ body.capturing .hamburger-menu{display:none!important}
 <div id="view-weatherfeeds" class="tab-view">
   <div class="wf-feeds-wrap">
     <div class="wf-feeds-grid" id="wfFeedsGrid">
-      <!-- Twitter: NWS Tornado - official X widget embed -->
+      <!-- Twitter: NWS Tornado - created programmatically via createTimeline() -->
       <div class="wf-feed-card">
         <div class="wf-feed-header"><i class="fab fa-x-twitter"></i> NWS Tornado (X/Twitter)</div>
         <div class="wf-feed-body" id="tw-nwstornado">
-          <a class="twitter-timeline" data-theme="dark" data-chrome="noheader nofooter" data-tweet-limit="20" href="https://x.com/NWStornado?ref_src=twsrc%5Etfw">Posts by NWStornado</a>
+          <div style="padding:20px;text-align:center;color:var(--t3);font-size:11px"><i class="fas fa-spinner fa-spin" style="margin-right:6px"></i>Loading Twitter feed...</div>
         </div>
       </div>
       <!-- SPC Watches RSS -->
@@ -3172,31 +3172,61 @@ function loadWeatherFeeds(){
   fetchRssFeed('https://www.weather.gov/rss_page.php?site_name=nws','rss-nws-alerts');
 }
 
-/* Load Twitter/X timeline widget. The <a class="twitter-timeline"> anchor
-   is already in the HTML. The widgets.js script (loaded async in <head>)
-   auto-discovers these anchors and replaces them with iframe timelines.
-   We call twttr.widgets.load() to trigger rendering when the feeds tab
-   is opened (since the anchor may not have been visible when the script
-   initially loaded). We poll for twttr availability since it loads async. */
+/* Load Twitter/X timeline using createTimeline() - the programmatic API.
+   This is more reliable than the anchor-based approach because it doesn't
+   depend on auto-discovery of <a class="twitter-timeline"> elements.
+   The widgets.js script is loaded synchronously in <head> (not async)
+   so twttr should be available immediately. If not, we poll briefly.
+   Visible status messages are shown so the user can see what's happening
+   (important for mobile where there's no F12 console). */
 function loadTwitterFeeds(){
+  var container=document.getElementById('tw-nwstornado');
+  if(!container)return;
   var attempts=0;
-  var maxAttempts=20;  /* 20 x 500ms = 10s max wait */
+  var maxAttempts=30;  /* 30 x 500ms = 15s max wait */
   function tryLoad(){
-    if(typeof twttr!=='undefined'&&twttr&&twttr.widgets&&twttr.widgets.load){
-      /* SDK is ready - call load() to render the twitter-timeline anchor */
-      twttr.widgets.load(document.getElementById('tw-nwstornado'));
-      console.log('[Feeds] Twitter widget load triggered for @NWStornado');
+    if(typeof twttr!=='undefined'&&twttr&&twttr.widgets&&typeof twttr.widgets.createTimeline==='function'){
+      /* SDK is ready - create the timeline programmatically */
+      container.innerHTML='<div style="padding:20px;text-align:center;color:var(--t3);font-size:11px"><i class="fas fa-spinner fa-spin" style="margin-right:6px"></i>Creating Twitter timeline...</div>';
+      twttr.widgets.createTimeline(
+        {
+          sourceType:'profile',
+          screenName:'NWStornado'
+        },
+        container,
+        {
+          theme:'dark',
+          chrome:'noheader nofooter',
+          tweetLimit:20,
+          dnt:true
+        }
+      ).then(function(el){
+        /* Success - the iframe element is returned */
+        if(el){
+          console.log('[Feeds] Twitter timeline created for @NWStornado');
+        }else{
+          container.innerHTML='<div style="padding:20px;text-align:center;color:var(--t3);font-size:11px">Timeline returned empty. <a href="https://x.com/NWStornado" target="_blank" style="color:var(--acc)">Open @NWStornado on X</a></div>';
+        }
+      }).catch(function(e){
+        console.warn('[Feeds] Twitter createTimeline error:',e);
+        container.innerHTML='<div style="padding:20px;text-align:center;color:var(--t3);font-size:11px">Error loading timeline: '+(e&&e.message?e.message:'unknown')+'. <br><a href="https://x.com/NWStornado" target="_blank" style="color:var(--acc)">Open @NWStornado on X</a></div>';
+      });
     }else{
-      /* SDK not loaded yet - retry */
+      /* SDK not loaded yet - show waiting message and retry */
       attempts++;
+      if(attempts<=5){
+        container.innerHTML='<div style="padding:20px;text-align:center;color:var(--t3);font-size:11px"><i class="fas fa-spinner fa-spin" style="margin-right:6px"></i>Waiting for Twitter SDK... ('+attempts+')</div>';
+      }
       if(attempts<maxAttempts){
         setTimeout(tryLoad,500);
       }else{
-        console.warn('[Feeds] Twitter SDK not loaded after '+maxAttempts+' attempts');
-        var container=document.getElementById('tw-nwstornado');
-        if(container){
-          container.innerHTML='<div style="padding:20px;text-align:center;color:var(--t3);font-size:11px">Twitter SDK not loaded. <a href="https://x.com/NWStornado" target="_blank" style="color:var(--acc)">Open @NWStornado on X</a></div>';
-        }
+        /* Timed out - show fallback with explanation */
+        container.innerHTML='<div style="padding:20px;text-align:center;color:var(--t3);font-size:11px;line-height:1.6">'+
+          '<i class="fas fa-circle-exclamation" style="color:var(--acc);font-size:20px;margin-bottom:8px;display:block"></i>'+
+          'Twitter SDK failed to load after 15 seconds.<br>'+
+          'This may be blocked by your browser\'s privacy settings.<br><br>'+
+          '<a href="https://x.com/NWStornado" target="_blank" style="color:var(--acc);font-weight:600">Open @NWStornado on X →</a>'+
+          '</div>';
       }
     }
   }
