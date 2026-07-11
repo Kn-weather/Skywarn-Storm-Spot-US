@@ -1506,9 +1506,203 @@ function renderAlertPopupContent(idx){
       '<div style="font-size:8px;color:var(--t1);line-height:1.4;background:rgba(251,191,36,.06);padding:5px 6px;border-radius:3px;border:1px solid rgba(251,191,36,.2);white-space:pre-wrap">'+a.instruction+'</div>'+
       '</div>';
   }
+  /* Screenshot button - captures the full expanded alert + map polygon */
+  html+='<button type="button" onclick="event.stopPropagation();event.preventDefault();screenshotAlert('+idx+');return false;" style="display:flex;align-items:center;justify-content:center;gap:4px;width:100%;margin-top:4px;padding:4px 8px;background:rgba(255,115,0,.12);border:1px solid var(--bdr-a);color:var(--acc);border-radius:3px;cursor:pointer;font-family:inherit;font-size:8px;font-weight:600"><i class="fas fa-camera"></i> Screenshot This Alert</button>';
   html+='</div>';
   return html;
 }
+
+/* Screenshot a single alert: captures the map (showing the polygon) at the
+   alert's location, then overlays a full-size alert info panel (with the
+   entire description, not truncated) on top. The result is a composite
+   image with the map + alert details + Skywarn branding.
+   Steps:
+   1. Pan the map to center on the alert polygon
+   2. Hide UI overlays and capture the map via html2canvas
+   3. Build a full-size alert info panel (no max-height) as an off-screen div
+   4. Composite: map canvas + alert panel + branding watermark
+   5. Show in the screenshot preview modal */
+async function screenshotAlert(idx){
+  if(!alertPopupState||!alertMapInstance)return;
+  if(typeof html2canvas==='undefined'){alert('Screenshot library not loaded');return}
+  var alerts=alertPopupState.overlappingAlerts;
+  if(idx<0||idx>=alerts.length)return;
+  var a=alerts[idx];
+  /* Close the popup so it doesn't appear in the map capture */
+  alertMapInstance.closePopup();
+  /* Pan to center on the alert's geometry */
+  if(a.geoms&&a.geoms.length>0){
+    try{
+      var bounds=L.latLngBounds([]);
+      a.geoms.forEach(function(g){
+        var testLayer=L.geoJSON(g);
+        if(testLayer.getBounds&&testLayer.getBounds().isValid()){
+          bounds.extend(testLayer.getBounds());
+        }
+        testLayer.remove();
+      });
+      if(bounds.isValid()){
+        alertMapInstance.fitBounds(bounds,{padding:[60,60],maxZoom:10});
+      }
+    }catch(e){console.warn('[AlertShot] Could not pan to polygon:',e)}
+  }
+  /* Wait for map to settle (tiles load) */
+  await new Promise(function(resolve){
+    var done=false;
+    function finish(){if(!done){done=true;setTimeout(resolve,800)}}
+    if(!alertMapInstance._loaded){resolve();return}
+    alertMapInstance.once('load',finish);
+    setTimeout(finish,2000);
+  });
+  /* Hide UI overlays during capture */
+  document.body.classList.add('capturing');
+  await new Promise(function(r){requestAnimationFrame(function(){requestAnimationFrame(r)})});
+  try{
+    /* Capture the map */
+    var mapEl=document.getElementById('alertMap');
+    var mapCanvas=await html2canvas(mapEl,{
+      useCORS:true,
+      allowTaint:true,
+      backgroundColor:'#050505',
+      scale:window.devicePixelRatio||1,
+      logging:false,
+      imageTimeout:10000,
+      width:mapEl.offsetWidth,
+      height:mapEl.offsetHeight,
+      windowWidth:mapEl.offsetWidth,
+      windowHeight:mapEl.offsetHeight,
+      x:0,y:0,scrollX:0,scrollY:0
+    });
+    if(!mapCanvas)throw new Error('Map capture failed');
+    /* Build a full-size alert info panel as an off-screen div. This has
+       NO max-height on the description, so the entire text is visible. */
+    var panel=document.createElement('div');
+    panel.style.cssText='position:absolute;left:-9999px;top:0;width:340px;background:rgba(10,10,10,.96);border:1px solid '+a.color+';border-radius:8px;padding:14px;font-family:Inter,sans-serif;font-size:11px;color:#f0f0f0;line-height:1.5;box-shadow:0 4px 20px rgba(0,0,0,.5)';
+    var panelHtml='<h3 style="font-size:15px;color:'+a.color+';margin-bottom:6px;font-weight:700">'+a.event+'</h3>';
+    if(a.senderName){
+      panelHtml+='<div style="font-size:10px;color:#606060;margin-bottom:8px"><i class="fas fa-satellite-dish" style="margin-right:4px"></i>'+a.senderName+'</div>';
+    }
+    if(a.headline){
+      panelHtml+='<div style="background:rgba(255,255,255,.04);border-left:3px solid '+a.color+';padding:8px 10px;margin-bottom:10px;border-radius:3px;font-size:11px;font-weight:600;color:#f0f0f0;line-height:1.4">'+a.headline+'</div>';
+    }
+    panelHtml+='<table style="width:100%;font-size:10px;border-collapse:collapse;margin-bottom:10px">';
+    panelHtml+='<tr><td style="padding:3px 8px 3px 0;color:#606060;white-space:nowrap;vertical-align:top"><i class="fas fa-paper-plane" style="margin-right:4px"></i>Issued</td><td style="padding:3px 0;color:#a0a0a0">'+fmtNwsTime(a.sent)+'</td></tr>';
+    if(a.onset&&a.onset!==a.sent){
+      panelHtml+='<tr><td style="padding:3px 8px 3px 0;color:#606060;white-space:nowrap;vertical-align:top"><i class="fas fa-clock" style="margin-right:4px"></i>Onset</td><td style="padding:3px 0;color:#a0a0a0">'+fmtNwsTime(a.onset)+'</td></tr>';
+    }
+    panelHtml+='<tr><td style="padding:3px 8px 3px 0;color:#606060;white-space:nowrap;vertical-align:top"><i class="fas fa-hourglass-end" style="margin-right:4px"></i>Expires</td><td style="padding:3px 0;color:#a0a0a0">'+fmtNwsTime(a.ends)+'</td></tr>';
+    panelHtml+='</table>';
+    if(a.areaDesc&&a.areaDesc!=='Unknown'){
+      panelHtml+='<div style="margin-bottom:10px"><div style="font-size:9px;color:#606060;text-transform:uppercase;letter-spacing:.04em;margin-bottom:4px"><i class="fas fa-map-marker-alt" style="margin-right:4px"></i>Affected Areas</div><div style="font-size:10px;color:#a0a0a0;line-height:1.5">'+a.areaDesc.replace(/;/g,';<br>')+'</div></div>';
+    }
+    if(a.description){
+      panelHtml+='<div style="margin-bottom:10px"><div style="font-size:9px;color:#606060;text-transform:uppercase;letter-spacing:.04em;margin-bottom:4px"><i class="fas fa-file-lines" style="margin-right:4px"></i>Description</div><div style="font-size:10px;color:#f0f0f0;line-height:1.55;background:rgba(0,0,0,.2);padding:8px 10px;border-radius:4px;border:1px solid rgba(255,115,0,.18);white-space:pre-wrap">'+a.description+'</div></div>';
+    }
+    if(a.instruction){
+      panelHtml+='<div style="margin-bottom:10px"><div style="font-size:9px;color:#fbbf24;text-transform:uppercase;letter-spacing:.04em;margin-bottom:4px"><i class="fas fa-triangle-exclamation" style="margin-right:4px"></i>Precautionary/Preparedness Actions</div><div style="font-size:10px;color:#f0f0f0;line-height:1.55;background:rgba(251,191,36,.06);padding:8px 10px;border-radius:4px;border:1px solid rgba(251,191,36,.2);white-space:pre-wrap">'+a.instruction+'</div></div>';
+    }
+    panel.innerHTML=panelHtml;
+    document.body.appendChild(panel);
+    /* Capture the alert panel */
+    var panelCanvas=await html2canvas(panel,{
+      backgroundColor:null,
+      scale:window.devicePixelRatio||1,
+      logging:false
+    });
+    document.body.removeChild(panel);
+    /* Build composite: map on left, alert panel on right (or below on mobile) */
+    await preloadLogoDataUrl();
+    var panelW=panelCanvas.width;
+    var panelH=panelCanvas.height;
+    var mapW=mapCanvas.width;
+    var mapH=mapCanvas.height;
+    /* Layout: if map is wide enough, put panel on right side. Otherwise stack. */
+    var compositeW,compositeH,panelX,panelY,mapX,mapY;
+    if(mapW>panelW+40){
+      /* Side by side: map on left, panel on right */
+      compositeW=mapW+panelW+20;
+      compositeH=Math.max(mapH,panelH);
+      mapX=0;mapY=0;
+      panelX=mapW+20;panelY=0;
+    }else{
+      /* Stacked: map on top, panel below */
+      compositeW=Math.max(mapW,panelW);
+      compositeH=mapH+panelH+20;
+      mapX=Math.floor((compositeW-mapW)/2);mapY=0;
+      panelX=Math.floor((compositeW-panelW)/2);panelY=mapH+20;
+    }
+    var footerH=60;
+    var finalCanvas=document.createElement('canvas');
+    finalCanvas.width=compositeW;
+    finalCanvas.height=compositeH+footerH;
+    var fctx=finalCanvas.getContext('2d');
+    /* Fill background */
+    fctx.fillStyle='#050505';
+    fctx.fillRect(0,0,finalCanvas.width,finalCanvas.height);
+    /* Draw map */
+    fctx.drawImage(mapCanvas,mapX,mapY);
+    /* Draw panel */
+    fctx.drawImage(panelCanvas,panelX,panelY);
+    /* Draw footer branding (centered, like the main screenshot) */
+    var logoSize=48;
+    var siteName='Skywarn Storm Spotters & Chasers United States';
+    var stampStr=new Date().toLocaleString('en-US',{weekday:'short',year:'numeric',month:'short',day:'numeric',hour:'2-digit',minute:'2-digit',hour12:true});
+    fctx.font='bold 16px Inter,sans-serif';
+    var nameW=fctx.measureText(siteName).width;
+    fctx.font='11px Inter,sans-serif';
+    var stampW=fctx.measureText(stampStr).width;
+    var textW=Math.max(nameW,stampW);
+    var contentW=logoSize+12+textW;
+    var barY=compositeH;
+    fctx.fillStyle='rgba(0,0,0,.8)';
+    fctx.fillRect(0,barY,finalCanvas.width,footerH);
+    fctx.fillStyle='#ff7300';
+    fctx.fillRect(0,barY-2,finalCanvas.width,2);
+    var groupX=Math.floor((finalCanvas.width-contentW)/2);
+    var logoX=groupX;
+    var logoY=barY+6;
+    if(LOGO_DATA_URL){
+      var logoImg=new Image();
+      await new Promise(function(resolve){
+        logoImg.onload=function(){try{fctx.drawImage(logoImg,logoX,logoY,logoSize,logoSize)}catch(e){}resolve()};
+        logoImg.onerror=function(){resolve()};
+        logoImg.src=LOGO_DATA_URL;
+      });
+    }
+    var textX=logoX+logoSize+12;
+    fctx.fillStyle='#ff7300';
+    fctx.font='bold 16px Inter,sans-serif';
+    fctx.textBaseline='middle';
+    fctx.fillText(siteName,textX,barY+footerH/2-9);
+    fctx.fillStyle='#a0a0a0';
+    fctx.font='11px Inter,sans-serif';
+    fctx.fillText(stampStr,textX,barY+footerH/2+10);
+    /* Show preview */
+    var dataUrl=finalCanvas.toDataURL('image/png');
+    var previewImg=document.getElementById('shotPreviewImg');
+    var downloadLink=document.getElementById('shotDownloadLink');
+    var infoEl=document.getElementById('shotInfo');
+    if(previewImg)previewImg.src=dataUrl;
+    if(downloadLink){
+      var filename='skywarn-alert-'+a.event.replace(/[^a-zA-Z0-9]/g,'_')+'-'+new Date().toISOString().slice(0,19).replace(/[:T]/g,'-')+'.png';
+      downloadLink.href=dataUrl;
+      downloadLink.download=filename;
+    }
+    if(infoEl)infoEl.textContent=finalCanvas.width+'x'+finalCanvas.height+'px - PNG';
+    document.getElementById('shotModal').classList.add('visible');
+  }catch(e){
+    console.error('[AlertShot] Error:',e);
+    alert('Screenshot failed: '+e.message);
+  }finally{
+    document.body.classList.remove('capturing');
+    /* Reopen the popup */
+    if(alertPopupState){
+      var html=renderAlertPopupContent(alertPopupState.currentIndex);
+      L.popup({maxWidth:240,minWidth:180}).setLatLng(alertPopupState.latlng).setContent(html).openOn(alertMapInstance);
+    }
+  }
+}
+window.screenshotAlert=screenshotAlert;
 function cycleAlertPopup(delta){
   if(!alertPopupState)return;
   var newIdx=alertPopupState.currentIndex+delta;
