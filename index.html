@@ -1,0 +1,3552 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes, viewport-fit=cover">
+<title>Skywarn Storm Spotters & Chasers United States</title>
+<meta name="theme-color" content="#0a0a0a">
+<meta name="description" content="Skywarn Storm Spotters & Chasers United States - Live NWS alert polygon map for the entire United States with SPC convective outlooks.">
+<!-- iOS / iPhone PWA meta tags -->
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Skywarn US">
+<meta name="application-name" content="Skywarn US">
+<meta name="format-detection" content="telephone=no">
+<!-- Icons -->
+<link rel="icon" type="image/png" href="./skywarn-logo.png">
+<link rel="apple-touch-icon" href="./skywarn-logo.png">
+<link rel="apple-touch-icon" sizes="180x180" href="./skywarn-logo.png">
+<link rel="apple-touch-icon" sizes="192x192" href="./skywarn-logo.png">
+<link rel="manifest" href="./manifest.json">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+<script async src="https://platform.x.com/widgets.js" charset="utf-8"></script>
+<style>
+:root{
+  --bg:#0a0a0a;
+  --bg2:#141414;
+  --card:rgba(255,115,0,.035);
+  --bdr:rgba(255,115,0,.18);
+  --bdr-a:rgba(255,115,0,.3);
+  --t1:#f0f0f0;
+  --t2:#a0a0a0;
+  --t3:#606060;
+  --acc:#ff7300;
+  --acc2:#ff9333;
+  --acc-g:rgba(255,115,0,.12);
+  --suc:#34d399;
+  --rs:8px;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html{
+  height:100%;width:100%;overflow:hidden;
+  -webkit-text-size-adjust:100%;
+  -webkit-tap-highlight-color:transparent;
+}
+body{
+  font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
+  background:var(--bg);
+  color:var(--t1);
+  font-size:13px;
+  line-height:1.4;
+  height:100%;width:100%;overflow:hidden;
+  /* Prevent overscroll/bounce on iOS and pull-to-refresh on Android */
+  overscroll-behavior:none;
+  -webkit-overflow-scrolling:touch;
+  /* Safe area insets for notched phones (iPhone X+, Android notches) */
+  padding-top:env(safe-area-inset-top);
+  padding-bottom:env(safe-area-inset-bottom);
+  padding-left:env(safe-area-inset-left);
+  padding-right:env(safe-area-inset-right);
+}
+/* Top header bar - respects safe area for notched phones */
+.app-header{
+  position:fixed;top:0;left:0;right:0;z-index:2000;
+  display:flex;align-items:center;justify-content:space-between;gap:12px;
+  padding:10px 16px;
+  /* Add safe-area-inset-top for iPhone notch / Dynamic Island */
+  padding-top:calc(10px + env(safe-area-inset-top));
+  background:rgba(10,10,10,.92);
+  border-bottom:1px solid var(--bdr);
+  backdrop-filter:blur(12px);
+  -webkit-backdrop-filter:blur(12px);
+}
+.app-header .brand{display:flex;align-items:center;gap:10px;min-width:0}
+.app-header .brand .logo{
+  width:40px;height:40px;border-radius:8px;
+  background:#000;
+  display:flex;align-items:center;justify-content:center;
+  box-shadow:0 0 12px rgba(255,115,0,.4);
+  flex-shrink:0;
+  overflow:hidden;
+  border:1px solid var(--bdr-a);
+}
+.app-header .brand .logo img{width:100%;height:100%;object-fit:cover;display:block}
+.app-header .brand .titles{min-width:0;display:flex;flex-direction:column;line-height:1.2}
+.app-header .brand .titles h1{
+  font-size:15px;font-weight:700;color:var(--t1);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
+.app-header .brand .titles .sub{
+  font-size:10px;color:var(--t2);font-weight:500;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
+.app-header .actions{display:flex;align-items:center;gap:8px;flex-shrink:0}
+.app-header .actions .stat{
+  display:flex;align-items:center;gap:6px;
+  padding:6px 10px;background:var(--acc-g);
+  border:1px solid var(--bdr-a);border-radius:var(--rs);
+  font-size:11px;font-weight:600;color:var(--acc);
+  white-space:nowrap;
+}
+.app-header .actions .stat .dot{
+  width:8px;height:8px;border-radius:50%;background:var(--acc);
+  box-shadow:0 0 6px var(--acc);
+  animation:pulse 2s ease-in-out infinite;
+}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+.app-header .actions button{
+  display:flex;align-items:center;gap:6px;
+  padding:7px 12px;background:var(--bg2);
+  border:1px solid var(--bdr);border-radius:var(--rs);
+  color:var(--t1);font-family:inherit;font-size:11px;font-weight:600;
+  cursor:pointer;transition:all .15s;white-space:nowrap;
+}
+.app-header .actions button:hover{
+  background:var(--acc-g);border-color:var(--bdr-a);color:var(--acc);
+}
+.app-header .actions button i{font-size:10px}
+/* Map container fills viewport below header */
+#mapWrap{
+  position:fixed;top:calc(53px + env(safe-area-inset-top));left:0;right:0;bottom:0;
+  background:#050505;
+}
+#alertMap{height:100%;width:100%;background:#050505;z-index:1;touch-action:none}
+/* Alert count badge (top-left of map area, positioned below the Leaflet
+   zoom control so it doesn't cover the + / - buttons) */
+.alert-map-count{
+  position:absolute;top:75px;left:10px;z-index:1000;
+  background:rgba(10,10,10,.92);
+  border:1px solid var(--acc);
+  border-radius:var(--rs);
+  padding:6px 12px;
+  font-size:11px;color:var(--acc);font-weight:600;
+  backdrop-filter:blur(12px);
+  -webkit-backdrop-filter:blur(12px);
+  display:flex;align-items:center;gap:6px;
+  max-width:calc(100% - 20px);
+}
+.alert-map-count i{font-size:10px;opacity:.8}
+/* Controls panel (top-right of map area) */
+.alert-map-controls{
+  position:absolute;top:10px;right:10px;z-index:1000;
+  background:rgba(10,10,10,.92);
+  border:1px solid var(--bdr);
+  border-radius:var(--rs);
+  padding:0;
+  backdrop-filter:blur(12px);
+  -webkit-backdrop-filter:blur(12px);
+  max-width:230px;
+  font-size:11px;
+}
+.alert-map-controls-toggle{
+  display:flex;align-items:center;justify-content:space-between;gap:8px;
+  padding:8px 12px;cursor:pointer;
+  font-size:11px;font-weight:700;color:var(--acc);
+  text-transform:uppercase;letter-spacing:.04em;
+  user-select:none;
+}
+.alert-map-controls-toggle i{transition:transform .2s}
+.alert-map-controls.collapsed .alert-map-controls-toggle i{transform:rotate(-90deg)}
+.alert-map-controls-body{
+  padding:0 12px 10px 12px;display:block;
+  border-top:1px solid var(--bdr);
+}
+.alert-map-controls.collapsed .alert-map-controls-body{display:none}
+.alert-map-controls label{
+  display:flex;align-items:center;gap:6px;cursor:pointer;
+  margin:4px 0;font-size:11px;color:var(--t1);
+}
+.alert-map-controls input[type="checkbox"]{
+  accent-color:var(--acc);width:13px;height:13px;cursor:pointer;
+}
+.alert-map-controls .section-label{
+  font-size:9px;color:var(--t3);
+  text-transform:uppercase;letter-spacing:.05em;
+  margin:8px 0 4px 0;font-weight:700;
+}
+.alert-map-controls select{
+  width:100%;background:var(--bg2);border:1px solid var(--bdr);
+  color:var(--t1);font-family:inherit;font-size:10px;
+  padding:5px 6px;border-radius:4px;margin-top:2px;
+  cursor:pointer;
+}
+.alert-map-controls select:focus{outline:none;border-color:var(--bdr-a)}
+.alert-map-controls .divider{
+  margin-top:8px;padding-top:8px;border-top:1px solid var(--bdr);
+}
+/* Legend (bottom-left of map area) */
+.alert-map-legend{
+  position:absolute;bottom:10px;left:10px;z-index:1000;
+  background:rgba(10,10,10,.92);
+  border:1px solid var(--bdr);
+  border-radius:var(--rs);
+  padding:0;
+  font-size:10px;color:var(--t2);
+  backdrop-filter:blur(12px);
+  -webkit-backdrop-filter:blur(12px);
+  max-height:calc(100% - 80px);
+  overflow-y:auto;max-width:240px;
+}
+.alert-map-legend::-webkit-scrollbar{width:6px}
+.alert-map-legend::-webkit-scrollbar-track{background:transparent}
+.alert-map-legend::-webkit-scrollbar-thumb{background:var(--bdr-a);border-radius:3px}
+.alert-map-legend-toggle{
+  display:flex;align-items:center;justify-content:space-between;gap:8px;
+  padding:8px 12px;cursor:pointer;
+  font-size:10px;font-weight:700;color:var(--acc);
+  text-transform:uppercase;letter-spacing:.06em;
+  user-select:none;
+}
+.alert-map-legend-toggle i{transition:transform .2s}
+.alert-map-legend.collapsed .alert-map-legend-toggle i{transform:rotate(-90deg)}
+.alert-map-legend-body{padding:0 12px 10px 12px;display:block}
+.alert-map-legend.collapsed .alert-map-legend-body{display:none}
+.alert-map-legend.collapsed .alert-map-legend-actions{display:none!important}
+/* Two-button row (Show All / Hide All) at top of legend */
+.alert-map-legend-actions{
+  display:flex;align-items:stretch;
+  border-bottom:1px solid var(--bdr);
+}
+.alert-map-legend-action{
+  flex:1;display:flex;align-items:center;justify-content:center;gap:4px;
+  padding:6px 8px;margin:0;
+  background:rgba(255,115,0,.08);
+  cursor:pointer;
+  font-size:10px;font-weight:600;color:var(--acc);
+  text-transform:uppercase;letter-spacing:.04em;
+  user-select:none;transition:background .15s;
+  border-right:1px solid var(--bdr);
+}
+.alert-map-legend-action:last-child{border-right:none}
+.alert-map-legend-action:hover{background:rgba(255,115,0,.18)}
+.alert-map-legend-action.hide-action{color:var(--t2);background:rgba(255,255,255,.03)}
+.alert-map-legend-action.hide-action:hover{background:rgba(251,113,133,.12);color:var(--dng,#fb7185)}
+/* Legacy single-button style (kept for backwards compat, unused now) */
+.alert-map-legend-reset{
+  display:flex;align-items:center;justify-content:center;gap:5px;
+  padding:6px 10px;margin:0;
+  border-bottom:1px solid var(--bdr);
+  background:rgba(255,115,0,.08);
+  cursor:pointer;
+  font-size:10px;font-weight:600;color:var(--acc);
+  text-transform:uppercase;letter-spacing:.04em;
+  user-select:none;transition:background .15s;
+}
+.alert-map-legend-reset:hover{background:rgba(255,115,0,.18)}
+.alert-map-legend-item{
+  display:flex;align-items:center;gap:6px;
+  margin:3px 0;padding:2px 4px;border-radius:3px;
+  transition:background .15s;
+}
+.alert-map-legend-item:hover{background:rgba(255,255,255,.04)}
+.alert-map-legend-item span{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.alert-map-legend-dot{
+  width:11px;height:11px;border-radius:2px;flex-shrink:0;
+}
+.alert-map-legend-item input[type="checkbox"]{
+  width:11px;height:11px;cursor:pointer;margin:0;flex-shrink:0;
+}
+/* Loading overlay */
+.loading-overlay{
+  position:absolute;inset:0;z-index:1500;
+  background:rgba(10,10,18,.6);
+  display:flex;align-items:center;justify-content:center;
+  backdrop-filter:blur(4px);
+  -webkit-backdrop-filter:blur(4px);
+  pointer-events:none;
+  opacity:0;transition:opacity .2s;
+}
+.loading-overlay.visible{opacity:1;pointer-events:auto}
+.loading-overlay .spinner{
+  width:36px;height:36px;border-radius:50%;
+  border:3px solid rgba(255,115,0,.2);
+  border-top-color:var(--acc);
+  animation:spin 1s linear infinite;
+}
+@keyframes spin{to{transform:rotate(360deg)}}
+/* Camera popup styling (live weather/traffic cameras) */
+.cam-popup{font-family:Inter,sans-serif;text-align:center;min-width:240px}
+.cam-popup .cam-title{font-size:13px;font-weight:700;color:var(--t1);margin-bottom:6px;border-bottom:1px solid var(--bdr);padding-bottom:4px}
+.cam-popup .cam-image{width:280px;max-width:100%;height:auto;display:block;margin:0 auto;border-radius:4px;background:#0a0a0a;border:1px solid var(--bdr)}
+.cam-popup .cam-controls{margin-top:6px;font-size:10px;color:var(--t3)}
+.cam-popup .cam-status{display:block;margin-bottom:4px;font-family:monospace}
+.cam-popup .refresh-btn{
+  background:var(--acc);color:#000;border:none;
+  padding:5px 12px;border-radius:4px;cursor:pointer;
+  font-family:inherit;font-size:11px;font-weight:600;
+  transition:background .15s;
+}
+.cam-popup .refresh-btn:hover{background:var(--acc2)}
+.cam-popup .refresh-btn i{margin-right:4px}
+/* Camera marker (orange camera icon) */
+.camera-marker{background:transparent!important;border:none!important}
+.camera-marker-inner{
+  width:24px;height:24px;border-radius:50%;
+  background:rgba(10,10,10,.9);
+  border:2px solid var(--acc);
+  display:flex;align-items:center;justify-content:center;
+  color:var(--acc);font-size:11px;
+  box-shadow:0 0 6px rgba(255,115,0,.4);
+  transition:transform .15s;
+}
+.camera-marker-inner:hover{transform:scale(1.2)}
+/* Leaflet popup overrides */
+.leaflet-popup-content-wrapper{
+  background:rgba(10,10,10,.96);
+  color:var(--t1);
+  border:1px solid var(--bdr-a);
+  border-radius:8px;
+  backdrop-filter:blur(12px);
+  -webkit-backdrop-filter:blur(12px);
+}
+.leaflet-popup-content{margin:12px 14px!important;line-height:1.4}
+.leaflet-popup-content-wrapper{box-shadow:0 4px 24px rgba(0,0,0,.5),0 0 12px rgba(255,115,0,.08)}
+.leaflet-popup-tip{background:rgba(10,10,10,.96);border:1px solid var(--bdr-a)}
+.leaflet-popup-close-button{color:var(--t2)!important;font-size:20px!important;padding:8px 8px 0 0!important;z-index:10}
+.leaflet-popup-close-button:hover{color:var(--acc)!important}
+.leaflet-container a.leaflet-popup-close-button{font-weight:300}
+/* Scrollbar styling for the description text box inside popups */
+.leaflet-popup-content ::-webkit-scrollbar{width:5px}
+.leaflet-popup-content ::-webkit-scrollbar-track{background:transparent}
+.leaflet-popup-content ::-webkit-scrollbar-thumb{background:var(--bdr-a);border-radius:3px}
+.leaflet-bar a,.leaflet-bar a:hover{
+  background:rgba(10,10,10,.92);color:var(--t1);
+  border-color:var(--bdr);
+}
+.leaflet-bar a:hover{background:var(--acc-g);color:var(--acc)}
+.leaflet-control-attribution{
+  background:rgba(14,14,21,.85)!important;
+  color:var(--t3)!important;font-size:9px!important;
+  backdrop-filter:blur(8px);
+}
+.leaflet-control-attribution a{color:var(--t2)!important}
+.leaflet-control-zoom{border:none!important;box-shadow:0 2px 8px rgba(0,0,0,.3)!important}
+/* Responsive breakpoints */
+/* ── Small phones (iPhone SE, older Androids) ── */
+@media (max-width:400px){
+  .app-header .brand .logo{width:32px;height:32px}
+  .app-header .brand .titles h1{font-size:12px}
+  .app-header .actions button{padding:6px 8px}
+  .alert-map-controls{max-width:160px;font-size:9px}
+  .alert-map-legend{max-width:160px;font-size:9px}
+  .alert-map-count{font-size:9px;padding:4px 6px;max-width:calc(100vw - 20px)}
+  .wf-feeds-grid{grid-template-columns:1fr;gap:12px}
+  .wf-feed-body{max-height:400px}
+}
+/* ── Standard phones (iPhone 12-16, most Androids) ── */
+@media (max-width:640px){
+  .app-header{padding:8px 12px}
+  .app-header .brand .titles h1{font-size:13px}
+  .app-header .brand .titles .sub{display:none}
+  .app-header .actions .stat{display:none}
+  .app-header .actions .btn-label{display:none}
+  .app-header .actions button{padding:7px 10px}
+  .alert-map-controls{max-width:180px;top:8px;right:8px}
+  .alert-map-legend{max-width:180px;bottom:8px;left:8px}
+  .alert-map-count{font-size:10px;padding:5px 8px;top:68px;left:8px}
+  .hamburger-menu{min-width:180px}
+  /* Mobile popup: constrain width to viewport and shrink content */
+  .leaflet-popup-content-wrapper{max-width:calc(100vw - 30px)!important}
+  .leaflet-popup-content{max-width:calc(100vw - 50px)!important;font-size:10px!important;margin:8px 10px!important}
+  .leaflet-popup-content h3{font-size:12px!important}
+  .leaflet-popup-content table{font-size:9px!important}
+  .leaflet-popup-content .shot-desc-box{max-height:180px!important;font-size:9px!important}
+  /* Single-column feeds on mobile */
+  .wf-feeds-grid{grid-template-columns:1fr}
+  .wf-feed-body{max-height:500px}
+  /* Larger touch targets on mobile */
+  .hamburger{width:40px;height:40px}
+  .radar-anim-btn{width:32px;height:32px;font-size:12px}
+  .radar-anim-btn.play-btn{width:36px;height:32px}
+  .alert-map-controls label,
+  .alert-map-legend-item{padding:4px 2px;min-height:32px}
+  /* Screenshot modal full-width on mobile */
+  .shot-modal-content{max-width:95vw;max-height:95vh}
+  .shot-modal-body img{max-height:50vh}
+  .shot-modal-footer{flex-direction:column;align-items:stretch}
+  .shot-modal-actions{justify-content:center}
+}
+/* ── Tablets (iPad, Android tablets) ── */
+@media (min-width:641px) and (max-width:1024px){
+  .wf-feeds-grid{grid-template-columns:repeat(2,1fr)}
+  .alert-map-controls{max-width:220px}
+  .alert-map-legend{max-width:220px}
+}
+/* ── Desktop (large screens) ── */
+@media (min-width:1025px){
+  .wf-feeds-grid{grid-template-columns:repeat(3,1fr)}
+  .alert-map-controls{max-width:240px}
+  .alert-map-legend{max-width:240px}
+}
+/* ── Landscape phone adjustments ── */
+@media (max-width:900px) and (orientation:landscape){
+  .app-header .brand .titles .sub{display:none}
+  .alert-map-count{top:60px}
+  .wf-feeds-grid{grid-template-columns:repeat(2,1fr)}
+  .wf-feed-body{max-height:300px}
+}
+/* Screenshot modal */
+.shot-modal{
+  position:fixed;inset:0;z-index:5000;
+  display:none;align-items:center;justify-content:center;
+  padding:20px;
+}
+.shot-modal.visible{display:flex}
+.shot-modal-bg{
+  position:absolute;inset:0;
+  background:rgba(0,0,0,.8);
+  backdrop-filter:blur(8px);
+  -webkit-backdrop-filter:blur(8px);
+}
+.shot-modal-content{
+  position:relative;z-index:1;
+  background:var(--bg2);
+  border:1px solid var(--bdr-a);
+  border-radius:12px;
+  max-width:90vw;max-height:90vh;
+  display:flex;flex-direction:column;
+  box-shadow:0 8px 32px rgba(0,0,0,.6),0 0 20px rgba(255,115,0,.1);
+  overflow:hidden;
+}
+.shot-modal-header{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:12px 16px;
+  border-bottom:1px solid var(--bdr);
+  background:rgba(255,115,0,.04);
+}
+.shot-modal-header h2{
+  font-size:14px;font-weight:700;color:var(--acc);
+  display:flex;align-items:center;gap:8px;
+}
+.shot-modal-header h2 i{font-size:13px}
+.shot-modal-close{
+  background:none;border:none;color:var(--t2);
+  font-size:20px;cursor:pointer;padding:4px 8px;
+  border-radius:4px;transition:all .15s;
+}
+.shot-modal-close:hover{color:var(--acc);background:var(--acc-g)}
+.shot-modal-body{
+  padding:16px;overflow:auto;
+  background:rgba(0,0,0,.3);
+  display:flex;align-items:center;justify-content:center;
+  min-height:200px;
+}
+.shot-modal-body img{
+  max-width:100%;max-height:60vh;
+  border-radius:6px;
+  border:1px solid var(--bdr);
+  display:block;
+}
+.shot-modal-footer{
+  display:flex;align-items:center;justify-content:space-between;gap:12px;
+  padding:12px 16px;
+  border-top:1px solid var(--bdr);
+  background:rgba(255,115,0,.04);
+  flex-wrap:wrap;
+}
+.shot-modal-info{
+  font-size:10px;color:var(--t3);
+  font-family:'JetBrains Mono',monospace;
+}
+.shot-modal-actions{display:flex;gap:8px;flex-wrap:wrap}
+.shot-btn{
+  display:inline-flex;align-items:center;gap:6px;
+  padding:8px 14px;
+  border-radius:6px;
+  font-family:inherit;font-size:11px;font-weight:600;
+  cursor:pointer;text-decoration:none;
+  transition:all .15s;
+  border:1px solid var(--bdr);
+}
+.shot-btn-secondary{
+  background:var(--bg2);color:var(--t2);
+}
+.shot-btn-secondary:hover{background:var(--acc-g);color:var(--acc)}
+.shot-btn-primary{
+  background:var(--acc);color:#000;border-color:var(--acc);
+}
+.shot-btn-primary:hover{background:var(--acc2);border-color:var(--acc2)}
+/* Capturing state - hide UI elements that shouldn't appear in screenshots */
+/* Hamburger menu button (top-left) */
+.hamburger{
+  width:36px;height:36px;
+  background:var(--bg2);
+  border:1px solid var(--bdr);
+  border-radius:6px;
+  cursor:pointer;
+  display:flex;align-items:center;justify-content:center;
+  color:var(--acc);
+  font-size:16px;
+  transition:all .15s;
+  flex-shrink:0;
+}
+.hamburger:hover{background:var(--acc-g);border-color:var(--bdr-a)}
+.hamburger i{transition:transform .2s}
+.hamburger.open i{transform:rotate(90deg)}
+/* Hamburger dropdown menu (slides out below the button) */
+.hamburger-menu{
+  position:fixed;
+  top:calc(53px + env(safe-area-inset-top));left:0;
+  z-index:3000;
+  background:rgba(10,10,10,.98);
+  border-right:1px solid var(--bdr-a);
+  border-bottom:1px solid var(--bdr-a);
+  border-radius:0 0 8px 0;
+  min-width:200px;
+  padding:8px 0;
+  backdrop-filter:blur(12px);
+  -webkit-backdrop-filter:blur(12px);
+  box-shadow:4px 4px 16px rgba(0,0,0,.5),0 0 12px rgba(255,115,0,.08);
+  display:none;
+  flex-direction:column;
+}
+.hamburger-menu.visible{display:flex}
+.hamburger-menu-item{
+  display:flex;align-items:center;gap:10px;
+  padding:12px 16px;
+  cursor:pointer;
+  font-size:13px;font-weight:600;
+  color:var(--t2);
+  border-left:3px solid transparent;
+  transition:all .15s;
+  user-select:none;
+}
+.hamburger-menu-item i{width:18px;text-align:center;font-size:14px}
+.hamburger-menu-item:hover{
+  background:var(--acc-g);
+  color:var(--acc);
+}
+.hamburger-menu-item.active{
+  background:var(--acc-g);
+  color:var(--acc);
+  border-left-color:var(--acc);
+}
+.hamburger-menu-divider{
+  height:1px;
+  background:var(--bdr);
+  margin:4px 12px;
+}
+/* Tab views */
+.tab-view{display:none}
+.tab-view.active{display:block}
+/* Weatherfront iframe */
+.wf-frame-wrap{
+  position:fixed;top:calc(53px + env(safe-area-inset-top));left:0;right:0;bottom:0;
+  background:#0a0a0a;
+  display:flex;flex-direction:column;
+}
+.wf-frame-wrap iframe{
+  flex:1;width:100%;height:100%;border:none;
+  background:#0a0a0a;
+}
+/* Weather Feeds tab */
+.wf-feeds-wrap{
+  position:fixed;top:calc(53px + env(safe-area-inset-top));left:0;right:0;bottom:0;
+  background:#0a0a0a;
+  overflow-y:auto;
+  -webkit-overflow-scrolling:touch;
+  padding:16px;
+  /* Add bottom safe area for iPhone home indicator */
+  padding-bottom:calc(16px + env(safe-area-inset-bottom));
+}
+.wf-feeds-grid{
+  display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(340px,1fr));
+  gap:16px;
+  max-width:1400px;
+  margin:0 auto;
+}
+.wf-feed-card{
+  background:var(--bg2);
+  border:1px solid var(--bdr);
+  border-radius:8px;
+  overflow:hidden;
+  display:flex;flex-direction:column;
+}
+.wf-feed-header{
+  display:flex;align-items:center;gap:8px;
+  padding:10px 14px;
+  background:rgba(255,115,0,.06);
+  border-bottom:1px solid var(--bdr);
+  font-size:12px;font-weight:700;color:var(--acc);
+  text-transform:uppercase;letter-spacing:.04em;
+}
+.wf-feed-header i{font-size:13px}
+.wf-feed-body{
+  padding:0;
+  flex:1;
+  overflow-y:auto;
+  max-height:600px;
+}
+.wf-feed-body::-webkit-scrollbar{width:5px}
+.wf-feed-body::-webkit-scrollbar-thumb{background:var(--bdr-a);border-radius:3px}
+/* Twitter embed inside feed card */
+.wf-feed-body .twitter-timeline{
+  width:100%!important;
+}
+/* RSS feed items */
+.wf-rss-item{
+  padding:10px 14px;
+  border-bottom:1px solid var(--bdr);
+  transition:background .15s;
+  cursor:pointer;
+}
+.wf-rss-item:hover{background:rgba(255,115,0,.04)}
+.wf-rss-item:last-child{border-bottom:none}
+.wf-rss-title{
+  font-size:12px;font-weight:600;color:var(--t1);
+  margin-bottom:3px;line-height:1.4;
+}
+.wf-rss-time{
+  font-size:9px;color:var(--t3);
+  font-family:monospace;
+  margin-bottom:4px;
+}
+.wf-rss-summary{
+  font-size:10px;color:var(--t2);
+  line-height:1.5;
+  max-height:60px;overflow:hidden;
+}
+.wf-rss-empty{
+  padding:20px;text-align:center;
+  font-size:11px;color:var(--t3);
+}
+/* Radar animation controls */
+.radar-anim-controls{
+  display:flex;align-items:center;gap:4px;
+  margin-top:6px;
+}
+.radar-anim-btn{
+  background:var(--bg2);
+  border:1px solid var(--bdr);
+  color:var(--acc);
+  width:24px;height:24px;
+  border-radius:4px;
+  cursor:pointer;
+  display:flex;align-items:center;justify-content:center;
+  font-size:10px;
+  transition:all .15s;
+  padding:0;
+  flex-shrink:0;
+}
+.radar-anim-btn:hover{background:var(--acc-g);border-color:var(--bdr-a)}
+.radar-anim-btn.play-btn{width:28px;height:24px}
+.radar-anim-frame-label{
+  font-size:9px;color:var(--t2);
+  font-family:monospace;
+  flex:1;text-align:center;
+  white-space:nowrap;
+}
+.radar-anim-timeline{
+  width:100%;
+  margin-top:4px;
+  accent-color:var(--acc);
+  cursor:pointer;
+}
+.radar-anim-time-display{
+  font-size:8px;color:var(--t3);
+  text-align:center;
+  margin-top:2px;
+  font-family:monospace;
+}
+/* Capturing state - hide UI chrome that shouldn't appear in screenshots.
+   NOTE: .leaflet-popup-pane is intentionally NOT hidden so that any open
+   alert popup window is included in the screenshot. */
+body.capturing .alert-map-controls,
+body.capturing .alert-map-legend,
+body.capturing .loading-overlay,
+body.capturing .leaflet-control-zoom,
+body.capturing .leaflet-control-attribution,
+body.capturing .hamburger,
+body.capturing .hamburger-menu{display:none!important}
+</style>
+</head>
+<body>
+
+<div class="app-header">
+  <div class="brand">
+    <div class="hamburger" id="hamburgerBtn" onclick="toggleHamburgerMenu(event)">
+      <i class="fas fa-bars"></i>
+    </div>
+    <div class="logo"><img src="./skywarn-logo.png" alt="Skywarn logo"></div>
+    <div class="titles">
+      <h1>Skywarn Storm Spotters &amp; Chasers United States</h1>
+      <span class="sub">Live NWS Alert Polygon Map &middot; Warnings, Watches &amp; SPC Outlooks</span>
+    </div>
+  </div>
+  <div class="actions">
+    <div class="stat" id="liveStat"><span class="dot"></span><span id="liveText">LIVE</span></div>
+    <button id="screenshotBtn" onclick="captureScreenshot()"><i class="fas fa-camera"></i> <span class="btn-label">Screenshot</span></button>
+    <button id="refreshBtn" onclick="manualRefresh()"><i class="fas fa-rotate"></i> Refresh</button>
+  </div>
+</div>
+
+<!-- Hamburger dropdown menu -->
+<div class="hamburger-menu" id="hamburgerMenu">
+  <div class="hamburger-menu-item active" id="tab-polygonmap" onclick="switchTab('polygonmap')">
+    <i class="fas fa-map-location-dot"></i>
+    <span>Polygon Map</span>
+  </div>
+  <div class="hamburger-menu-item" id="tab-weatherfront" onclick="switchTab('weatherfront')">
+    <i class="fas fa-cloud-bolt"></i>
+    <span>Weatherfront</span>
+  </div>
+  <div class="hamburger-menu-item" id="tab-stormcams" onclick="switchTab('stormcams')">
+    <i class="fas fa-video"></i>
+    <span>StormCams</span>
+  </div>
+  <div class="hamburger-menu-item" id="tab-weatherfeeds" onclick="switchTab('weatherfeeds')">
+    <i class="fas fa-rss"></i>
+    <span>Weather Feeds</span>
+  </div>
+  <div class="hamburger-menu-divider"></div>
+  <div class="hamburger-menu-item" id="menu-install" onclick="installPWA()" style="display:none">
+    <i class="fas fa-download"></i>
+    <span>Install App</span>
+  </div>
+  <div class="hamburger-menu-item" onclick="manualRefresh()">
+    <i class="fas fa-rotate"></i>
+    <span>Refresh Data</span>
+  </div>
+  <div class="hamburger-menu-item" onclick="captureScreenshot()">
+    <i class="fas fa-camera"></i>
+    <span>Screenshot</span>
+  </div>
+</div>
+
+<!-- Tab View: Polygon Map -->
+<div id="view-polygonmap" class="tab-view active">
+<div id="mapWrap">
+  <div id="alertMap"></div>
+  <div class="alert-map-count" id="alertMapCount"><i class="fas fa-satellite-dish"></i> Loading alerts...</div>
+
+  <div class="alert-map-controls" id="alertMapControls">
+    <div class="alert-map-controls-toggle" onclick="var c=document.getElementById('alertMapControls');c.classList.toggle('collapsed')">
+      <span><i class="fas fa-sliders"></i> Layers &amp; Filters</span>
+      <i class="fas fa-chevron-down"></i>
+    </div>
+    <div class="alert-map-controls-body">
+      <div class="section-label">Alert Categories</div>
+      <label><input type="checkbox" id="amLayerWarnings" checked onchange="fAlertMap()"> Warnings</label>
+      <label><input type="checkbox" id="amLayerWatches" checked onchange="fAlertMap()"> Watches</label>
+      <label><input type="checkbox" id="amLayerAdvisories" onchange="fAlertMap()"> Advisories &amp; Statements <span style="font-size:9px;color:var(--t3);font-weight:400">(off by default - click to enable)</span></label>
+      <label><input type="checkbox" id="amLayerLabels" checked onchange="fAlertMap()"> Zone Labels</label>
+
+      <div class="divider">
+        <div class="section-label">State Filter</div>
+        <select id="amStateFilter" onchange="fAlertMap()">
+          <option value="">All United States</option>
+          <option value="AL">Alabama</option>
+          <option value="AK">Alaska</option>
+          <option value="AZ">Arizona</option>
+          <option value="AR">Arkansas</option>
+          <option value="CA">California</option>
+          <option value="CO">Colorado</option>
+          <option value="CT">Connecticut</option>
+          <option value="DE">Delaware</option>
+          <option value="FL">Florida</option>
+          <option value="GA">Georgia</option>
+          <option value="HI">Hawaii</option>
+          <option value="ID">Idaho</option>
+          <option value="IL">Illinois</option>
+          <option value="IN">Indiana</option>
+          <option value="IA">Iowa</option>
+          <option value="KS">Kansas</option>
+          <option value="KY">Kentucky</option>
+          <option value="LA">Louisiana</option>
+          <option value="ME">Maine</option>
+          <option value="MD">Maryland</option>
+          <option value="MA">Massachusetts</option>
+          <option value="MI">Michigan</option>
+          <option value="MN">Minnesota</option>
+          <option value="MS">Mississippi</option>
+          <option value="MO">Missouri</option>
+          <option value="MT">Montana</option>
+          <option value="NE">Nebraska</option>
+          <option value="NV">Nevada</option>
+          <option value="NH">New Hampshire</option>
+          <option value="NJ">New Jersey</option>
+          <option value="NM">New Mexico</option>
+          <option value="NY">New York</option>
+          <option value="NC">North Carolina</option>
+          <option value="ND">North Dakota</option>
+          <option value="OH">Ohio</option>
+          <option value="OK">Oklahoma</option>
+          <option value="OR">Oregon</option>
+          <option value="PA">Pennsylvania</option>
+          <option value="RI">Rhode Island</option>
+          <option value="SC">South Carolina</option>
+          <option value="SD">South Dakota</option>
+          <option value="TN">Tennessee</option>
+          <option value="TX">Texas</option>
+          <option value="UT">Utah</option>
+          <option value="VT">Vermont</option>
+          <option value="VA">Virginia</option>
+          <option value="WA">Washington</option>
+          <option value="WV">West Virginia</option>
+          <option value="WI">Wisconsin</option>
+          <option value="WY">Wyoming</option>
+          <option value="DC">District of Columbia</option>
+          <option value="PR">Puerto Rico</option>
+          <option value="GU">Guam</option>
+        </select>
+      </div>
+
+      <div class="divider">
+        <div class="section-label">SPC Convective Outlook</div>
+        <select id="amSpcDay" onchange="toggleSpcOverlay()">
+          <option value="1">Day 1</option>
+          <option value="2">Day 2</option>
+          <option value="3">Day 3</option>
+        </select>
+        <label style="margin-top:6px"><input type="checkbox" id="amSpcEnable" onchange="toggleSpcOverlay()"> Show SPC Outlook</label>
+        <div style="margin-top:6px;padding:6px;background:rgba(0,0,0,.2);border-radius:4px;border:1px solid var(--bdr)">
+          <div style="font-size:9px;color:var(--t3);text-transform:uppercase;letter-spacing:.04em;margin-bottom:4px">Risk Levels</div>
+          <label style="font-size:10px"><input type="checkbox" id="amSpcTstm" checked onchange="toggleSpcOverlay()"> <span style="display:inline-block;width:10px;height:10px;background:#c1e9c1;border:1px solid #999;border-radius:2px;vertical-align:middle;margin:0 4px"></span>TSTM</label>
+          <label style="font-size:10px"><input type="checkbox" id="amSpcMrgl" checked onchange="toggleSpcOverlay()"> <span style="display:inline-block;width:10px;height:10px;background:#73bf93;border:1px solid #999;border-radius:2px;vertical-align:middle;margin:0 4px"></span>MRGL</label>
+          <label style="font-size:10px"><input type="checkbox" id="amSpcSlgt" checked onchange="toggleSpcOverlay()"> <span style="display:inline-block;width:10px;height:10px;background:#ffff00;border:1px solid #999;border-radius:2px;vertical-align:middle;margin:0 4px"></span>SLGT</label>
+          <label style="font-size:10px"><input type="checkbox" id="amSpcEnh" checked onchange="toggleSpcOverlay()"> <span style="display:inline-block;width:10px;height:10px;background:#ffa500;border:1px solid #999;border-radius:2px;vertical-align:middle;margin:0 4px"></span>ENH</label>
+          <label style="font-size:10px"><input type="checkbox" id="amSpcMdt" checked onchange="toggleSpcOverlay()"> <span style="display:inline-block;width:10px;height:10px;background:#ff0000;border:1px solid #999;border-radius:2px;vertical-align:middle;margin:0 4px"></span>MDT</label>
+          <label style="font-size:10px"><input type="checkbox" id="amSpcHigh" checked onchange="toggleSpcOverlay()"> <span style="display:inline-block;width:10px;height:10px;background:#ff00ff;border:1px solid #999;border-radius:2px;vertical-align:middle;margin:0 4px"></span>HIGH</label>
+        </div>
+      </div>
+
+      <div class="divider">
+        <div class="section-label">Radar Overlay</div>
+        <label><input type="checkbox" id="amRadarEnable" onchange="toggleRadarOverlay()"> Show Radar</label>
+        <label style="margin-top:4px">Type:
+          <select id="amRadarType" onchange="onRadarTypeChanged()" style="width:100%;background:var(--bg2);border:1px solid var(--bdr);color:var(--t1);font-family:inherit;font-size:10px;padding:3px 4px;border-radius:4px;margin-top:2px">
+            <option value="reflectivity">Composite Reflectivity</option>
+            <option value="rainrate">Rain Rate (dBZ)</option>
+          </select>
+        </label>
+        <label style="margin-top:4px">Opacity:
+          <input type="range" id="amRadarOpacity" min="20" max="100" value="70" oninput="updateRadarOpacity()" style="width:100%;accent-color:var(--acc);cursor:pointer">
+        </label>
+        <div style="margin-top:6px">
+          <div style="font-size:9px;color:var(--t3);text-transform:uppercase;letter-spacing:.04em;margin-bottom:3px">Animation</div>
+          <div class="radar-anim-controls">
+            <button class="radar-anim-btn" onclick="radarStep(-1)" title="Previous frame"><i class="fas fa-backward-step"></i></button>
+            <button class="radar-anim-btn play-btn" id="amRadarPlayBtn" onclick="radarTogglePlay()" title="Play/Pause"><i class="fas fa-play"></i></button>
+            <button class="radar-anim-btn" onclick="radarStep(1)" title="Next frame"><i class="fas fa-forward-step"></i></button>
+            <span class="radar-anim-frame-label" id="amRadarFrameLabel">—</span>
+          </div>
+          <input type="range" class="radar-anim-timeline" id="amRadarTimeline" min="0" max="0" value="0" oninput="radarSeekTo(this.value)" style="width:100%">
+          <div class="radar-anim-time-display" id="amRadarTimeDisplay">—</div>
+        </div>
+        <label style="font-size:9px;color:var(--t3);margin-top:4px"><i class="fas fa-info-circle" style="margin-right:4px"></i>RainViewer API · 13 frames · auto-refresh 5 min</label>
+      </div>
+
+      <div class="divider">
+        <div class="section-label">Live Cameras <span style="font-size:8px;color:var(--t3);text-transform:none;letter-spacing:0">(Coming Soon)</span></div>
+        <label style="font-size:10px;color:var(--t3);opacity:.7;cursor:not-allowed">
+          <input type="checkbox" disabled> Camera layer (disabled)
+        </label>
+        <label style="font-size:9px;color:var(--t3);margin-top:4px;line-height:1.4">
+          <i class="fas fa-info-circle" style="margin-right:4px"></i>Pending state DOT camera integration (MDOT, etc.)
+        </label>
+      </div>
+    </div>
+  </div>
+
+  <div class="alert-map-legend" id="alertMapLegend"></div>
+
+  <div class="loading-overlay" id="loadingOverlay"><div class="spinner"></div></div>
+</div>
+</div><!-- /view-polygonmap -->
+
+<!-- Tab View: Weatherfront -->
+<div id="view-weatherfront" class="tab-view">
+  <div class="wf-frame-wrap" data-tab-label="Weatherfront" data-tab-icon="fa-cloud-bolt">
+    <iframe src="https://app.weatherfront.com/" title="Weatherfront" allow="fullscreen; geolocation"></iframe>
+  </div>
+</div>
+
+<!-- Tab View: StormCams -->
+<div id="view-stormcams" class="tab-view">
+  <div class="wf-frame-wrap" data-tab-label="StormCams" data-tab-icon="fa-video">
+    <iframe src="https://stormcamsusa.com" title="StormCams" allow="fullscreen; geolocation"></iframe>
+  </div>
+</div>
+
+<!-- Tab View: Weather Feeds -->
+<div id="view-weatherfeeds" class="tab-view">
+  <div class="wf-feeds-wrap">
+    <div class="wf-feeds-grid" id="wfFeedsGrid">
+      <!-- Twitter: NWS Tornado -->
+      <div class="wf-feed-card">
+        <div class="wf-feed-header"><i class="fab fa-x-twitter"></i> NWS Tornado (X/Twitter)</div>
+        <div class="wf-feed-body" id="tw-nwstornado">
+          <div style="padding:20px;text-align:center;color:var(--t3);font-size:11px"><i class="fas fa-spinner fa-spin" style="margin-right:6px"></i>Loading...</div>
+        </div>
+      </div>
+      <!-- Twitter: NWS Storm Prediction Center -->
+      <div class="wf-feed-card">
+        <div class="wf-feed-header"><i class="fab fa-x-twitter"></i> NWS SPC (X/Twitter)</div>
+        <div class="wf-feed-body" id="tw-nwsspc">
+          <div style="padding:20px;text-align:center;color:var(--t3);font-size:11px"><i class="fas fa-spinner fa-spin" style="margin-right:6px"></i>Loading...</div>
+        </div>
+      </div>
+      <!-- Twitter: NWS -->
+      <div class="wf-feed-card">
+        <div class="wf-feed-header"><i class="fab fa-x-twitter"></i> NWS (X/Twitter)</div>
+        <div class="wf-feed-body" id="tw-nws">
+          <div style="padding:20px;text-align:center;color:var(--t3);font-size:11px"><i class="fas fa-spinner fa-spin" style="margin-right:6px"></i>Loading...</div>
+        </div>
+      </div>
+      <!-- SPC Watches RSS -->
+      <div class="wf-feed-card">
+        <div class="wf-feed-header"><i class="fas fa-shield-halved"></i> SPC Watches</div>
+        <div class="wf-feed-body" id="rss-spc-watches"><div class="wf-rss-empty">Loading...</div></div>
+      </div>
+      <!-- SPC Mesoscale Discussions RSS -->
+      <div class="wf-feed-card">
+        <div class="wf-feed-header"><i class="fas fa-comment-dots"></i> SPC Mesoscale Discussions</div>
+        <div class="wf-feed-body" id="rss-spc-meso"><div class="wf-rss-empty">Loading...</div></div>
+      </div>
+      <!-- SPC Convective Outlooks RSS -->
+      <div class="wf-feed-card">
+        <div class="wf-feed-header"><i class="fas fa-bullseye"></i> SPC Convective Outlooks</div>
+        <div class="wf-feed-body" id="rss-spc-outlooks"><div class="wf-rss-empty">Loading...</div></div>
+      </div>
+      <!-- NWS All Active Alerts RSS -->
+      <div class="wf-feed-card">
+        <div class="wf-feed-header"><i class="fas fa-triangle-exclamation"></i> NWS Active Alerts</div>
+        <div class="wf-feed-body" id="rss-nws-alerts"><div class="wf-rss-empty">Loading...</div></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Screenshot preview modal -->
+<div class="shot-modal" id="shotModal">
+  <div class="shot-modal-bg" onclick="closeShotModal()"></div>
+  <div class="shot-modal-content">
+    <div class="shot-modal-header">
+      <h2><i class="fas fa-camera"></i> Screenshot Preview</h2>
+      <button class="shot-modal-close" onclick="closeShotModal()"><i class="fas fa-xmark"></i></button>
+    </div>
+    <div class="shot-modal-body">
+      <img id="shotPreviewImg" alt="Screenshot preview">
+    </div>
+    <div class="shot-modal-footer">
+      <span class="shot-modal-info" id="shotInfo"></span>
+      <div class="shot-modal-actions">
+        <button class="shot-btn shot-btn-secondary" onclick="closeShotModal()"><i class="fas fa-xmark"></i> Close</button>
+        <a id="shotDownloadLink" class="shot-btn shot-btn-primary" download=""><i class="fas fa-download"></i> Download PNG</a>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ───────────────────────────────────────────────────────────────────────────
+   US NWS Alert Polygon Map - Standalone Version
+   Based on the KN Weather Center alertMap module, expanded to cover all
+   NWS regions across the entire United States.
+   Data source: api.weather.gov/alerts/active
+   ─────────────────────────────────────────────────────────────────────────── */
+
+/* Fetch with multiple CORS proxy fallbacks.
+   Timeouts are short (6s) so we fail fast - the NWS API supports CORS so
+   direct fetch usually works; the proxies are just fallbacks. With 4
+   fallbacks at 6s each, worst case is 24s per failed fetch instead of 60s. */
+function tms(){return new Date().toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit',hour12:true})}
+function to(ms){return new Promise(function(_,r){setTimeout(function(){r(new Error('Timeout'))},ms)})}
+async function fP(u){
+  try{return await Promise.race([fetch(u).then(function(r){if(r.ok)return r.text();throw 0}),to(6e3)])}catch(e){}
+  try{return await Promise.race([fetch('https://api.allorigins.win/raw?url='+encodeURIComponent(u)).then(function(r){if(r.ok)return r.text();throw 0}),to(6e3)])}catch(e2){}
+  try{
+    var res=await Promise.race([fetch('https://api.allorigins.win/get?url='+encodeURIComponent(u)).then(function(r){if(r.ok)return r.json();throw 0}),to(6e3)]);
+    if(res&&res.contents)return res.contents;
+  }catch(e3){}
+  try{return await Promise.race([fetch('https://corsproxy.io/?url='+encodeURIComponent(u)).then(function(r){if(r.ok)return r.text();throw 0}),to(6e3)])}catch(e4){}
+  return null;
+}
+
+/* Concurrency-limited async pool. Runs up to `limit` promises at a time
+   over the `items` array, calling fn(item) for each. Returns results in
+   order. Prevents firing hundreds of simultaneous fetches (which would
+   overwhelm the browser's connection pool and the proxy). */
+async function asyncPool(limit,items,fn){
+  var results=new Array(items.length);
+  var executing=[];
+  var nextIdx=0;
+  async function worker(){
+    while(nextIdx<items.length){
+      var myIdx=nextIdx++;
+      try{results[myIdx]=await fn(items[myIdx],myIdx)}catch(e){results[myIdx]=null}
+    }
+  }
+  for(var w=0;w<Math.min(limit,items.length);w++)executing.push(worker());
+  await Promise.all(executing);
+  return results;
+}
+
+/* ── Map state ──────────────────────────────────────────────────────────── */
+var alertMapInstance=null;
+var alertMapLayers={warnings:[],watches:[],advisories:[]};
+var drawnAlerts=[];           /* all alerts currently drawn (or hidden) */
+var alertPopupState=null;     /* {latlng, overlappingAlerts, currentIndex} */
+var wwasCache=null;           /* cached alert features from last fetch */
+
+/* Critical alerts that ALWAYS render on load regardless of category toggle
+   state. This guarantees the user sees Tornado Warnings, Severe Thunderstorm
+   Warnings, Hurricane Warnings, and Tornado Watches immediately, even if
+   they've unchecked the Warnings or Watches category checkbox. The user
+   can still hide these individually via the legend checkboxes. */
+var CRITICAL_ALWAYS_ON={
+  'Tornado Warning':true,
+  'Severe Thunderstorm Warning':true,
+  'Hurricane Warning':true,
+  'Tornado Watch':true
+};
+
+/* ── Alert color logic - matches official NWS Hazards Map color codes ───── */
+function getAlertColor(event){
+  if(!event)return '#cccccc';
+  var e=event.toLowerCase();
+  /* Warnings (priority order) */
+  if(e.includes('tsunami warning'))return '#FD6347';
+  if(e.includes('tornado warning'))return '#FF0000';
+  if(e.includes('extreme wind warning'))return '#FF8C00';
+  if(e.includes('severe thunderstorm warning'))return '#FFA500';
+  if(e.includes('flash flood warning'))return '#8B0000';
+  if(e.includes('flash flood statement'))return '#8B0000';
+  if(e.includes('severe weather statement'))return '#00FFFF';
+  if(e.includes('shelter in place'))return '#FA8072';
+  if(e.includes('evacuation'))return '#7FFF00';
+  if(e.includes('civil danger'))return '#FFB6C1';
+  if(e.includes('nuclear power plant'))return '#4B0082';
+  if(e.includes('radiological'))return '#4B0082';
+  if(e.includes('hazardous materials'))return '#4B0082';
+  if(e.includes('fire warning'))return '#A0522D';
+  if(e.includes('civil emergency'))return '#FFB6C1';
+  if(e.includes('law enforcement warning'))return '#C0C0C0';
+  if(e.includes('storm surge warning'))return '#B524F7';
+  if(e.includes('hurricane force wind warning'))return '#CD5C5C';
+  if(e.includes('hurricane warning'))return '#DC143C';
+  if(e.includes('typhoon warning'))return '#DC143C';
+  if(e.includes('special marine warning'))return '#FFA500';
+  if(e.includes('blizzard warning'))return '#FF4500';
+  if(e.includes('snow squall warning'))return '#C71585';
+  if(e.includes('ice storm warning'))return '#8B008B';
+  if(e.includes('freezing spray warning'))return '#00BFFF';
+  if(e.includes('winter storm warning'))return '#FF69B4';
+  if(e.includes('lake effect snow warning'))return '#008B8B';
+  if(e.includes('dust storm warning'))return '#FFE4C4';
+  if(e.includes('blowing dust warning'))return '#FFE4C4';
+  if(e.includes('high wind warning'))return '#DAA520';
+  if(e.includes('tropical storm warning'))return '#B22222';
+  if(e.includes('storm warning'))return '#9400D3';
+  if(e.includes('avalanche warning'))return '#1E90FF';
+  if(e.includes('earthquake warning'))return '#8B4513';
+  if(e.includes('volcano warning'))return '#2F4F4F';
+  if(e.includes('ashfall warning'))return '#A9A9A9';
+  if(e.includes('flood warning'))return '#00FF00';
+  if(e.includes('coastal flood warning'))return '#228B22';
+  if(e.includes('lakeshore flood warning'))return '#228B22';
+  if(e.includes('high surf warning'))return '#228B22';
+  if(e.includes('extreme heat warning'))return '#C71585';
+  if(e.includes('extreme cold warning'))return '#0000FF';
+  if(e.includes('freeze warning'))return '#483D8B';
+  if(e.includes('red flag warning'))return '#FF1493';
+  if(e.includes('hazardous seas warning'))return '#D8BFD8';
+  if(e.includes('low water advisory'))return '#A52A2A';
+  /* Watches */
+  if(e.includes('tsunami watch'))return '#FF00FF';
+  if(e.includes('tornado watch'))return '#FFFF00';
+  if(e.includes('severe thunderstorm watch'))return '#DB7093';
+  if(e.includes('flash flood watch'))return '#2E8B57';
+  if(e.includes('flood watch'))return '#2E8B57';
+  if(e.includes('storm surge watch'))return '#DB7FF7';
+  if(e.includes('hurricane force wind watch'))return '#9932CC';
+  if(e.includes('hurricane watch'))return '#FF00FF';
+  if(e.includes('typhoon watch'))return '#FF00FF';
+  if(e.includes('tropical storm watch'))return '#F08080';
+  if(e.includes('storm watch'))return '#FFE4B5';
+  if(e.includes('winter storm watch'))return '#4682B4';
+  if(e.includes('gale watch'))return '#FFC0CB';
+  if(e.includes('avalanche watch'))return '#F4A460';
+  if(e.includes('hazardous seas watch'))return '#483D8B';
+  if(e.includes('freezing spray watch'))return '#BC8F8F';
+  if(e.includes('coastal flood watch'))return '#66CDAA';
+  if(e.includes('lakeshore flood watch'))return '#66CDAA';
+  if(e.includes('high wind watch'))return '#B8860B';
+  if(e.includes('extreme heat watch'))return '#800000';
+  if(e.includes('extreme cold watch'))return '#5F9EA0';
+  if(e.includes('freeze watch'))return '#00FFFF';
+  if(e.includes('fire weather watch'))return '#FFDEAD';
+  if(e.includes('watch'))return '#FFC0CB';
+  /* Advisories */
+  if(e.includes('tsunami advisory'))return '#D2691E';
+  if(e.includes('ashfall advisory'))return '#696969';
+  if(e.includes('winter weather advisory'))return '#7B68EE';
+  if(e.includes('avalanche advisory'))return '#CD853F';
+  if(e.includes('cold weather advisory'))return '#AFEEEE';
+  if(e.includes('heat advisory'))return '#FF7F50';
+  if(e.includes('flood advisory'))return '#00FF7F';
+  if(e.includes('coastal flood advisory'))return '#7CFC00';
+  if(e.includes('lakeshore flood advisory'))return '#7CFC00';
+  if(e.includes('high surf advisory'))return '#BA55D3';
+  if(e.includes('dense fog advisory'))return '#708090';
+  if(e.includes('dense smoke advisory'))return '#F0E68C';
+  if(e.includes('small craft advisory'))return '#D8BFD8';
+  if(e.includes('brisk wind advisory'))return '#D8BFD8';
+  if(e.includes('dust advisory'))return '#BDB76B';
+  if(e.includes('blowing dust advisory'))return '#BDB76B';
+  if(e.includes('lake wind advisory'))return '#D2B48C';
+  if(e.includes('wind advisory'))return '#D2B48C';
+  if(e.includes('frost advisory'))return '#6495ED';
+  if(e.includes('freezing fog advisory'))return '#008080';
+  if(e.includes('freezing spray advisory'))return '#00BFFF';
+  if(e.includes('air stagnation advisory'))return '#808080';
+  if(e.includes('advisory'))return '#D8BFD8';
+  /* Statements */
+  if(e.includes('tropical cyclone local statement'))return '#FFE4B5';
+  if(e.includes('flood statement'))return '#00FF00';
+  if(e.includes('coastal flood statement'))return '#6B8E23';
+  if(e.includes('lakeshore flood statement'))return '#6B8E23';
+  if(e.includes('rip current statement'))return '#40E0D0';
+  if(e.includes('beach hazards statement'))return '#40E0D0';
+  if(e.includes('special weather statement'))return '#FFE4B5';
+  if(e.includes('marine weather statement'))return '#FFDAB9';
+  if(e.includes('air quality alert'))return '#808080';
+  if(e.includes('hazardous weather outlook'))return '#EEE8AA';
+  if(e.includes('hydrologic outlook'))return '#90EE90';
+  if(e.includes('short term forecast'))return '#98FB98';
+  if(e.includes('local area emergency'))return '#C0C0C0';
+  if(e.includes('administrative message'))return '#C0C0C0';
+  if(e.includes('911 telephone outage'))return '#C0C0C0';
+  if(e.includes('extreme fire danger'))return '#E9967A';
+  return '#cccccc';
+}
+
+/* Categorize an alert as Warning, Watch, or Advisory/Statement */
+function alertCategory(event){
+  if(!event)return 'advisories';
+  var e=event.toLowerCase();
+  if(e.includes('warning'))return 'warnings';
+  if(e.includes('watch'))return 'watches';
+  return 'advisories';
+}
+
+/* ── Initialize Leaflet map centered on the continental US ─────────────── */
+function initAlertMap(){
+  var mapEl=document.getElementById('alertMap');
+  if(!mapEl||alertMapInstance)return;
+  /* Canvas renderer preferred - better for large polygon counts when the
+     whole US is rendered (1 alert can produce dozens of zone polygons).
+     zoomSnap:0.25 + zoomDelta:0.25 enable fractional zoom steps so the
+     user can zoom in precise 0.25 increments (e.g. 4.0 → 4.25 → 4.5 →
+     4.75 → 5.0) instead of jumping by whole integers. This makes it
+     much easier to frame a specific area (like a single state or storm
+     system) for screenshots. wheelPxPerZoomLevel is lowered so mouse-
+     wheel zoom also uses the smaller 0.25 step instead of skipping
+     multiple levels per scroll notch. */
+  alertMapInstance=L.map('alertMap',{
+    scrollWheelZoom:true,
+    preferCanvas:true,
+    minZoom:3,
+    maxZoom:18,
+    zoomSnap:0.25,
+    zoomDelta:0.25,
+    wheelPxPerZoomLevel:120,
+    worldCopyJump:true
+  }).setView([39.0,-98.0],4);
+
+  /* Capture last click position for popup overlap detection */
+  alertMapInstance.on('click',function(e){
+    alertMapInstance._lastClickLatLng=e.latlng;
+  });
+
+  /* CARTO dark basemap - matches original site aesthetic and supports CORS
+     for canvas rendering. */
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png',{
+    maxZoom:18,
+    attribution:'&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a> | Alerts: <a href="https://api.weather.gov">NWS</a>',
+    subdomains:'abcd',
+    crossOrigin:true
+  }).addTo(alertMapInstance);
+
+  /* Build the legend container - body is populated by fAlertMap() */
+  var legend=document.getElementById('alertMapLegend');
+  if(legend&&!legend.dataset.built){
+    legend.innerHTML='<div class="alert-map-legend-toggle" onclick="var l=document.getElementById(\'alertMapLegend\');l.classList.toggle(\'collapsed\')"><span><i class="fas fa-palette"></i> Active Alert Colors</span><i class="fas fa-chevron-down"></i></div>'+
+      '<div class="alert-map-legend-actions" id="alertMapLegendActions" style="display:none">'+
+        '<div class="alert-map-legend-action" onclick="resetAlertTypeHidden()"><i class="fas fa-eye"></i> Show All</div>'+
+        '<div class="alert-map-legend-action hide-action" onclick="hideAllAlertTypes()"><i class="fas fa-eye-slash"></i> Hide All</div>'+
+      '</div>'+
+      '<div class="alert-map-legend-body" id="alertMapLegendBody">'+
+      '<div style="font-size:10px;color:var(--t3);padding:6px 0">Loading alerts...</div>'+
+      '</div>';
+    legend.dataset.built='1';
+  }
+}
+
+/* ── Alert type visibility state (persisted in localStorage) ─────────────── */
+var ALERT_TYPE_HIDDEN_KEY='us_nws_alert_hidden_types';
+var ALERT_TYPE_HIDDEN={};
+try{
+  var savedHidden=localStorage.getItem(ALERT_TYPE_HIDDEN_KEY);
+  if(savedHidden)ALERT_TYPE_HIDDEN=JSON.parse(savedHidden)||{};
+}catch(e){}
+function saveAlertTypeHidden(){
+  try{localStorage.setItem(ALERT_TYPE_HIDDEN_KEY,JSON.stringify(ALERT_TYPE_HIDDEN))}catch(e){}
+}
+function resetAlertTypeHidden(){
+  ALERT_TYPE_HIDDEN={};
+  saveAlertTypeHidden();
+  fAlertMap();
+}
+/* Hide all currently-drawn alert types at once. Adds every event name
+   from the drawnAlerts list to ALERT_TYPE_HIDDEN so nothing renders on
+   the map. The legend still shows all types (dimmed) so the user can
+   re-enable individual ones or click "Show All" to bring everything back. */
+function hideAllAlertTypes(){
+  drawnAlerts.forEach(function(a){
+    ALERT_TYPE_HIDDEN[a.event]=true;
+  });
+  saveAlertTypeHidden();
+  fAlertMap();
+}
+function toggleAlertType(eventName){
+  if(!eventName)return;
+  var cat=alertCategory(eventName);
+  /* Find the parent category checkbox for this alert type. */
+  var catCbId=cat==='advisories'?'amLayerAdvisories':(cat==='warnings'?'amLayerWarnings':'amLayerWatches');
+  var catCb=document.getElementById(catCbId);
+  var catOn=catCb&&catCb.checked;
+
+  if(!catOn){
+    /* Category is currently OFF. Clicking this legend item turns the
+       category ON (which makes ALL alerts in that category render,
+       subject to any per-type hides). We also clear any per-type hide
+       on this specific event so it actually shows up. This makes the
+       legend feel intuitive: clicking an advisory's checkbox enables
+       advisories, rather than toggling per-type visibility without
+       actually showing anything. */
+    if(catCb)catCb.checked=true;
+    delete ALERT_TYPE_HIDDEN[eventName];
+  }else{
+    /* Category is ON - toggle this specific type's visibility. */
+    if(ALERT_TYPE_HIDDEN[eventName])delete ALERT_TYPE_HIDDEN[eventName];
+    else ALERT_TYPE_HIDDEN[eventName]=true;
+  }
+  saveAlertTypeHidden();
+  fAlertMap();
+}
+
+/* ── Build the dynamic legend with per-type visibility checkboxes ──────── */
+function buildAlertLegend(presentTypes){
+  var body=document.getElementById('alertMapLegendBody');
+  if(!body)return;
+  /* Show the Show All / Hide All action row whenever there are alerts
+     present. Both buttons stay visible so the user can always toggle
+     the whole set on or off in one click. */
+  var actionsRow=document.getElementById('alertMapLegendActions');
+  var hasAlerts=presentTypes&&presentTypes.length>0;
+  if(actionsRow)actionsRow.style.display=hasAlerts?'flex':'none';
+  if(!presentTypes||presentTypes.length===0){
+    body.innerHTML='<div style="font-size:10px;color:var(--t3);padding:6px 0">No active alerts</div>';
+    return;
+  }
+  /* Sort alphabetically by event name (case-insensitive) for easy scanning.
+     This puts all related alert types together (e.g. "Flood Advisory",
+     "Flood Statement", "Flood Watch", "Flood Warning" cluster under F)
+     regardless of their severity category. */
+  presentTypes.sort(function(a,b){
+    return a.event.toLowerCase().localeCompare(b.event.toLowerCase());
+  });
+  var html='';
+  presentTypes.forEach(function(t){
+    /* Determine if this alert type is currently visible on the map.
+       Visibility depends on BOTH the category toggle AND per-type hide.
+       Critical alerts bypass the category toggle (always visible unless
+       explicitly hidden via the legend). */
+    var catCbId=t.cat==='advisories'?'amLayerAdvisories':(t.cat==='warnings'?'amLayerWarnings':'amLayerWatches');
+    var catCb=document.getElementById(catCbId);
+    var catOn=catCb&&catCb.checked;
+    var isCritical=!!CRITICAL_ALWAYS_ON[t.event];
+    var perTypeHidden=!!ALERT_TYPE_HIDDEN[t.event];
+    /* For critical alerts, category state doesn't gate visibility. */
+    var effectivelyVisible=isCritical?!perTypeHidden:(catOn&&!perTypeHidden);
+    var isHidden=!effectivelyVisible;
+    var isCategoryOff=!isCritical&&!catOn;
+    html+='<label class="alert-map-legend-item" style="opacity:'+(isHidden?'.4':'1')+';cursor:pointer"'+(isCategoryOff?' title="Click to enable '+t.cat+'"':'')+'>'+
+      '<input type="checkbox" '+(effectivelyVisible?'checked':'')+' onchange="toggleAlertType(\''+t.event.replace(/'/g,"\\'")+'\')" style="accent-color:'+t.color+'">'+
+      '<div class="alert-map-legend-dot" style="background:'+t.color+'"></div>'+
+      '<span>'+t.event+'</span>'+
+      (t.count>1?'<span style="margin-left:auto;font-size:9px;color:var(--t3);font-weight:700">'+t.count+'</span>':'')+
+      (isCritical?'<i class="fas fa-star" style="color:var(--acc);font-size:8px;margin-left:3px" title="Critical alert - always shown"></i>':'')+
+      '</label>';
+  });
+  body.innerHTML=html;
+}
+
+/* ── Point-in-polygon tests for popup overlap detection ────────────────── */
+function pointInRing(pt,ring){
+  var x=pt.lng,y=pt.lat;
+  var inside=false;
+  for(var i=0,j=ring.length-1;i<ring.length;j=i++){
+    var xi=ring[i].lng,yi=ring[i].lat;
+    var xj=ring[j].lng,yj=ring[j].lat;
+    var intersect=((yi>y)!==(yj>y))&&(x<(xj-xi)*(y-yi)/(yj-yi)+xi);
+    if(intersect)inside=!inside;
+  }
+  return inside;
+}
+function pointInGeometries(latlng,geoms){
+  if(!latlng||!geoms||geoms.length===0)return false;
+  try{
+    var pt=L.latLng(latlng.lat,latlng.lng);
+    for(var gi=0;gi<geoms.length;gi++){
+      var g=geoms[gi];
+      var testLayer=L.geoJSON(g);
+      var hit=false;
+      testLayer.eachLayer(function(layer){
+        if(hit)return;
+        try{
+          if(layer.getBounds&&layer.getBounds().contains(pt)){
+            if(layer.getLatLngs){
+              var rings=layer.getLatLngs();
+              var flatRings=[];
+              if(Array.isArray(rings[0])&&Array.isArray(rings[0][0])){
+                rings.forEach(function(poly){poly.forEach(function(ring){flatRings.push(ring)})});
+              }else{
+                rings.forEach(function(ring){flatRings.push(ring)});
+              }
+              for(var ri=0;ri<flatRings.length;ri++){
+                if(pointInRing(pt,flatRings[ri])){hit=true;return;}
+              }
+            }
+          }
+        }catch(e){}
+      });
+      testLayer.remove();
+      if(hit)return true;
+    }
+  }catch(e){console.warn('pointInGeometries error:',e)}
+  return false;
+}
+
+/* Format an ISO timestamp (e.g. "2025-07-11T15:30:00Z") into a readable
+   local time string. Returns 'N/A' if the input is empty or invalid. */
+function fmtNwsTime(iso){
+  if(!iso)return 'N/A';
+  try{
+    var d=new Date(iso);
+    if(isNaN(d.getTime()))return 'N/A';
+    return d.toLocaleString('en-US',{
+      weekday:'short',month:'short',day:'numeric',
+      year:'numeric',hour:'numeric',minute:'2-digit',hour12:true,
+      timeZoneName:'short'
+    });
+  }catch(e){return iso}
+}
+
+/* Check if an alert is currently visible on the map (i.e., should appear
+   in the popup when its polygon is clicked). An alert is visible if:
+   1. It's a critical alert (Tornado Warning, SVR Warning, Hurricane Warning,
+      Tornado Watch) AND not per-type hidden, OR
+   2. Its category checkbox is ON AND not per-type hidden.
+   This mirrors the drawing logic in fAlertMap() so the popup only shows
+   alerts the user can actually see on the map. */
+function isAlertCurrentlyVisible(a){
+  if(!a)return false;
+  if(ALERT_TYPE_HIDDEN[a.event])return false;
+  var isCritical=!!CRITICAL_ALWAYS_ON[a.event];
+  if(isCritical)return true;
+  var catCbId=a.cat==='advisories'?'amLayerAdvisories':(a.cat==='warnings'?'amLayerWarnings':'amLayerWatches');
+  var catCb=document.getElementById(catCbId);
+  return catCb&&catCb.checked;
+}
+
+/* ── Popup builder: shows all alerts overlapping the clicked point ─────── */
+function buildAlertPopup(latlng){
+  if(!latlng)return '<div style="font-family:Inter,sans-serif;font-size:11px">No location</div>';
+  /* Only show alerts that are currently visible on the map (respecting
+     the category toggles and per-type visibility checkboxes). This way
+     if the user has hidden an alert type or turned off the Advisories
+     category, those alerts won't appear in the popup even if their
+     polygon geometry overlaps the clicked point. */
+  var overlapping=drawnAlerts.filter(function(a){
+    return isAlertCurrentlyVisible(a)&&pointInGeometries(latlng,a.geoms);
+  });
+  if(overlapping.length===0){
+    return '<div style="font-family:Inter,sans-serif;font-size:11px;max-width:260px;padding:4px">'+
+      '<div style="color:var(--t3);font-size:10px"><i class="fas fa-check-circle" style="color:#34d399;margin-right:4px"></i>No active alerts at this location</div>'+
+      '</div>';
+  }
+  /* Sort alphabetically by event name (case-insensitive) so the user can
+     cycle through overlapping alerts in a predictable A-Z order via the
+     prev/next arrows. */
+  overlapping.sort(function(a,b){
+    return a.event.toLowerCase().localeCompare(b.event.toLowerCase());
+  });
+  alertPopupState={latlng:latlng,overlappingAlerts:overlapping,currentIndex:0};
+  return renderAlertPopupContent(0);
+}
+function renderAlertPopupContent(idx){
+  if(!alertPopupState)return '';
+  var alerts=alertPopupState.overlappingAlerts;
+  if(idx<0)idx=0;
+  if(idx>=alerts.length)idx=alerts.length-1;
+  alertPopupState.currentIndex=idx;
+  var a=alerts[idx];
+  var color=a.color;
+  var html='<div style="font-family:Inter,sans-serif;font-size:11px;max-width:380px">'+
+    /* Header: colored event name */
+    '<h3 style="font-size:14px;color:'+color+';margin-bottom:4px;font-weight:700">'+a.event+'</h3>';
+  /* Sender (NWS office) */
+  if(a.senderName){
+    html+='<div style="font-size:10px;color:var(--t3);margin-bottom:8px"><i class="fas fa-satellite-dish" style="margin-right:4px"></i>'+a.senderName+'</div>';
+  }
+  /* Prev/next navigation if multiple alerts overlap. The buttons use
+     event.stopPropagation() to prevent the click from bubbling up to
+     Leaflet's map handler (which would close the popup). The
+     event.preventDefault() + return false prevents any form-submission
+     default behavior. */
+  if(alerts.length>1){
+    html+='<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;padding:4px 8px;background:rgba(255,115,0,.1);border-radius:4px">'+
+      '<button type="button" onclick="event.stopPropagation();event.preventDefault();cycleAlertPopup(-1);return false;" style="background:rgba(255,115,0,.12);border:1px solid var(--bdr-a);color:var(--acc);width:24px;height:24px;border-radius:4px;cursor:pointer;font-size:10px;display:flex;align-items:center;justify-content:center"><i class="fas fa-chevron-left"></i></button>'+
+      '<span style="font-size:9px;color:var(--t2);font-weight:600">'+(idx+1)+' of '+alerts.length+' alerts</span>'+
+      '<button type="button" onclick="event.stopPropagation();event.preventDefault();cycleAlertPopup(1);return false;" style="background:rgba(255,115,0,.12);border:1px solid var(--bdr-a);color:var(--acc);width:24px;height:24px;border-radius:4px;cursor:pointer;font-size:10px;display:flex;align-items:center;justify-content:center"><i class="fas fa-chevron-right"></i></button>'+
+      '</div>';
+  }
+  /* Headline (NWS-formatted, usually bold/caps) */
+  if(a.headline){
+    html+='<div style="background:rgba(255,255,255,.04);border-left:3px solid '+color+';padding:6px 8px;margin-bottom:8px;border-radius:3px;font-size:10px;font-weight:600;color:var(--t1);line-height:1.4">'+a.headline+'</div>';
+  }
+  /* Timestamps table: Issued, Effective, Expires */
+  html+='<table style="width:100%;font-size:10px;border-collapse:collapse;margin-bottom:8px">'+
+    '<tr><td style="padding:2px 6px 2px 0;color:var(--t3);white-space:nowrap;vertical-align:top"><i class="fas fa-paper-plane" style="margin-right:4px;width:10px"></i>Issued</td><td style="padding:2px 0;color:var(--t2)">'+fmtNwsTime(a.sent)+'</td></tr>';
+  if(a.onset&&a.onset!==a.sent){
+    html+='<tr><td style="padding:2px 6px 2px 0;color:var(--t3);white-space:nowrap;vertical-align:top"><i class="fas fa-clock" style="margin-right:4px;width:10px"></i>Onset</td><td style="padding:2px 0;color:var(--t2)">'+fmtNwsTime(a.onset)+'</td></tr>';
+  }
+  html+='<tr><td style="padding:2px 6px 2px 0;color:var(--t3);white-space:nowrap;vertical-align:top"><i class="fas fa-hourglass-end" style="margin-right:4px;width:10px"></i>Expires</td><td style="padding:2px 0;color:var(--t2)">'+fmtNwsTime(a.ends)+'</td></tr>'+
+    '</table>';
+  /* Affected areas */
+  if(a.areaDesc&&a.areaDesc!=='Unknown'){
+    html+='<div style="margin-bottom:8px">'+
+      '<div style="font-size:9px;color:var(--t3);text-transform:uppercase;letter-spacing:.04em;margin-bottom:3px"><i class="fas fa-map-marker-alt" style="margin-right:4px"></i>Affected Areas</div>'+
+      '<div style="font-size:10px;color:var(--t2);line-height:1.5">'+a.areaDesc.replace(/;/g,';<br>')+'</div>'+
+      '</div>';
+  }
+  /* Full NWS description text (the big block with the actual weather info) */
+  if(a.description){
+    html+='<div style="margin-bottom:8px">'+
+      '<div style="font-size:9px;color:var(--t3);text-transform:uppercase;letter-spacing:.04em;margin-bottom:3px"><i class="fas fa-file-lines" style="margin-right:4px"></i>Description</div>'+
+      '<div class="shot-desc-box" style="font-size:10px;color:var(--t1);line-height:1.55;background:rgba(0,0,0,.2);padding:8px;border-radius:4px;border:1px solid var(--bdr);white-space:pre-wrap;max-height:300px;overflow-y:auto">'+a.description+'</div>'+
+      '</div>';
+  }
+  /* NWS recommended actions / instructions */
+  if(a.instruction){
+    html+='<div style="margin-bottom:8px">'+
+      '<div style="font-size:9px;color:#fbbf24;text-transform:uppercase;letter-spacing:.04em;margin-bottom:3px"><i class="fas fa-triangle-exclamation" style="margin-right:4px"></i>Precautionary/Preparedness Actions</div>'+
+      '<div style="font-size:10px;color:var(--t1);line-height:1.55;background:rgba(251,191,36,.06);padding:8px;border-radius:4px;border:1px solid rgba(251,191,36,.2);white-space:pre-wrap">'+a.instruction+'</div>'+
+      '</div>';
+  }
+  html+='</div>';
+  return html;
+}
+function cycleAlertPopup(delta){
+  if(!alertPopupState)return;
+  var newIdx=alertPopupState.currentIndex+delta;
+  var n=alertPopupState.overlappingAlerts.length;
+  if(newIdx<0)newIdx=n-1;
+  if(newIdx>=n)newIdx=0;
+  var newHtml=renderAlertPopupContent(newIdx);
+  if(alertMapInstance&&alertMapInstance._popup){
+    alertMapInstance._popup.setContent(newHtml);
+    alertMapInstance._popup.update();
+  }
+}
+
+/* ── Zone geometry cache - avoids re-fetching same NWS zone polygon ───────
+   Two-tier cache:
+   1. ZONE_GEOMETRY_CACHE - in-memory, per-page-load (fast)
+   2. ZONE_CACHE_PERSISTENT - localStorage, survives page reloads (instant
+      on subsequent loads). Zone boundaries change very rarely (county
+      lines maybe once a decade) so a 30-day TTL is more than safe. This
+      is the single biggest performance win: first load fetches everything,
+      every subsequent load is near-instant. */
+var ZONE_GEOMETRY_CACHE={};
+var ZONE_CACHE_KEY='us_nws_zone_geom_v1';
+var ZONE_CACHE_TTL=30*24*60*60*1000;  /* 30 days in ms */
+var ZONE_CACHE_PERSISTENT={};
+try{
+  var savedZoneCache=localStorage.getItem(ZONE_CACHE_KEY);
+  if(savedZoneCache){
+    var parsed=JSON.parse(savedZoneCache);
+    if(parsed&&parsed.data&&parsed.savedAt&&(Date.now()-parsed.savedAt<ZONE_CACHE_TTL)){
+      ZONE_CACHE_PERSISTENT=parsed.data;
+    }else if(parsed&&parsed.data){
+      /* Cache exists but stale - keep it anyway since zone boundaries
+         rarely change. Better to have stale data than re-fetch everything. */
+      ZONE_CACHE_PERSISTENT=parsed.data;
+    }
+  }
+}catch(e){}
+/* Persist the cache to localStorage. Wrapped in try/catch because the
+   cache can get large (each zone polygon is ~2-5KB, 200 zones = ~1MB)
+   and localStorage has a ~5MB limit per origin. If it's too big, we
+   trim to the most recent 150 entries. */
+var _zoneCacheSaveTimer=null;
+function saveZoneCache(){
+  if(_zoneCacheSaveTimer)clearTimeout(_zoneCacheSaveTimer);
+  _zoneCacheSaveTimer=setTimeout(function(){
+    _zoneCacheSaveTimer=null;
+    try{
+      var payload=JSON.stringify({data:ZONE_CACHE_PERSISTENT,savedAt:Date.now()});
+      localStorage.setItem(ZONE_CACHE_KEY,payload);
+    }catch(e){
+      /* Quota exceeded - trim to most recent 150 entries and retry */
+      try{
+        var keys=Object.keys(ZONE_CACHE_PERSISTENT);
+        if(keys.length>150){
+          var trimmed={};
+          keys.slice(keys.length-150).forEach(function(k){trimmed[k]=ZONE_CACHE_PERSISTENT[k]});
+          ZONE_CACHE_PERSISTENT=trimmed;
+          localStorage.setItem(ZONE_CACHE_KEY,JSON.stringify({data:ZONE_CACHE_PERSISTENT,savedAt:Date.now()}));
+        }
+      }catch(e2){/* give up silently */}
+    }
+  },500);  /* debounce - don't save on every single fetch */
+}
+async function getZoneGeometry(ugc){
+  if(!ugc)return null;
+  ugc=String(ugc).toUpperCase();
+  if(ZONE_GEOMETRY_CACHE[ugc]!==undefined)return ZONE_GEOMETRY_CACHE[ugc];
+  /* Check persistent cache */
+  if(ZONE_CACHE_PERSISTENT[ugc]!==undefined){
+    ZONE_GEOMETRY_CACHE[ugc]=ZONE_CACHE_PERSISTENT[ugc];
+    return ZONE_CACHE_PERSISTENT[ugc];
+  }
+  /* Route UGC code to correct NWS zones API endpoint:
+     XYC###  -> county zone    (zones/county)
+     XYZ###  -> forecast zone  (zones/forecast)
+     XYB###  -> fire weather   (zones/fire)
+     LMZ/ANZ/GMZ/PZZ/SLZ### -> marine (zones/marine) */
+  var type='forecast';
+  var thirdChar=ugc.charAt(2);
+  if(/^[A-Z]{2}[CZBF]\d/.test(ugc)){
+    if(thirdChar==='C')type='county';
+    else if(thirdChar==='Z')type='forecast';
+    else if(thirdChar==='B')type='fire';
+    else type='forecast';
+  }else if(/^(LMZ|ANZ|GMZ|PZZ|SLZ)\d/.test(ugc)){
+    type='marine';
+  }
+  var apiUrl='https://api.weather.gov/zones/'+type+'/'+ugc;
+  var result=null;
+  try{
+    var txt=await fP(apiUrl);
+    if(txt){
+      var data=JSON.parse(txt);
+      if(data&&data.geometry)result=data.geometry;
+    }
+  }catch(e){
+    console.warn('[AlertMap] Zone geometry fetch failed for',ugc,e);
+  }
+  ZONE_GEOMETRY_CACHE[ugc]=result;
+  if(result){
+    ZONE_CACHE_PERSISTENT[ugc]=result;
+    saveZoneCache();
+  }
+  return result;
+}
+
+/* Extract UGC zone codes from an alert feature */
+function alertUgcs(alert){
+  var ugcs=[],seen={};
+  if(!alert||!alert.properties)return ugcs;
+  var p=alert.properties;
+  if(p.geocode&&Array.isArray(p.geocode.UGC)){
+    p.geocode.UGC.forEach(function(c){
+      if(c&&!seen[c]){seen[c]=1;ugcs.push(c)}
+    });
+  }
+  if(Array.isArray(p.affectedZones)){
+    p.affectedZones.forEach(function(u){
+      if(typeof u==='string'){
+        var m=u.match(/\/zones\/[^\/]+\/([A-Z]{2,3}\d{3}[A-Z]?)/);
+        if(m&&!seen[m[1]]){seen[m[1]]=1;ugcs.push(m[1])}
+      }
+    });
+  }
+  return ugcs;
+}
+
+/* ── SPC Convective Outlook overlay (drawn with Leaflet polygons) ─────────
+   Fetches the official SPC GeoJSON for Day 1/2/3 convective outlooks and
+   draws the categorical risk polygons natively with Leaflet (L.geoJSON).
+   This is the same approach used by the NWS alert polygons - pure vector
+   data, perfect geographic alignment, no image overlays.
+
+   SPC publishes several GeoJSON endpoints. The categorical layer file
+   contains one Feature per risk polygon, with properties.LABEL holding
+   the category code (TSTM/MRGL/SLGT/ENH/MDT/HIGH). We try multiple URL
+   patterns since SPC's naming has varied over time:
+     1. https://www.spc.noaa.gov/products/outlook/day{N}otlk_cat.lyr.geojson
+     2. https://www.spc.noaa.gov/products/outlook/day{N}otlk.geojson
+
+   The GeoJSON is fetched via fP() which handles the CORS proxy fallback
+   chain (same as NWS alerts). No JSZip or KML parsing needed. */
+
+/* Official SPC outlook colors (matches their published legend). */
+var SPC_COLORS={
+  TSTM:'#c1e9c1',  /* General Thunderstorm - light green */
+  MRGL:'#73bf93',  /* Marginal - green */
+  SLGT:'#ffff00',  /* Slight - yellow */
+  ENH:'#ffa500',   /* Enhanced - orange */
+  MDT:'#ff0000',   /* Moderate - red */
+  HIGH:'#ff00ff'   /* High - magenta */
+};
+var SPC_LABELS={
+  TSTM:'General Thunderstorm',
+  MRGL:'Marginal (Level 1)',
+  SLGT:'Slight (Level 2)',
+  ENH:'Enhanced (Level 3)',
+  MDT:'Moderate (Level 4)',
+  HIGH:'High (Level 5)'
+};
+/* SPC outlook cache - keyed by day number. Avoids re-fetching the same
+   GeoJSON when the user just toggles level checkboxes. Persisted to
+   localStorage for 6 hours (SPC issues new outlooks 5x/day for Day 1,
+   less often for Day 2/3). */
+var SPC_CACHE={};
+var SPC_PERSIST_KEY='us_nws_spc_geojson_v1';
+var SPC_TTL=6*60*60*1000;  /* 6 hours */
+var SPC_PERSIST={};
+try{
+  var savedSpc=localStorage.getItem(SPC_PERSIST_KEY);
+  if(savedSpc){
+    var parsedSpc=JSON.parse(savedSpc);
+    if(parsedSpc&&parsedSpc.data&&parsedSpc.savedAt){
+      Object.keys(parsedSpc.data).forEach(function(day){
+        if(Date.now()-parsedSpc.savedAt<SPC_TTL){
+          SPC_PERSIST[day]=parsedSpc.data[day];
+        }
+      });
+    }
+  }
+}catch(e){}
+function saveSpcCache(){
+  try{
+    localStorage.setItem(SPC_PERSIST_KEY,JSON.stringify({data:SPC_PERSIST,savedAt:Date.now()}));
+  }catch(e){/* quota - silently ignore */}
+}
+
+/* Parse the SPC GeoJSON response into an array of {category, ring}
+   objects. Each feature's properties.LABEL holds the category code
+   (TSTM/MRGL/SLGT/ENH/MDT/HIGH). Some older SPC files use DN1/DN2/DN3
+   with values like "SLGT/0.15" - we fall back to those if LABEL is
+   missing. Geometry can be Polygon, MultiPolygon, or GeometryCollection. */
+function parseSpcGeoJson(data){
+  var results=[];
+  if(!data||!data.features||!Array.isArray(data.features))return results;
+  data.features.forEach(function(feature){
+    if(!feature||!feature.properties||!feature.geometry)return;
+    var props=feature.properties;
+    /* Extract category code - try LABEL first (modern SPC format) */
+    var category=null;
+    if(props.LABEL){
+      var code=String(props.LABEL).trim().toUpperCase();
+      /* Some SPC files use full words like "SLIGHT" or "MODERATE" -
+         normalize them to the abbreviated code. */
+      var labelMap={'GENERAL':'TSTM','GENERAL THUNDERSTORM':'TSTM','THUNDERSTORM':'TSTM',
+        'MARGINAL':'MRGL','SLIGHT':'SLGT','ENHANCED':'ENH',
+        'MODERATE':'MDT','HIGH':'HIGH'};
+      if(SPC_COLORS[code]){category=code}
+      else if(labelMap[code]){category=labelMap[code]}
+    }
+    /* Fall back to DN1/DN2/DN3 fields (older format, value like "SLGT/0.15") */
+    if(!category){
+      ['DN1','DN2','DN3','DN4','DN5','DN6','DN7','DN8'].forEach(function(field){
+        if(category)return;
+        if(props[field]){
+          var rawVal=String(props[field]).trim();
+          var code2=rawVal.split('/')[0].trim().toUpperCase();
+          if(SPC_COLORS[code2])category=code2;
+        }
+      });
+    }
+    if(!category)return;
+    /* Extract all polygon rings from the geometry */
+    var geom=feature.geometry;
+    function processPolygon(coords){
+      /* coords = [outerRing, hole1, hole2, ...]. Use the outer ring. */
+      if(Array.isArray(coords)&&coords.length>0&&Array.isArray(coords[0])&&coords[0].length>=3){
+        results.push({category:category,ring:coords[0]});
+      }
+    }
+    if(geom.type==='Polygon'){
+      processPolygon(geom.coordinates);
+    }else if(geom.type==='MultiPolygon'){
+      geom.coordinates.forEach(function(poly){processPolygon(poly)});
+    }else if(geom.type==='GeometryCollection'&&Array.isArray(geom.geometries)){
+      geom.geometries.forEach(function(g){
+        if(g.type==='Polygon')processPolygon(g.coordinates);
+        else if(g.type==='MultiPolygon')g.coordinates.forEach(function(poly){processPolygon(poly)});
+      });
+    }
+  });
+  return results;
+}
+
+/* Fetch and cache SPC outlook polygons for a given day. Returns an
+   array of {category, ring:[lng,lat],...} objects. Tries multiple URL
+   patterns and uses the CORS proxy fallback chain (fP). Results are
+   cached in memory and persisted to localStorage for 6 hours. */
+async function fetchSpcOutlook(day){
+  day=String(day);
+  if(SPC_CACHE[day])return SPC_CACHE[day];
+  if(SPC_PERSIST[day]){
+    SPC_CACHE[day]=SPC_PERSIST[day];
+    return SPC_PERSIST[day];
+  }
+  /* Try multiple SPC GeoJSON URL patterns. The _cat.lyr.geojson is the
+     modern categorical-layer file. The plain .geojson is a fallback.
+     Some days the file may not exist yet (SPC hasn't issued that day's
+     outlook), in which case we try the next pattern. */
+  var urls=[
+    'https://www.spc.noaa.gov/products/outlook/day'+day+'otlk_cat.lyr.geojson',
+    'https://www.spc.noaa.gov/products/outlook/day'+day+'otlk.geojson',
+    'https://www.spc.noaa.gov/products/outlook/day'+day+'otlk_cat.geojson'
+  ];
+  var parsed=null;
+  for(var i=0;i<urls.length;i++){
+    var txt=await fP(urls[i]);
+    if(!txt)continue;
+    try{
+      var data=JSON.parse(txt);
+      var parsedAttempt=parseSpcGeoJson(data);
+      if(parsedAttempt.length>0){
+        parsed=parsedAttempt;
+        console.log('[SPC] Loaded day',day,'outlook:',parsed.length,'polygons from',urls[i]);
+        break;
+      }
+    }catch(e){
+      console.warn('[SPC] JSON parse error for',urls[i],e);
+    }
+  }
+  if(!parsed||parsed.length===0){
+    console.warn('[SPC] No outlook polygons found for day',day,'- tried',urls.length,'URL patterns');
+    return null;
+  }
+  SPC_CACHE[day]=parsed;
+  SPC_PERSIST[day]=parsed;
+  saveSpcCache();
+  return parsed;
+}
+
+/* SPC outlook layer state - holds the currently-drawn Leaflet polygons
+   so we can remove them on toggle/refresh. */
+var spcOutlookLayers=[];
+var spcOutlookFetching=false;
+
+/* Toggle handler for the SPC outlook overlay. Reads the day selector and
+   the level checkboxes, fetches (or uses cached) outlook data, removes
+   existing SPC layers, and draws the selected levels as Leaflet polygons. */
+async function toggleSpcOverlay(){
+  if(!alertMapInstance)initAlertMap();
+  if(!alertMapInstance)return;
+  /* Remove existing SPC layers */
+  spcOutlookLayers.forEach(function(l){alertMapInstance.removeLayer(l)});
+  spcOutlookLayers=[];
+  var enableCb=document.getElementById('amSpcEnable');
+  if(!enableCb||!enableCb.checked)return;
+  var daySel=document.getElementById('amSpcDay');
+  var day=daySel?daySel.value:'1';
+  /* Read level checkboxes */
+  var levels={
+    TSTM:document.getElementById('amSpcTstm')&&document.getElementById('amSpcTstm').checked,
+    MRGL:document.getElementById('amSpcMrgl')&&document.getElementById('amSpcMrgl').checked,
+    SLGT:document.getElementById('amSpcSlgt')&&document.getElementById('amSpcSlgt').checked,
+    ENH:document.getElementById('amSpcEnh')&&document.getElementById('amSpcEnh').checked,
+    MDT:document.getElementById('amSpcMdt')&&document.getElementById('amSpcMdt').checked,
+    HIGH:document.getElementById('amSpcHigh')&&document.getElementById('amSpcHigh').checked
+  };
+  /* Update the count badge to show we're fetching SPC data */
+  var countEl=document.getElementById('alertMapCount');
+  var prevHtml=countEl?countEl.innerHTML:'';
+  if(countEl)countEl.innerHTML='<i class="fas fa-shield-halved"></i> Loading SPC Day '+day+' outlook...';
+  /* Fetch (cached) outlook polygons */
+  if(spcOutlookFetching)return;
+  spcOutlookFetching=true;
+  var parsed=await fetchSpcOutlook(day);
+  spcOutlookFetching=false;
+  if(countEl)countEl.innerHTML=prevHtml;
+  if(!parsed||parsed.length===0){
+    if(countEl)countEl.innerHTML='<i class="fas fa-circle-exclamation"></i> SPC Day '+day+' outlook unavailable';
+    setTimeout(function(){if(countEl)countEl.innerHTML=prevHtml},3000);
+    return;
+  }
+  /* Draw polygons grouped by category, respecting level checkboxes.
+     Lower-severity levels are drawn first so higher-severity levels
+     (MDT, HIGH) render on top. */
+  var drawOrder=['TSTM','MRGL','SLGT','ENH','MDT','HIGH'];
+  drawOrder.forEach(function(cat){
+    if(!levels[cat])return;
+    var features=parsed.filter(function(p){return p.category===cat});
+    if(features.length===0)return;
+    /* Build a GeoJSON FeatureCollection for this category so we can
+       draw them all in one L.geoJSON call (faster than per-polygon). */
+    var geoJsonFeatures=features.map(function(p){
+      return {
+        type:'Feature',
+        properties:{category:p.category,label:SPC_LABELS[p.category]},
+        geometry:{type:'Polygon',coordinates:[p.ring]}
+      };
+    });
+    var layer=L.geoJSON({type:'FeatureCollection',features:geoJsonFeatures},{
+      style:{
+        color:SPC_COLORS[cat],
+        weight:cat==='HIGH'||cat==='MDT'?2.5:1.5,
+        fillColor:SPC_COLORS[cat],
+        fillOpacity:0.35,
+        dashArray:cat==='TSTM'?'4,3':null
+      },
+      onEachFeature:function(feature,lyr){
+        lyr.bindPopup('<div style="font-family:Inter,sans-serif;font-size:11px;max-width:220px">'+
+          '<h3 style="font-size:12px;color:'+SPC_COLORS[feature.properties.category]+';margin-bottom:4px">SPC '+feature.properties.label+'</h3>'+
+          '<div style="font-size:9px;color:var(--t3)">Day '+day+' Convective Outlook</div>'+
+          '<div style="font-size:9px;color:var(--t3);margin-top:4px">Source: spc.noaa.gov</div>'+
+          '</div>');
+      }
+    }).addTo(alertMapInstance);
+    spcOutlookLayers.push(layer);
+  });
+}
+
+
+/* ── Loading overlay helpers ────────────────────────────────────────────── */
+function showLoading(){
+  var el=document.getElementById('loadingOverlay');
+  if(el)el.classList.add('visible');
+}
+function hideLoading(){
+  var el=document.getElementById('loadingOverlay');
+  if(el)el.classList.remove('visible');
+}
+
+/* ── Main alert map fetch & render ──────────────────────────────────────── */
+async function fAlertMap(){
+  if(!alertMapInstance)initAlertMap();
+  if(!alertMapInstance)return;
+  /* Clear existing alert layers */
+  alertMapLayers.warnings.forEach(function(l){alertMapInstance.removeLayer(l)});
+  alertMapLayers.watches.forEach(function(l){alertMapInstance.removeLayer(l)});
+  alertMapLayers.advisories.forEach(function(l){alertMapInstance.removeLayer(l)});
+  alertMapLayers.warnings=[];alertMapLayers.watches=[];alertMapLayers.advisories=[];
+
+  var countEl=document.getElementById('alertMapCount');
+  if(countEl)countEl.innerHTML='<i class="fas fa-satellite-dish"></i> Loading alerts...';
+  showLoading();
+
+  try{
+    /* Build URL: optionally filter by state, otherwise fetch all US alerts.
+       NWS API supports ?area=XX for a single state, or no parameter for
+       the entire active alert set (all 50 states + territories + marine). */
+    var stateFilter=document.getElementById('amStateFilter');
+    var state=(stateFilter&&stateFilter.value)?stateFilter.value.toUpperCase():'';
+    var url='https://api.weather.gov/alerts/active';
+    if(state){
+      url+='?area='+state;
+    }
+    var txt=await fP(url);
+    if(!txt){
+      if(countEl)countEl.innerHTML='<i class="fas fa-circle-exclamation"></i> Alerts unavailable';
+      hideLoading();
+      return;
+    }
+    var data=JSON.parse(txt);
+    var features=data.features||[];
+    wwasCache=features;
+    var warnCount=0,watchCount=0,advCount=0,undrawn=0;
+    var presentTypes=[];
+    drawnAlerts=[];
+    var showWarnings=document.getElementById('amLayerWarnings');
+    var showWatches=document.getElementById('amLayerWatches');
+    var showAdvisories=document.getElementById('amLayerAdvisories');
+
+    /* Pre-filter by category toggle. We also track presentTypes here for
+       ALL alerts in scope (not just drawn ones) so that advisory types
+       still appear in the legend even when the Advisories category is
+       off - this lets the user see what advisories are active and click
+       them to enable the category. The expensive zone-geometry fetch
+       only happens for alerts that pass the filter (drawTasks). */
+    var drawTasks=[];
+    features.forEach(function(alert){
+      if(!alert||!alert.properties)return;
+      var event=alert.properties.event||'Unknown';
+      var cat=alertCategory(event);
+      var color=getAlertColor(event);
+
+      /* Track present alert types for the legend - ALWAYS tracked
+         regardless of category state or per-type hide state, so the
+         legend checkbox stays visible (just dimmed) when the category
+         is off or the type is hidden. */
+      var existing=presentTypes.find(function(pt){return pt.event===event});
+      if(existing){existing.count++}else{
+        presentTypes.push({event:event,color:color,cat:cat,count:1});
+      }
+
+      /* Determine if this alert should be drawn. Critical alerts
+         (Tornado Warning, SVR Warning, Hurricane Warning, Tornado Watch)
+         always draw regardless of category toggle - they bypass the
+         filter so the user always sees them on initial load. */
+      var isCritical=!!CRITICAL_ALWAYS_ON[event];
+      var showLayer=isCritical;
+      if(!showLayer){
+        if(cat==='warnings'&&showWarnings&&showWarnings.checked)showLayer=true;
+        if(cat==='watches'&&showWatches&&showWatches.checked)showLayer=true;
+        if(cat==='advisories'&&showAdvisories&&showAdvisories.checked)showLayer=true;
+      }
+      if(!showLayer)return;
+      drawTasks.push({alert:alert,event:event,cat:cat});
+    });
+
+    /* Draw each alert. Strategy: split into two batches.
+       Phase 1 (instant): alerts with inline geometry - draw immediately.
+       Phase 2 (background): alerts needing zone-geometry resolution.
+       After Phase 1 we hide the loading overlay and update the count
+       badge, so the user sees the map populate right away. Phase 2
+       fetches zone geometries with a concurrency limit of 8 (enough
+       parallelism to be fast, low enough to not overwhelm the NWS API
+       or the CORS proxy). */
+    function drawAlert(t,geoms){
+      var alert=t.alert,event=t.event,cat=t.cat;
+      var color=getAlertColor(event);
+      var p=alert.properties;
+      if(geoms.length===0)return false;
+      /* Store ALL useful NWS fields for the popup. We store more than we
+         currently display so future popup enhancements don't need to
+         re-fetch. Fields come from the NWS API alert.properties object:
+           event      - "Tornado Warning", "Severe Thunderstorm Watch", etc.
+           headline   - NWS-formatted headline line
+           areaDesc   - semicolon-separated list of affected areas
+           sent       - ISO timestamp when NWS issued the alert
+           effective  - ISO timestamp when the alert became active
+           onset      - ISO timestamp when the hazard begins
+           expires    - ISO timestamp when the alert expires
+           ends       - ISO timestamp when the alert ends (may differ from expires)
+           senderName - NWS office that issued the alert (e.g. "NWS Grand Rapids")
+           description- full NWS description text (the big block of info)
+           instruction- NWS recommended actions (what to do)
+           id         - alert ID/URL for reference */
+      drawnAlerts.push({
+        event:event,
+        color:color,
+        cat:cat,
+        areaDesc:p.areaDesc||'Unknown',
+        sent:p.sent||'',
+        effective:p.effective||'',
+        onset:p.onset||'',
+        expires:p.expires||'',
+        ends:p.ends||'Unknown',
+        headline:p.headline||'',
+        description:p.description||'',
+        instruction:p.instruction||'',
+        senderName:p.senderName||'',
+        id:p.id||alert.id||'',
+        geoms:geoms
+      });
+      /* Count regardless of visibility */
+      if(cat==='warnings')warnCount++;
+      else if(cat==='watches')watchCount++;
+      else advCount++;
+      /* Skip drawing if user has hidden this alert type */
+      if(ALERT_TYPE_HIDDEN[event])return true;
+      var geomData=geoms.length===1?geoms[0]:{type:'GeometryCollection',geometries:geoms};
+      var polygon=L.geoJSON(geomData,{
+        style:{color:color,weight:2,fillColor:color,fillOpacity:0.25},
+        onEachFeature:function(feature,layer){
+          /* Use a click handler instead of bindPopup(function) because
+             Leaflet's bindPopup function callback doesn't receive the
+             click event - it only gets the layer. That means we can't
+             know WHERE the user clicked, so the old code fell back to
+             the map center (which is rarely inside the polygon), causing
+             the "No active alerts at this location" bug. By handling
+             the click ourselves we get e.latlng and can do accurate
+             point-in-polygon overlap detection. */
+          layer.on('click',function(e){
+            var ll=e.latlng;
+            var html=buildAlertPopup(ll);
+            L.popup({maxWidth:380,minWidth:280})
+              .setLatLng(ll)
+              .setContent(html)
+              .openOn(alertMapInstance);
+            /* Stop propagation so the map-level click handler doesn't
+               also fire and overwrite _lastClickLatLng with stale data. */
+            if(e.originalEvent&&e.originalEvent.stopPropagation){
+              e.originalEvent.stopPropagation();
+            }
+          });
+        }
+      }).addTo(alertMapInstance);
+      alertMapLayers[cat].push(polygon);
+      return true;
+    }
+
+    function updateCountLabel(progressText){
+      var scopeLabel=state?('State: '+state):'United States';
+      /* Count Tornado Warnings and Severe Thunderstorm Warnings specifically.
+         These are the two alert types storm spotters care about most, so the
+         counter focuses on them instead of showing all warnings/watches/advisories. */
+      var torCount=0,svrCount=0;
+      presentTypes.forEach(function(pt){
+        var e=pt.event.toLowerCase();
+        if(e==='tornado warning')torCount+=pt.count;
+        else if(e==='severe thunderstorm warning')svrCount+=pt.count;
+      });
+      /* Build the label: just TOR + SVR counts, plus a Tornado Warning icon
+         if any are active. If neither is active, show "No active TOR/SVR". */
+      var label;
+      var torActive=torCount>0;
+      var icon=torActive?'fa-tornado':'fa-triangle-exclamation';
+      var colorStyle=torActive?'color:#ff0000':'';
+      if(torCount===0&&svrCount===0){
+        label='<i class="fas '+icon+'" style="'+colorStyle+'"></i> No active TOR/SVR &middot; '+scopeLabel;
+      }else{
+        label='<i class="fas '+icon+'" style="'+colorStyle+'"></i> ';
+        if(torCount>0)label+='<b style="color:#ff0000">'+torCount+' TOR</b>';
+        if(torCount>0&&svrCount>0)label+=' &middot; ';
+        if(svrCount>0)label+='<b style="color:#ffa500">'+svrCount+' SVR</b>';
+        label+=' &middot; '+scopeLabel;
+      }
+      if(progressText)label+=' &middot; '+progressText;
+      if(countEl)countEl.innerHTML=label;
+    }
+
+    /* Phase 1: Draw alerts with inline geometry (instant, no fetch) */
+    var zoneTasks=[];
+    drawTasks.forEach(function(t){
+      var alert=t.alert;
+      if(alert.geometry){
+        var geoms=[alert.geometry];
+        drawAlert(t,geoms);
+      }else{
+        /* Needs zone resolution - queue for Phase 2 */
+        zoneTasks.push(t);
+      }
+    });
+
+    /* Build legend after Phase 1 so it appears immediately */
+    buildAlertLegend(presentTypes);
+    updateCountLabel(zoneTasks.length>0?('resolving '+zoneTasks.length+'...'):'');
+    /* Hide the loading overlay NOW - the map is interactive, the rest
+       streams in progressively. This is the key fix for the spinner
+       problem: we don't block the UI while zone geometries fetch. */
+    hideLoading();
+
+    /* Phase 2: Resolve zone geometries for remaining alerts with
+       concurrency-limited batch fetching. Each alert can reference
+       multiple UGC zones, so we collect ALL unique UGCs across ALL
+       zone-tasks, fetch them in a single concurrent pool, then draw
+       each alert as its zones become available. */
+    if(zoneTasks.length>0){
+      /* Collect all unique UGCs across all zone-tasks */
+      var allUgcs=[];
+      var ugcSeen={};
+      var taskUgcs=zoneTasks.map(function(t){
+        var us=alertUgcs(t.alert);
+        us.forEach(function(u){
+          if(!ugcSeen[u]){ugcSeen[u]=1;allUgcs.push(u)}
+        });
+        return us;
+      });
+
+      /* Fetch all unique zones with concurrency limit 8 */
+      await asyncPool(8,allUgcs,function(ugc){
+        return getZoneGeometry(ugc);
+      });
+
+      /* Now draw each zone-task using its (now-cached) zone geometries */
+      var zoneDone=0;
+      for(var zi=0;zi<zoneTasks.length;zi++){
+        var zt=zoneTasks[zi];
+        var zus=taskUgcs[zi];
+        var zgeoms=[];
+        for(var ui=0;ui<zus.length;ui++){
+          var g=ZONE_GEOMETRY_CACHE[zus[ui]];
+          if(g)zgeoms.push(g);
+        }
+        if(zgeoms.length===0){
+          undrawn++;
+          if(zt.cat==='warnings')warnCount++;
+          else if(zt.cat==='watches')watchCount++;
+          else advCount++;
+        }else{
+          drawAlert(zt,zgeoms);
+        }
+        zoneDone++;
+        /* Update progress every 5 alerts so the count badge stays responsive */
+        if(zoneDone%5===0||zoneDone===zoneTasks.length){
+          updateCountLabel(zoneDone+'/'+zoneTasks.length+' resolved');
+          /* Yield to the event loop so the browser can paint and stay responsive */
+          await new Promise(function(r){setTimeout(r,0)});
+        }
+      }
+      /* Final update with no progress text */
+      buildAlertLegend(presentTypes);
+      updateCountLabel('');
+    }
+  }catch(e){
+    console.error('Alert map error:',e);
+    if(countEl)countEl.innerHTML='<i class="fas fa-circle-exclamation"></i> Error loading alerts';
+    hideLoading();
+  }
+}
+
+/* ── Manual refresh button handler ──────────────────────────────────────── */
+function manualRefresh(){
+  /* Clear zone geometry cache so we re-fetch fresh polygons on next render.
+     This is mostly defensive - zone boundaries change rarely. */
+  ZONE_GEOMETRY_CACHE={};
+  fAlertMap();
+}
+
+/* ── Live indicator pulse ───────────────────────────────────────────────── */
+function updateLiveTime(){
+  var el=document.getElementById('liveText');
+  if(el)el.textContent='Updated '+tms();
+}
+
+/* ── Live Weather Cameras Layer (DISABLED - placeholder for future upgrade) ──
+   This module is currently DISABLED. The camera layer UI in the Layers &
+   Filters panel shows a "Coming Soon" placeholder. To re-enable in the
+   future (e.g. when state DOT camera integration is ready), set
+   CAMERAS_ENABLED=true below and replace the disabled checkbox in the HTML
+   with the active one (search for "Camera layer (disabled)").
+
+   Adds live weather/traffic camera markers to the map. Each camera has a
+   lat/lng, name, and image URL. The image is cache-busted with a timestamp
+   (?t=Date.now()) on every refresh so the browser always fetches the latest
+   frame. When a camera popup is open, the image auto-refreshes every 60
+   seconds. A manual "Refresh Now" button is also available.
+
+   Camera sources:
+   1. FAA Aviation Weather Cameras (https://avcams.faa.gov/) - fetched via
+      API and merged into the layer. Mostly Alaska + some lower-48 sites.
+   2. Manual CAMERAS array below - add your own cameras here by following
+      the format. Useful for state DOT cameras, personal weather stations,
+      or any camera with a public image URL.
+
+   To add a manual camera, add an entry to the CAMERAS array:
+   {id:'mycam-001',name:'My Camera',lat:42.0,lng:-86.0,img:'https://example.com/cam.jpg'} */
+
+/* MASTER SWITCH: set to true to re-enable the camera layer.
+   When false, toggleCameraLayer() returns immediately without doing anything,
+   so no camera markers are created and no FAA fetch happens. */
+var CAMERAS_ENABLED=false;
+
+/* Built-in camera entries - known-working public weather/scenic cameras.
+   These are from government sources (NPS, NOAA, state agencies) that allow
+   hotlinking. The FAA Aviation Weather Camera API is also fetched at runtime
+   (see fetchFaaCameras) but may fail due to CORS restrictions, so these
+   built-in entries guarantee cameras always appear on the map.
+   To add your own cameras, append entries to this array following the format:
+   {id:'unique-id',name:'Camera Name',lat:42.0,lng:-86.0,img:'https://example.com/cam.jpg'} */
+var CAMERAS=[
+  /* ── National Park Service webcams (stable, government-run, CORS-friendly) ── */
+  /* Yellowstone */
+  {id:'nps-yell-oldfaithful',name:'Old Faithful Geyser - Yellowstone',lat:44.4605,lng:-110.8281,img:'https://www.nps.gov/webcams-yell/oldfaithful.jpg'},
+  {id:'nps-yell-washburn',name:'Mount Washburn - Yellowstone',lat:44.7990,lng:-110.4170,img:'https://www.nps.gov/webcams-yell/washburn.jpg'},
+  {id:'nps-yell-north',name:'North Entrance - Yellowstone',lat:45.1099,lng:-110.8980,img:'https://www.nps.gov/webcams-yell/north.jpg'},
+  /* Grand Teton */
+  {id:'nps-grte-cathedral',name:'Cathedral Group - Grand Teton',lat:43.7600,lng:-110.8000,img:'https://www.nps.gov/webcams-grte/cathedral.jpg'},
+  /* Glacier National Park */
+  {id:'nps-glac-goingtothesun',name:'Going-to-the-Sun Rd - Glacier NP',lat:48.6960,lng:-113.6400,img:'https://www.nps.gov/webcams-glac/gtsr.jpg'},
+  /* Yosemite */
+  {id:'nps-yose-halfdome',name:'Half Dome - Yosemite',lat:37.7456,lng:-119.5328,img:'https://www.nps.gov/webcams-yose/halfdome.jpg'},
+  {id:'nps-yose-elcapitan',name:'El Capitan - Yosemite',lat:37.7275,lng:-119.6372,img:'https://www.nps.gov/webcams-yose/elcap.jpg'},
+  /* Grand Canyon */
+  {id:'nps-grca-south',name:'South Rim - Grand Canyon',lat:36.0544,lng:-112.1401,img:'https://www.nps.gov/webcams-grca/south.jpg'},
+  /* Great Smoky Mountains */
+  {id:'nps-grsm-clingmans',name:'Clingmans Dome - Great Smoky Mtns',lat:35.5629,lng:-83.4985,img:'https://www.nps.gov/webcams-grsm/clingmans.jpg'},
+  /* Denali */
+  {id:'nps-denali-denali',name:'Denali - Denali NP',lat:63.0692,lng:-151.0061,img:'https://www.nps.gov/webcams-denali/denali.jpg'},
+  /* Hawaii Volcanoes */
+  {id:'nps-havo-kilauea',name:'Kilauea Summit - Hawaii Volcanoes',lat:19.4213,lng:-155.2880,img:'https://www.nps.gov/webcams-havo/kilauea.jpg'},
+  /* ── Great Lakes / Midwest (relevant to Skywarn storm spotting) ── */
+  {id:'nps-slbe-sleepingbear',name:'Sleeping Bear Dunes - Lake MI',lat:44.7611,lng:-86.0586,img:'https://www.nps.gov/webcams-slbe/sb.jpg'},
+  {id:'nps-piro-picturedrocks',name:'Pictured Rocks - Lake Superior',lat:46.4700,lng:-86.3400,img:'https://www.nps.gov/webcams-piro/pr.jpg'},
+  /* ── Coastal / Hurricane zone cameras ── */
+  {id:'nps-caha-hatteras',name:'Cape Hatteras - Outer Banks',lat:35.2504,lng:-75.5288,img:'https://www.nps.gov/webcams-caha/hatteras.jpg'},
+  {id:'nps-caco-eastham',name:'Cape Cod National Seashore',lat:41.8334,lng:-69.9486,img:'https://www.nps.gov/webcams-caco/eastham.jpg'},
+  /* ── Western mountain cameras (good for storm watching) ── */
+  {id:'nps-romo-trails',name:'Rocky Mountain NP - Trail Ridge',lat:40.3953,lng:-105.6597,img:'https://www.nps.gov/webcams-romo/trails.jpg'},
+  {id:'nps-romo-longspeak',name:'Longs Peak - Rocky Mountain NP',lat:40.2549,lng:-105.6161,img:'https://www.nps.gov/webcams-romo/longs.jpg'},
+  /* ── Additional NPS cameras for broader US coverage ── */
+  {id:'nps-acad-cadillac',name:'Cadillac Mountain - Acadia',lat:44.3536,lng:-68.2236,img:'https://www.nps.gov/webcams-acad/cadillac.jpg'},
+  {id:'nps-shen-stonyman',name:'Stony Man - Shenandoah',lat:38.6600,lng:-78.3600,img:'https://www.nps.gov/webcams-shen/stonyman.jpg'},
+  {id:'nps-olym-hurricane',name:'Hurricane Ridge - Olympic NP',lat:47.9378,lng:-123.4997,img:'https://www.nps.gov/webcams-olym/hurricane.jpg'},
+  {id:'nps-mora-paradise',name:'Paradise - Mount Rainier',lat:46.7861,lng:-121.7350,img:'https://www.nps.gov/webcams-mora/paradise.jpg'},
+  {id:'nps-crla-craterlake',name:'Crater Lake - Watchman',lat:42.9446,lng:-122.1090,img:'https://www.nps.gov/webcams-crla/watchman.jpg'},
+  {id:'nps-bibe-chisos',name:'Chisos Basin - Big Bend',lat:29.2700,lng:-103.3000,img:'https://www.nps.gov/webcams-bibe/chisos.jpg'},
+  {id:'nps-saguaro-east',name:'Saguaro NP East - Tucson',lat:32.1700,lng:-110.6300,img:'https://www.nps.gov/webcams-sagu/east.jpg'},
+  {id:'nps-jotr-keys',name:'Keys View - Joshua Tree',lat:33.9074,lng:-116.1867,img:'https://www.nps.gov/webcams-jotr/keys.jpg'}
+];
+
+/* State - the camera layer and intervals */
+var cameraLayer=null;
+var cameraMarkers=[];
+var camIntervals={};
+var camerasLoaded=false;
+
+/* Refresh a single camera's image by appending a cache-busting timestamp.
+   Called by the auto-refresh interval and the manual "Refresh Now" button.
+   Exposed globally (window.refreshCamImage) so inline onclick handlers work. */
+function refreshCamImage(camId,baseUrl){
+  var imgEl=document.getElementById('cam-img-'+camId);
+  var statusEl=document.getElementById('cam-status-'+camId);
+  if(!imgEl)return;
+  imgEl.src=baseUrl+'?t='+Date.now();
+  if(statusEl){
+    statusEl.textContent='Last updated: '+new Date().toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit',second:'2-digit',hour12:true});
+  }
+}
+window.refreshCamImage=refreshCamImage;
+
+/* Build the camera marker icon - an orange circle with a camera glyph,
+   matching the Skywarn theme. */
+function buildCameraIcon(){
+  return L.divIcon({
+    className:'camera-marker',
+    html:'<div class="camera-marker-inner"><i class="fas fa-video"></i></div>',
+    iconSize:[24,24],
+    iconAnchor:[12,12],
+    popupAnchor:[0,-12]
+  });
+}
+
+/* Add a single camera marker to the camera layer. Sets up the popup with
+   the live image, auto-refresh on popup open, and cleanup on popup close. */
+function addCameraMarker(cam){
+  if(!cam||typeof cam.lat!=='number'||typeof cam.lng!=='number')return;
+  var marker=L.marker([cam.lat,cam.lng],{icon:buildCameraIcon()});
+  var safeName=(cam.name||'Camera').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  /* Build popup content. The image src uses a cache-busting timestamp.
+     The refresh button calls refreshCamImage() with the cam id and base URL. */
+  var popupHtml='<div class="cam-popup">'+
+    '<div class="cam-title"><i class="fas fa-video" style="margin-right:5px;color:var(--acc)"></i>'+safeName+'</div>'+
+    '<img id="cam-img-'+cam.id+'" class="cam-image" src="'+cam.img+'?t='+Date.now()+'" alt="Live camera feed" onerror="this.style.display=\'none\';this.nextElementSibling.style.display=\'block\'">'+
+    '<div style="display:none;color:var(--t3);font-size:10px;padding:8px">Camera image unavailable</div>'+
+    '<div class="cam-controls">'+
+      '<span class="cam-status" id="cam-status-'+cam.id+'">Loading...</span>'+
+      '<button class="refresh-btn" onclick="refreshCamImage(\''+cam.id+'\',\''+cam.img.replace(/'/g,"\\'")+'\')"><i class="fas fa-rotate"></i>Refresh Now</button>'+
+    '</div>'+
+    '</div>';
+  marker.bindPopup(popupHtml,{maxWidth:320,minWidth:260});
+  /* Start auto-refresh (60s) when popup opens, stop when it closes */
+  marker.on('popupopen',function(){
+    refreshCamImage(cam.id,cam.img);
+    if(camIntervals[cam.id])clearInterval(camIntervals[cam.id]);
+    camIntervals[cam.id]=setInterval(function(){
+      refreshCamImage(cam.id,cam.img);
+    },60000);
+  });
+  marker.on('popupclose',function(){
+    if(camIntervals[cam.id]){
+      clearInterval(camIntervals[cam.id]);
+      delete camIntervals[cam.id];
+    }
+  });
+  cameraMarkers.push(marker);
+  if(cameraLayer)marker.addTo(cameraLayer);
+}
+
+/* Fetch cameras from the FAA Aviation Weather Camera API and merge them
+   into the CAMERAS array. The FAA API returns a list of camera sites with
+   lat/lon and image URLs. Uses fP() for the CORS proxy fallback chain.
+   Returns the number of FAA cameras added. */
+async function fetchFaaCameras(){
+  /* The FAA AVCAMs API endpoint. May change format over time - we try
+     a couple of candidate URLs and parse defensively. */
+  var urls=[
+    'https://avcams.faa.gov/api/cameras',
+    'https://avcams.faa.gov/api/cameras/',
+    'https://avcams.faa.gov/api/v1/cameras'
+  ];
+  var added=0;
+  for(var i=0;i<urls.length;i++){
+    var txt=await fP(urls[i]);
+    if(!txt)continue;
+    try{
+      var data=JSON.parse(txt);
+      /* The FAA API may return an array, or {data:[...]}, or {features:[...]} */
+      var list=[];
+      if(Array.isArray(data))list=data;
+      else if(Array.isArray(data.data))list=data.data;
+      else if(Array.isArray(data.features))list=data.features;
+      else if(data&&Array.isArray(data.cameras))list=data.cameras;
+      if(list.length===0)continue;
+      list.forEach(function(item,idx){
+        if(!item)return;
+        /* Extract lat/lng - try multiple field names */
+        var lat=typeof item.lat==='number'?item.lat:(typeof item.latitude==='number'?item.latitude:(item.geometry&&item.geometry.coordinates?item.geometry.coordinates[1]:null));
+        var lng=typeof item.lon==='number'?item.lon:(typeof item.lng==='number'?item.lng:(typeof item.longitude==='number'?item.longitude:(item.geometry&&item.geometry.coordinates?item.geometry.coordinates[0]:null)));
+        if(lat===null||lng===null)return;
+        /* Extract name */
+        var name=item.name||item.title||item.siteName||item.site||('FAA Camera '+idx);
+        /* Extract image URL - try multiple structures */
+        var img=null;
+        if(item.img)item.img=item.img;
+        if(item.image)img=item.image;
+        if(item.imageUrl)img=item.imageUrl;
+        if(item.url)img=item.url;
+        if(Array.isArray(item.images)&&item.images.length>0){
+          img=item.images[0].url||item.images[0].src||item.images[0];
+        }
+        if(Array.isArray(item.imageList)&&item.imageList.length>0){
+          img=item.imageList[0].url||item.imageList[0].src||item.imageList[0];
+        }
+        if(!img||typeof img!=='string')return;
+        /* Build a unique id */
+        var id=item.id||item.cameraId||('faa-'+idx+'-'+lat+'-'+lng);
+        /* Add to CAMERAS if not already present (avoid duplicates) */
+        var exists=CAMERAS.some(function(c){return c.id===id||c.id===String(id)});
+        if(!exists){
+          CAMERAS.push({id:String(id),name:String(name),lat:lat,lng:lng,img:img});
+          added++;
+        }
+      });
+      console.log('[Cameras] FAA API returned',list.length,'cameras,',added,'added from',urls[i]);
+      if(added>0)break;  /* success - stop trying other URLs */
+    }catch(e){
+      console.warn('[Cameras] JSON parse error for',urls[i],e);
+    }
+  }
+  return added;
+}
+
+/* Load cameras: build markers from the built-in CAMERAS array immediately,
+   then fetch from the FAA API as a bonus (non-blocking). Called the first
+   time the user enables the Live Cameras checkbox. */
+async function loadCameras(){
+  if(camerasLoaded){
+    /* Already loaded - just rebuild markers from the CAMERAS array */
+    buildCameraMarkers();
+    return;
+  }
+  /* Build markers from the built-in CAMERAS array RIGHT AWAY so cameras
+     appear on the map immediately, before the FAA fetch completes. */
+  buildCameraMarkers();
+  camerasLoaded=true;
+  /* Update the count badge to show we're also trying the FAA API */
+  var countEl=document.getElementById('alertMapCount');
+  var prevHtml=countEl?countEl.innerHTML:'';
+  if(countEl)countEl.innerHTML='<i class="fas fa-video"></i> '+CAMERAS.length+' cameras loaded · checking FAA...';
+  /* Fetch FAA cameras in the background (non-blocking). If it succeeds,
+     new cameras are appended and the layer is rebuilt. If it fails (CORS,
+     API moved, etc.), the built-in cameras remain. */
+  try{
+    var faaAdded=await fetchFaaCameras();
+    if(faaAdded>0){
+      /* FAA returned cameras - rebuild the layer to include them */
+      buildCameraMarkers();
+      console.log('[Cameras] Added '+faaAdded+' FAA cameras on top of built-in set');
+    }else{
+      console.log('[Cameras] FAA API returned no cameras (may be blocked or moved). Using '+CAMERAS.length+' built-in cameras only.');
+    }
+  }catch(e){
+    console.warn('[Cameras] FAA fetch failed (expected if CORS-blocked):',e.message||e);
+  }
+  if(countEl)countEl.innerHTML=prevHtml;
+}
+
+/* Build all camera markers into the camera layer. Clears existing markers
+   first so this can be called to refresh. */
+function buildCameraMarkers(){
+  if(!cameraLayer){
+    cameraLayer=L.layerGroup();
+    cameraLayer.addTo(alertMapInstance);
+  }
+  /* Clear existing markers */
+  cameraMarkers.forEach(function(m){cameraLayer.removeLayer(m)});
+  cameraMarkers=[];
+  /* Clear any stale intervals */
+  Object.keys(camIntervals).forEach(function(id){
+    clearInterval(camIntervals[id]);
+    delete camIntervals[id];
+  });
+  /* Add a marker for each camera */
+  CAMERAS.forEach(function(cam){addCameraMarker(cam)});
+  console.log('[Cameras] Built',CAMERAS.length,'camera markers');
+}
+
+/* Toggle handler for the Live Cameras checkbox. Loads cameras on first
+   enable, then adds/removes the layer from the map.
+   Returns immediately if CAMERAS_ENABLED is false (the layer is currently
+   disabled - see the comment at the top of this module). */
+async function toggleCameraLayer(){
+  if(!CAMERAS_ENABLED){
+    console.log('[Cameras] Layer is disabled (CAMERAS_ENABLED=false). Set CAMERAS_ENABLED=true to re-enable.');
+    /* Uncheck the box if someone somehow clicked it */
+    var cb=document.getElementById('amLayerCameras');
+    if(cb)cb.checked=false;
+    return;
+  }
+  if(!alertMapInstance)initAlertMap();
+  if(!alertMapInstance)return;
+  cb=document.getElementById('amLayerCameras');
+  if(!cb)return;
+  if(cb.checked){
+    /* Enable - load cameras (fetches FAA + builds markers) if needed */
+    await loadCameras();
+    if(cameraLayer){
+      cameraLayer.addTo(alertMapInstance);
+    }
+  }else{
+    /* Disable - remove layer from map but keep markers in memory */
+    if(cameraLayer){
+      alertMapInstance.removeLayer(cameraLayer);
+    }
+    /* Clear any open popup refresh intervals */
+    Object.keys(camIntervals).forEach(function(id){
+      clearInterval(camIntervals[id]);
+      delete camIntervals[id];
+    });
+  }
+}
+
+/* ── Radar Overlay (RainViewer API) ────────────────────────────────────────
+   Adds a nationwide (actually global) composite radar overlay to the map
+   using RainViewer's free tile API. RainViewer serves mosaic radar tiles
+   that cover the entire US (and world) as standard XYZ tiles, so they work
+   perfectly with Leaflet's L.tileLayer - no image-overlay bounds needed.
+
+   Two layer types available (both use the same radar data, different colors):
+   - reflectivity  : Composite reflectivity (Meteored color scheme, with snow)
+   - rainrate      : Rain rate (original dBZ color scheme, no snow)
+
+   Note: RainViewer's free tier no longer provides satellite IR data.
+
+   RainViewer's API works like this:
+   1. Fetch the latest available radar frames from the weather-maps endpoint.
+   2. The latest frame's `path` (e.g. "/v2/radar/a096eb25199f") is used to
+      build the tile URL:
+      https://tilecache.rainviewer.com/v2/radar/{path}/{size}/{z}/{x}/{y}/{color}_{options}.png
+
+   No API key required. CORS-friendly. Auto-refreshes every 5 minutes.
+   https://www.rainviewer.com/api/weather-radar-api-v2.html */
+
+var radarLayers=[];      /* array of L.tileLayer, one per frame - preloaded for instant switching */
+var radarFrames=[];      /* array of {time, path} from RainViewer API */
+var radarCurrentFrame=0;  /* index into radarFrames, 0 = oldest */
+var radarPlaying=false;
+var radarAnimTimer=null;
+var radarRefreshTimer=null;
+var radarType='reflectivity';
+var radarBaseOpacity=0.7;  /* user's chosen opacity (from slider) */
+var radarBuiltType=null;   /* which type the layers were built for (so we rebuild if type changes) */
+var radarLayerLoaded=[];   /* tracks which layers have finished loading tiles for the current view */
+var radarMapMoveHandler=null;  /* tracks map zoom/move to reset load state */
+
+/* Fetch ALL radar frames from RainViewer (not just the latest). The API
+   returns up to 13 past frames. We store them all so the user can
+   animate through them. Results cached in radarFrames. */
+async function fetchRadarFrames(){
+  if(radarFrames.length>0)return radarFrames;
+  try{
+    var txt=await fP('https://api.rainviewer.com/public/weather-maps.json');
+    if(!txt)return [];
+    var data=JSON.parse(txt);
+    if(data&&data.radar&&Array.isArray(data.radar.past)&&data.radar.past.length>0){
+      radarFrames=data.radar.past.map(function(f){return {time:f.time,path:f.path}});
+      console.log('[Radar] Loaded',radarFrames.length,'frames from RainViewer');
+      return radarFrames;
+    }
+  }catch(e){
+    console.warn('[Radar] Failed to fetch RainViewer frames:',e);
+  }
+  return [];
+}
+
+/* Build the RainViewer tile URL for a given type and path. Uses 256px tiles
+   with no zoomOffset for correct alignment at fractional zoom levels. */
+function buildRadarTileUrl(type,path){
+  var size=256;
+  var color,smooth,snow;
+  if(type==='rainrate'){
+    color=0;smooth=1;snow=0;
+  }else{
+    color=4;smooth=1;snow=1;
+  }
+  return 'https://tilecache.rainviewer.com'+path+'/'+size+'/{z}/{x}/{y}/'+color+'/'+smooth+'_'+snow+'.png';
+}
+
+/* Show the radar frame at the given index. Uses DOUBLE-BUFFERING to prevent
+   flashing: the old frame stays visible until the new frame's tiles are
+   fully loaded, then we swap opacities instantly. This eliminates the blank
+   gap that causes flashing when tiles haven't finished loading yet.
+
+   If the target frame's tiles are already loaded, the swap is instant.
+   If they're still loading, the old frame stays visible until the 'load'
+   event fires on the target layer, then the swap happens. This means the
+   animation might slow down during tile loading (waiting for tiles), but
+   it will NEVER flash or show blank areas. */
+function radarShowFrame(idx){
+  if(radarFrames.length===0||radarLayers.length===0)return;
+  if(idx<0)idx=0;
+  if(idx>=radarLayers.length)idx=radarLayers.length-1;
+  /* Update UI regardless of whether tiles are loaded */
+  radarUpdateUI(idx);
+  /* If the target frame is the same as current, do nothing */
+  if(idx===radarCurrentFrame&&radarLayers[radarCurrentFrame]){
+    radarLayers[radarCurrentFrame].setOpacity(radarBaseOpacity);
+    return;
+  }
+  var oldIdx=radarCurrentFrame;
+  var newLayer=radarLayers[idx];
+  var oldLayer=radarLayers[oldIdx];
+  if(!newLayer)return;
+  /* Check if the new frame's tiles are loaded */
+  if(radarLayerLoaded[idx]){
+    /* Tiles are ready - swap instantly */
+    doRadarSwap(idx,oldIdx);
+  }else{
+    /* Tiles not ready - wait for load event, then swap.
+       The old frame stays visible (no flashing). */
+    newLayer.once('load',function(){
+      /* Only swap if we haven't moved to a different frame in the meantime */
+      if(radarCurrentFrame===oldIdx){
+        doRadarSwap(idx,oldIdx);
+      }
+    });
+  }
+  radarCurrentFrame=idx;
+}
+
+/* Actually perform the opacity swap: hide old frame, show new frame. */
+function doRadarSwap(newIdx,oldIdx){
+  /* Hide ALL layers except the target, then show the target */
+  for(var i=0;i<radarLayers.length;i++){
+    if(i===newIdx){
+      radarLayers[i].setOpacity(radarBaseOpacity);
+    }else{
+      radarLayers[i].setOpacity(0);
+    }
+  }
+}
+
+/* Update the animation UI elements (frame label, timeline, time display). */
+function radarUpdateUI(idx){
+  var labelEl=document.getElementById('amRadarFrameLabel');
+  if(labelEl)labelEl.textContent=(idx+1)+'/'+radarFrames.length;
+  var timelineEl=document.getElementById('amRadarTimeline');
+  if(timelineEl){
+    timelineEl.max=radarFrames.length-1;
+    timelineEl.value=idx;
+  }
+  var timeEl=document.getElementById('amRadarTimeDisplay');
+  if(timeEl&&radarFrames[idx]){
+    var d=new Date(radarFrames[idx].time*1000);
+    timeEl.textContent=d.toLocaleString('en-US',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit',hour12:true});
+  }
+}
+
+/* Step forward or backward by delta frames. Wraps around at the ends. */
+function radarStep(delta){
+  if(radarFrames.length===0)return;
+  var n=radarFrames.length;
+  var newIdx=radarCurrentFrame+delta;
+  if(newIdx<0)newIdx=n-1;
+  if(newIdx>=n)newIdx=0;
+  radarShowFrame(newIdx);
+}
+
+/* Seek to a specific frame index (called by the timeline slider). */
+function radarSeekTo(idx){
+  radarShowFrame(parseInt(idx,10));
+}
+
+/* Toggle play/pause of the radar animation. When playing, advances one
+   frame every 500ms, wrapping around when it reaches the end.
+   Uses 500ms (not faster) to give tiles time to load between frames.
+   The double-buffering in radarShowFrame prevents flashing even if tiles
+   aren't ready - it just waits for the load event. */
+function radarTogglePlay(){
+  radarPlaying=!radarPlaying;
+  var btn=document.getElementById('amRadarPlayBtn');
+  if(radarPlaying){
+    if(btn)btn.innerHTML='<i class="fas fa-pause"></i>';
+    if(radarAnimTimer)clearInterval(radarAnimTimer);
+    radarAnimTimer=setInterval(function(){
+      var n=radarFrames.length;
+      if(n===0)return;
+      var newIdx=(radarCurrentFrame+1)%n;
+      radarShowFrame(newIdx);
+    },500);
+  }else{
+    if(btn)btn.innerHTML='<i class="fas fa-play"></i>';
+    if(radarAnimTimer){clearInterval(radarAnimTimer);radarAnimTimer=null}
+  }
+}
+
+/* Called when the radar type dropdown changes. Rebuilds all 13 layers with
+   the new color scheme (different tile URLs), then shows the current frame. */
+function onRadarTypeChanged(){
+  var typeSel=document.getElementById('amRadarType');
+  if(!typeSel)return;
+  var newType=typeSel.value;
+  if(newType===radarBuiltType)return;
+  if(radarLayers.length>0){
+    rebuildRadarLayers(newType);
+  }
+}
+
+/* Rebuild all 13 tile layers with a new type (color scheme). Removes old
+   layers, creates new ones with the new URLs, and shows the current frame. */
+function rebuildRadarLayers(type){
+  radarLayers.forEach(function(l){alertMapInstance.removeLayer(l)});
+  radarLayers=[];
+  radarLayerLoaded=[];
+  radarBuiltType=type;
+  radarType=type;
+  radarFrames.forEach(function(frame,idx){
+    var url=buildRadarTileUrl(type,frame.path);
+    var layer=L.tileLayer(url,{
+      opacity:0,
+      maxZoom:18,
+      maxNativeZoom:20,
+      attribution:'Radar: <a href="https://www.rainviewer.com/">RainViewer</a>',
+      crossOrigin:true
+    }).addTo(alertMapInstance);
+    /* Track when this layer's tiles finish loading */
+    (function(layerIdx){
+      layer.on('load',function(){radarLayerLoaded[layerIdx]=true});
+      layer.on('loading',function(){radarLayerLoaded[layerIdx]=false});
+    })(idx);
+    radarLayers.push(layer);
+  });
+  radarShowFrame(radarCurrentFrame);
+}
+
+/* Create a single radar tile layer and set up its load tracking. Returns
+   the layer. Used by toggleRadarOverlay and the auto-refresh. */
+function createRadarLayer(type,frame,idx){
+  var url=buildRadarTileUrl(type,frame.path);
+  var layer=L.tileLayer(url,{
+    opacity:0,
+    maxZoom:18,
+    maxNativeZoom:20,
+    attribution:'Radar: <a href="https://www.rainviewer.com/">RainViewer</a>',
+    crossOrigin:true
+  }).addTo(alertMapInstance);
+  /* Track tile load state for double-buffering */
+  (function(layerIdx){
+    layer.on('load',function(){radarLayerLoaded[layerIdx]=true});
+    layer.on('loading',function(){radarLayerLoaded[layerIdx]=false});
+  })(idx);
+  return layer;
+}
+
+/* Toggle the radar overlay on/off. Fetches all frames, creates all 13 tile
+   layers at once (preloading them), and shows the latest frame.
+   Uses double-buffering: the old frame stays visible until the new frame's
+   tiles are loaded, preventing flashing. Map zoom/move events reset the
+   load state so the system knows tiles need to reload. */
+async function toggleRadarOverlay(){
+  if(!alertMapInstance)initAlertMap();
+  if(!alertMapInstance)return;
+  var cb=document.getElementById('amRadarEnable');
+  var typeSel=document.getElementById('amRadarType');
+  var opacityEl=document.getElementById('amRadarOpacity');
+  /* Remove existing radar layers and stop animation */
+  if(radarLayers.length>0){
+    radarLayers.forEach(function(l){alertMapInstance.removeLayer(l)});
+    radarLayers=[];
+  }
+  if(radarPlaying)radarTogglePlay();
+  /* Remove old map move handler */
+  if(radarMapMoveHandler){
+    alertMapInstance.off('zoomstart',radarMapMoveHandler);
+    alertMapInstance.off('movestart',radarMapMoveHandler);
+    radarMapMoveHandler=null;
+  }
+  if(!cb||!cb.checked){
+    if(radarRefreshTimer){clearInterval(radarRefreshTimer);radarRefreshTimer=null}
+    return;
+  }
+  /* Fetch all radar frames */
+  var frames=await fetchRadarFrames();
+  if(frames.length===0){
+    console.warn('[Radar] No frames available - RainViewer API may be down');
+    if(cb)cb.checked=false;
+    return;
+  }
+  var type=typeSel?typeSel.value:'reflectivity';
+  radarType=type;
+  radarBuiltType=type;
+  radarBaseOpacity=opacityEl?(parseInt(opacityEl.value,10)/100):0.7;
+  radarLayerLoaded=[];
+  /* Create all 13 tile layers at once. They all start at opacity 0 (hidden).
+     Adding them to the map triggers tile loading in the background. */
+  frames.forEach(function(frame,idx){
+    radarLayers.push(createRadarLayer(type,frame,idx));
+  });
+  console.log('[Radar] Preloaded',radarLayers.length,'tile layers with double-buffering');
+  /* Set up map zoom/move handler to reset load state. When the map moves,
+     all layers need to reload tiles for the new viewport. We mark all
+     layers as unloaded so the double-buffering system knows to wait. */
+  radarMapMoveHandler=function(){
+    for(var i=0;i<radarLayerLoaded.length;i++){
+      radarLayerLoaded[i]=false;
+    }
+    console.log('[Radar] Map moved - resetting tile load state');
+  };
+  alertMapInstance.on('zoomstart',radarMapMoveHandler);
+  alertMapInstance.on('movestart',radarMapMoveHandler);
+  /* Start on the latest frame (most recent) */
+  radarShowFrame(frames.length-1);
+  /* Auto-refresh every 5 minutes */
+  if(radarRefreshTimer)clearInterval(radarRefreshTimer);
+  radarRefreshTimer=setInterval(async function(){
+    radarFrames=[];
+    var newFrames=await fetchRadarFrames();
+    if(newFrames.length>0&&cb&&cb.checked){
+      radarLayers.forEach(function(l){alertMapInstance.removeLayer(l)});
+      radarLayers=[];
+      radarLayerLoaded=[];
+      newFrames.forEach(function(frame,idx){
+        radarLayers.push(createRadarLayer(radarType,frame,idx));
+      });
+      radarShowFrame(radarLayers.length-1);
+      console.log('[Radar] Auto-refreshed to',newFrames.length,'frames');
+    }
+  },5*60*1000);
+}
+
+/* Update just the opacity of the currently visible radar layer. */
+function updateRadarOpacity(){
+  var opacityEl=document.getElementById('amRadarOpacity');
+  if(!opacityEl)return;
+  radarBaseOpacity=parseInt(opacityEl.value,10)/100;
+  if(radarLayers.length>0&&radarLayers[radarCurrentFrame]){
+    radarLayers[radarCurrentFrame].setOpacity(radarBaseOpacity);
+  }
+}
+
+/* ── Weather Feeds tab ─────────────────────────────────────────────────────
+   Loads Twitter/X embeds and SPC/NWS RSS feeds when the Weather Feeds tab
+   is first opened. Twitter timelines are embedded using twttr.widgets.
+   createTimeline() which creates the iframe-based timeline directly. We
+   poll for the twttr SDK to be ready (since it loads async), then create
+   each timeline. RSS feeds are fetched via fP() (CORS proxy fallback). */
+var weatherFeedsLoaded=false;
+/* Twitter account configs: elementId -> username. The X widget SDK
+   (platform.x.com/widgets.js) replaces the placeholder <a> element with
+   an iframe-based timeline. We use createTimeline() for reliability. */
+var TWITTER_FEEDS={
+  'tw-nwstornado':'NWStornado',
+  'tw-nwsspc':'NWSPC',
+  'tw-nws':'NWS'
+};
+function loadWeatherFeeds(){
+  /* Load Twitter timelines (poll for SDK readiness) */
+  loadTwitterFeeds();
+  /* Only fetch RSS feeds once */
+  if(weatherFeedsLoaded)return;
+  weatherFeedsLoaded=true;
+  /* SPC RSS feeds */
+  fetchRssFeed('https://www.spc.noaa.gov/products/spcwwrss.xml','rss-spc-watches');
+  fetchRssFeed('https://www.spc.noaa.gov/products/spcmdrss.xml','rss-spc-meso');
+  fetchRssFeed('https://www.spc.noaa.gov/products/spcacrss.xml','rss-spc-outlooks');
+  /* NWS alerts - use the Atom feed */
+  fetchRssFeed('https://www.weather.gov/alerts/feed','rss-nws-alerts');
+}
+
+/* Load Twitter/X timeline widgets. The SDK (widgets.js) loads async, so we
+   poll for window.twttr to be available, then call createTimeline() for each
+   account. createTimeline() creates the timeline iframe directly - more
+   reliable than relying on the <a class="twitter-timeline"> auto-render. */
+function loadTwitterFeeds(){
+  var attempts=0;
+  var maxAttempts=20;  /* 20 x 500ms = 10s max wait */
+  function tryLoad(){
+    if(typeof twttr!=='undefined'&&twttr&&twttr.widgets&&twttr.widgets.createTimeline){
+      /* SDK is ready - create each timeline */
+      Object.keys(TWITTER_FEEDS).forEach(function(elId){
+        var username=TWITTER_FEEDS[elId];
+        var container=document.getElementById(elId);
+        if(!container)return;
+        /* Show a loading placeholder while the iframe builds */
+        container.innerHTML='<div style="padding:20px;text-align:center;color:var(--t3);font-size:11px"><i class="fas fa-spinner fa-spin" style="margin-right:6px"></i>Loading @'+username+'...</div>';
+        /* createTimeline replaces the container content with an iframe */
+        twttr.widgets.createTimeline(
+          {
+            sourceType:'profile',
+            screenName:username
+          },
+          container,
+          {
+            theme:'dark',
+            chrome:'noheader nofooter',
+            tweetLimit:20,
+            dnt:true  /* Do Not Track - privacy */
+          }
+        ).then(function(el){
+          /* Success - the iframe element is returned */
+          if(el){
+            console.log('[Feeds] Twitter timeline loaded for @'+username);
+          }else{
+            container.innerHTML='<div style="padding:20px;text-align:center;color:var(--t3);font-size:11px">Timeline unavailable. <a href="https://x.com/'+username+'" target="_blank" style="color:var(--acc)">Open on X</a></div>';
+          }
+        }).catch(function(e){
+          console.warn('[Feeds] Twitter timeline error for @'+username,e);
+          container.innerHTML='<div style="padding:20px;text-align:center;color:var(--t3);font-size:11px">Timeline unavailable. <a href="https://x.com/'+username+'" target="_blank" style="color:var(--acc)">Open on X</a></div>';
+        });
+      });
+    }else{
+      /* SDK not loaded yet - retry */
+      attempt++;
+      if(attempt<maxAttempts){
+        setTimeout(tryLoad,500);
+      }else{
+        /* Timed out - show fallback links */
+        console.warn('[Feeds] Twitter SDK not loaded after '+maxAttempts+' attempts');
+        Object.keys(TWITTER_FEEDS).forEach(function(elId){
+          var username=TWITTER_FEEDS[elId];
+          var container=document.getElementById(elId);
+          if(container){
+            container.innerHTML='<div style="padding:20px;text-align:center;color:var(--t3);font-size:11px">Twitter SDK not loaded. <a href="https://x.com/'+username+'" target="_blank" style="color:var(--acc)">Open @'+username+' on X</a></div>';
+          }
+        });
+      }
+    }
+  }
+  tryLoad();
+}
+
+/* Fetch and parse an RSS/Atom feed, then render it as a list of items
+   inside the element with the given ID. Uses fP() for CORS proxy fallback. */
+async function fetchRssFeed(url,elementId){
+  var el=document.getElementById(elementId);
+  if(!el)return;
+  try{
+    var txt=await fP(url);
+    if(!txt){
+      el.innerHTML='<div class="wf-rss-empty">Feed unavailable</div>';
+      return;
+    }
+    var doc=new DOMParser().parseFromString(txt,'text/xml');
+    /* RSS 2.0: channel > item. Atom: feed > entry. */
+    var items=doc.querySelectorAll('item');
+    var entries=doc.querySelectorAll('entry');
+    var feedItems=items.length>0?items:entries;
+    if(feedItems.length===0){
+      el.innerHTML='<div class="wf-rss-empty">No items in feed</div>';
+      return;
+    }
+    var html='';
+    /* Show up to 30 items */
+    var max=Math.min(feedItems.length,30);
+    for(var i=0;i<max;i++){
+      var item=feedItems[i];
+      var title=textContent(item,'title');
+      var link=textContent(item,'link');
+      var pubDate=textContent(item,'pubDate')||textContent(item,'published')||textContent(item,'updated');
+      var desc=textContent(item,'description')||textContent(item,'summary');
+      /* Format the date */
+      var timeStr='';
+      if(pubDate){
+        try{
+          var d=new Date(pubDate);
+          timeStr=d.toLocaleString('en-US',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit',hour12:true});
+        }catch(e){timeStr=pubDate}
+      }
+      /* Strip HTML from description for the summary */
+      var summary='';
+      if(desc){
+        var tmp=document.createElement('div');
+        tmp.innerHTML=desc;
+        summary=tmp.textContent||tmp.innerText||'';
+        if(summary.length>200)summary=summary.substring(0,200)+'...';
+      }
+      html+='<div class="wf-rss-item" onclick="window.open(\''+link.replace(/'/g,"\\'")+'\',\'_blank\')">'+
+        '<div class="wf-rss-title">'+escapeHtml(title)+'</div>'+
+        (timeStr?'<div class="wf-rss-time">'+timeStr+'</div>':'')+
+        (summary?'<div class="wf-rss-summary">'+escapeHtml(summary)+'</div>':'')+
+        '</div>';
+    }
+    el.innerHTML=html;
+  }catch(e){
+    console.warn('[Feeds] RSS fetch error for',url,e);
+    el.innerHTML='<div class="wf-rss-empty">Feed error</div>';
+  }
+}
+
+/* Helper: get text content of the first child element with the given tag name */
+function textContent(parent,tagName){
+  var el=parent.getElementsByTagName(tagName)[0];
+  return el?el.textContent:'';
+}
+
+/* Helper: escape HTML special characters */
+function escapeHtml(s){
+  if(!s)return '';
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+/* ── Screenshot capture & export ──────────────────────────────────────────
+   Captures the current map view (base tiles + alert polygons + SPC outlooks)
+   as a PNG image with a branded footer (logo + site name + timestamp).
+   Uses a custom canvas composite approach (same as the original KN Weather
+   Center) instead of html2canvas for the map itself, because html2canvas
+   can't correctly capture Leaflet's transform-positioned tile/overlay panes.
+   The map is drawn manually: background fill → tile images → overlay canvas
+   (vector polygons) → marker pane. Then a brand footer is added at the
+   bottom with the Skywarn logo and timestamp, and the final composite is
+   shown in a preview modal with a Download button. */
+
+/* Cache the logo as a data URL so it can be drawn to canvas without CORS
+   taint. Fetched once on first screenshot, then reused. */
+var LOGO_DATA_URL=null;
+async function preloadLogoDataUrl(){
+  if(LOGO_DATA_URL)return LOGO_DATA_URL;
+  try{
+    var resp=await fetch('./skywarn-logo.png');
+    var blob=await resp.blob();
+    LOGO_DATA_URL=await new Promise(function(resolve){
+      var reader=new FileReader();
+      reader.onloadend=function(){
+        if(typeof reader.result==='string'&&reader.result.startsWith('data:'))resolve(reader.result);
+        else resolve(null);
+      };
+      reader.onerror=function(){resolve(null)};
+      reader.readAsDataURL(blob);
+    });
+  }catch(e){console.warn('Logo preload failed:',e)}
+  return LOGO_DATA_URL;
+}
+
+/* Snapshot the Leaflet map onto a single canvas. Draws:
+   1. Background fill
+   2. All tile images (fetched as data URLs to avoid canvas tainting)
+   3. The vector overlay canvas (alert polygons + SPC outlooks)
+   4. Marker pane images (zone labels, etc.)
+   Returns the composite canvas, or null on failure.
+
+   CRITICAL: Leaflet applies panning via a CSS transform on the
+   .leaflet-map-pane element (the parent of tile/overlay/marker panes).
+   Each tile also has its own transform relative to the map pane. To
+   correctly position everything on the screenshot canvas, we must add
+   BOTH transforms: screen_position = map_pane_offset + element_offset.
+   Missing the map pane offset causes the entire map to shift, which is
+   the "screenshot moved off the location I was looking at" bug. */
+async function snapshotLeafletMap(map){
+  try{
+    var container=map.getContainer();
+    var w=container.offsetWidth;
+    var h=container.offsetHeight;
+    var canvas=document.createElement('canvas');
+    canvas.width=w;canvas.height=h;
+    canvas.style.width=w+'px';canvas.style.height=h+'px';
+    var ctx=canvas.getContext('2d');
+    /* Fill background */
+    ctx.fillStyle='#050505';
+    ctx.fillRect(0,0,w,h);
+
+    /* Parse the .leaflet-map-pane transform to get the pan offset.
+       This is the key fix - without this, tiles are drawn at their
+       grid positions as if the map hasn't been panned, causing the
+       entire map content to shift on the screenshot. */
+    var mapPane=container.querySelector('.leaflet-map-pane');
+    var panX=0,panY=0;
+    if(mapPane){
+      var mapTransform=mapPane.style.transform||window.getComputedStyle(mapPane).transform||'';
+      var mpm=mapTransform.match(/translate3d\(\s*(-?[\d.]+)px\s*,\s*(-?[\d.]+)px/);
+      if(mpm){panX=parseFloat(mpm[1])||0;panY=parseFloat(mpm[2])||0}
+      /* Also check for matrix() transform format (Leaflet sometimes uses this) */
+      if(!mpm){
+        var mm=mapTransform.match(/matrix\(\s*([-\d.]+)\s*,\s*([-\d.]+)\s*,\s*([-\d.]+)\s*,\s*([-\d.]+)\s*,\s*([-\d.]+)\s*,\s*([-\d.]+)\s*\)/);
+        if(mm){panX=parseFloat(mm[5])||0;panY=parseFloat(mm[6])||0}
+      }
+    }
+
+    /* Helper: parse a leaflet element's transform into {x,y} */
+    function parseElementTransform(el){
+      var transform=el.style.transform||'';
+      var x=0,y=0;
+      var m=transform.match(/translate3d\(\s*(-?[\d.]+)px\s*,\s*(-?[\d.]+)px/);
+      if(m){x=parseFloat(m[1])||0;y=parseFloat(m[2])||0}
+      if(!m){
+        var mm=transform.match(/matrix\(\s*([-\d.]+)\s*,\s*([-\d.]+)\s*,\s*([-\d.]+)\s*,\s*([-\d.]+)\s*,\s*([-\d.]+)\s*,\s*([-\d.]+)\s*\)/);
+        if(mm){x=parseFloat(mm[5])||0;y=parseFloat(mm[6])||0}
+      }
+      if(!m&&!mm){
+        if(el.style.left)x=parseFloat(el.style.left)||0;
+        if(el.style.top)y=parseFloat(el.style.top)||0;
+      }
+      return {x:x,y:y};
+    }
+
+    /* Draw all tile images. Each tile's screen position = panX + tileX,
+       panY + tileY. Fetch each tile URL as a data URL to avoid tainting. */
+    var tilePane=container.querySelector('.leaflet-tile-pane');
+    if(tilePane){
+      var tiles=tilePane.querySelectorAll('img.leaflet-tile');
+      var tilePromises=[];
+      tiles.forEach(function(tile){
+        if(!tile.complete||tile.naturalWidth===0)return;
+        var pos=parseElementTransform(tile);
+        /* Add the map pane pan offset to get true screen position */
+        var px=panX+pos.x,py=panY+pos.y;
+        var tileUrl=tile.src;
+        tilePromises.push(
+          fetch(tileUrl,{mode:'cors'})
+            .then(function(r){return r.blob()})
+            .then(function(blob){
+              return new Promise(function(resolve){
+                var reader=new FileReader();
+                reader.onloadend=function(){
+                  if(typeof reader.result==='string'&&reader.result.startsWith('data:')){
+                    var img=new Image();
+                    img.onload=function(){try{ctx.drawImage(img,px,py)}catch(e){}resolve()};
+                    img.onerror=function(){resolve()};
+                    img.src=reader.result;
+                  }else{resolve()}
+                };
+                reader.onerror=function(){resolve()};
+                reader.readAsDataURL(blob);
+              });
+            })
+            .catch(function(){
+              try{ctx.drawImage(tile,px,py)}catch(e){}
+            })
+        );
+      });
+      await Promise.all(tilePromises);
+    }
+
+    /* Draw the vector overlay canvas (alert polygons + SPC outlooks,
+       rendered via preferCanvas:true) on top of the tiles.
+       The overlay canvas is inside .leaflet-overlay-pane which is inside
+       .leaflet-map-pane, so it's also offset by panX/panY. */
+    var overlayPane=container.querySelector('.leaflet-overlay-pane');
+    if(overlayPane){
+      var overlayCanvas=overlayPane.querySelector('canvas');
+      if(overlayCanvas&&overlayCanvas.width>0){
+        try{ctx.drawImage(overlayCanvas,panX,panY)}catch(e){}
+      }
+      /* Also handle SVG-rendered layers (SPC outlooks use L.geoJSON which
+         may render as SVG paths if canvas renderer isn't used). Draw the
+         SVG element as an image, offset by the pan position. */
+      var svgEl=overlayPane.querySelector('svg');
+      if(svgEl){
+        try{
+          var svgData=new XMLSerializer().serializeToString(svgEl);
+          var svgBlob=new Blob([svgData],{type:'image/svg+xml;charset=utf-8'});
+          var svgUrl=URL.createObjectURL(svgBlob);
+          await new Promise(function(resolve){
+            var svgImg=new Image();
+            svgImg.onload=function(){try{ctx.drawImage(svgImg,panX,panY)}catch(e){}URL.revokeObjectURL(svgUrl);resolve()};
+            svgImg.onerror=function(){URL.revokeObjectURL(svgUrl);resolve()};
+            svgImg.src=svgUrl;
+          });
+        }catch(e){}
+      }
+    }
+
+    /* Draw marker icons (zone labels, div icons). Markers are inside
+       .leaflet-marker-pane which is also offset by panX/panY. */
+    var markerPane=container.querySelector('.leaflet-marker-pane');
+    if(markerPane){
+      var markerImgs=markerPane.querySelectorAll('img');
+      markerImgs.forEach(function(mi){
+        if(!mi.complete||mi.naturalWidth===0)return;
+        var pos=parseElementTransform(mi);
+        /* Add pan offset to marker position */
+        var x=panX+pos.x,y=panY+pos.y;
+        var iw=mi.offsetWidth||mi.naturalWidth;
+        var ih=mi.offsetHeight||mi.naturalHeight;
+        try{ctx.drawImage(mi,x-iw/2,y-ih)}catch(e){}
+      });
+    }
+
+    return canvas;
+  }catch(e){
+    console.error('snapshotLeafletMap failed:',e);
+    return null;
+  }
+}
+
+/* Capture the full screenshot: map + branded footer. Shows a preview modal
+   with a Download button.
+
+   Uses html2canvas on the map container element. This is more reliable
+   than the manual snapshotLeafletMap approach because html2canvas handles
+   all of Leaflet's internal DOM transforms (map pane pan offset, tile
+   positions, overlay canvas, marker pane) automatically by reading the
+   computed styles. The manual approach missed the map pane transform
+   and had fragile positioning math for the overlay canvas.
+
+   Requirements for this to work:
+   - CARTO tiles (CORS-enabled, useCORS:true handles them)
+   - preferCanvas:true (polygons rendered to canvas, which html2canvas
+     captures natively)
+   - html2canvas library loaded (added in <head>) */
+async function captureScreenshot(){
+  if(typeof html2canvas==='undefined'){
+    alert('Screenshot library not loaded');
+    return;
+  }
+  var btn=document.getElementById('screenshotBtn');
+  if(btn){btn.classList.add('flash');setTimeout(function(){btn.classList.remove('flash')},400)}
+
+  /* Show a brief loading indicator. On the map tab we use the count badge;
+     on the Weatherfront tab (which has no count badge visible) we use a
+     temporary toast-style message. */
+  var countEl=document.getElementById('alertMapCount');
+  var prevHtml=countEl?countEl.innerHTML:'';
+  var toastMsg=null;
+  if(currentTab!=='polygonmap'){
+    toastMsg=document.createElement('div');
+    toastMsg.style.cssText='position:fixed;top:60px;left:50%;transform:translateX(-50%);z-index:4000;background:rgba(10,10,10,.95);border:1px solid var(--acc);border-radius:6px;padding:8px 16px;font-size:12px;color:var(--acc);font-weight:600;backdrop-filter:blur(12px);box-shadow:0 4px 16px rgba(0,0,0,.5)';
+    toastMsg.innerHTML='<i class="fas fa-camera"></i> Capturing screenshot...';
+    document.body.appendChild(toastMsg);
+  }else{
+    if(countEl)countEl.innerHTML='<i class="fas fa-camera"></i> Capturing screenshot...';
+  }
+
+  /* Hide UI overlays during capture (controls panel, legend, zoom buttons,
+     popups, attribution, hamburger) so they don't appear in the screenshot. */
+  document.body.classList.add('capturing');
+  /* Wait two frames for the DOM to update before capturing */
+  await new Promise(function(r){requestAnimationFrame(function(){requestAnimationFrame(r)})});
+
+  /* iframeData tracks any iframes we swap with placeholders during capture
+     so we can restore them in the finally block (both on success and error). */
+  var iframeData=[];
+
+  try{
+    var mapCanvas;
+
+    if(currentTab!=='polygonmap'){
+      /* IFRAME TAB (Weatherfront, StormCams, or any future iframe tab):
+         Replace the cross-origin iframe with a placeholder div before
+         capturing, then html2canvas can capture the placeholder.
+         This is the only way to handle cross-origin iframes in screenshots —
+         the Same-Origin Policy prevents html2canvas from reading pixels
+         inside an iframe whose origin differs from the parent document.
+         The placeholder matches the iframe's height so layout doesn't shift,
+         and shows an icon + tab label + source URL so the screenshot user
+         knows what was there and can re-open it live. */
+      var wfEl=document.querySelector('#view-'+currentTab+' .wf-frame-wrap');
+      if(!wfEl){throw new Error('Tab container not found: '+currentTab)}
+      /* Read the tab-specific label and icon from data attributes on the
+         .wf-frame-wrap element. Falls back to generic values if missing. */
+      var tabLabel=wfEl.getAttribute('data-tab-label')||'Interactive Content';
+      var tabIcon=wfEl.getAttribute('data-tab-icon')||'fa-external-link-alt';
+      /* Find the iframe inside the container and swap it with a placeholder */
+      var wfIframe=wfEl.querySelector('iframe');
+      if(wfIframe){
+        var wfHeight=wfIframe.offsetHeight||(wfEl.offsetHeight)||400;
+        var placeholder=document.createElement('div');
+        placeholder.style.cssText='width:100%;height:'+wfHeight+'px;background:#0a0a0a;border:1px solid var(--bdr);border-radius:var(--rs);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px';
+        var icon=document.createElement('div');
+        icon.innerHTML='<i class="fas '+tabIcon+'" style="font-size:48px;color:var(--acc)"></i>';
+        var label=document.createElement('div');
+        label.style.cssText='font-size:14px;color:var(--t2);font-weight:600;text-align:center;padding:0 20px';
+        label.innerText=tabLabel+' - Interactive Content';
+        var subLabel=document.createElement('div');
+        subLabel.style.cssText='font-size:11px;color:var(--t3);text-align:center;padding:0 20px';
+        subLabel.innerText='See live panel for full interactive content';
+        var srcLabel=document.createElement('div');
+        srcLabel.style.cssText='font-size:9px;color:var(--t3);font-family:monospace;word-break:break-all;max-width:80%;text-align:center;padding:8px 12px;background:rgba(255,115,0,.06);border:1px solid var(--bdr);border-radius:4px';
+        srcLabel.innerText=wfIframe.src||wfIframe.getAttribute('src')||'';
+        placeholder.appendChild(icon);
+        placeholder.appendChild(label);
+        placeholder.appendChild(subLabel);
+        placeholder.appendChild(srcLabel);
+        /* Save state so we can restore in finally, then swap */
+        iframeData.push({iframe:wfIframe,placeholder:placeholder,parent:wfIframe.parentNode});
+        wfIframe.parentNode.replaceChild(placeholder,wfIframe);
+      }
+      /* Wait a frame for the placeholder to render */
+      await new Promise(function(r){requestAnimationFrame(function(){requestAnimationFrame(r)})});
+      mapCanvas=await html2canvas(wfEl,{
+        useCORS:true,
+        allowTaint:true,
+        backgroundColor:'#0a0a0a',
+        scale:window.devicePixelRatio||1,
+        logging:false,
+        imageTimeout:10000,
+        width:wfEl.offsetWidth,
+        height:wfEl.offsetHeight,
+        windowWidth:wfEl.offsetWidth,
+        windowHeight:wfEl.offsetHeight,
+        x:0,y:0,scrollX:0,scrollY:0
+      });
+    }else{
+      /* POLYGON MAP TAB: stabilize the map first, then capture.
+         See the stabilization comment below for why this matters. */
+      if(!alertMapInstance){return}
+      /* STABILIZE THE MAP before capturing. This is the critical step that
+         prevents blank/partial screenshots. Three things happen:
+         1. invalidateSize() forces Leaflet to recalculate its cached size
+            (needed if the map was ever in a display:none container or if
+            the window was resized).
+         2. Wait for the map's 'load' event, which fires when all visible
+            tiles have finished loading. This ensures html2canvas captures
+            a fully-tiled map instead of half-loaded tiles.
+         3. Add an 800ms settle delay after the load event so any final
+            tile animations complete.
+         4. Hard fallback at 1500ms in case the load event never fires
+            (e.g., if tiles are already cached and no new load happens). */
+      await new Promise(function(resolve){
+        var done=false;
+        function finish(){
+          if(done)return;
+          done=true;
+          setTimeout(resolve,800);
+        }
+        if(!alertMapInstance._loaded){resolve();return}
+        alertMapInstance.once('load',finish);
+        alertMapInstance.invalidateSize();
+        setTimeout(finish,1500);
+      });
+
+      var mapEl=document.getElementById('alertMap');
+      mapCanvas=await html2canvas(mapEl,{
+        useCORS:true,
+        allowTaint:true,
+        backgroundColor:'#050505',
+        scale:window.devicePixelRatio||1,
+        logging:false,
+        imageTimeout:10000,
+        width:mapEl.offsetWidth,
+        height:mapEl.offsetHeight,
+        windowWidth:mapEl.offsetWidth,
+        windowHeight:mapEl.offsetHeight,
+        x:0,y:0,scrollX:0,scrollY:0
+      });
+    }
+
+    if(!mapCanvas){throw new Error('html2canvas returned null')}
+
+    /* Preload the logo as a data URL for the watermark */
+    await preloadLogoDataUrl();
+
+    /* Build the final canvas - same size as the captured canvas so the
+       content fills the entire screenshot (no black footer bar). The
+       branding (logo + site name + timestamp) is drawn as a semi-transparent
+       watermark overlay in the bottom-right corner. */
+    var finalCanvas=document.createElement('canvas');
+    finalCanvas.width=mapCanvas.width;
+    finalCanvas.height=mapCanvas.height;
+    var fctx=finalCanvas.getContext('2d');
+
+    /* Draw the captured canvas filling the entire screenshot */
+    fctx.drawImage(mapCanvas,0,0);
+
+    /* Draw a semi-transparent branding watermark in the bottom-right
+       corner. This keeps the content visible underneath while still
+       identifying the source. The watermark box auto-sizes to fit
+       the logo + text content. */
+    var logoSize=24;
+    var padX=10,padY=7;
+    var siteName='Skywarn Storm Spotters & Chasers United States';
+    var stampStr=new Date().toLocaleString('en-US',{
+      weekday:'short',year:'numeric',month:'short',day:'numeric',
+      hour:'2-digit',minute:'2-digit',hour12:true
+    });
+    /* Measure text widths to size the watermark box */
+    fctx.font='bold 11px Inter,sans-serif';
+    var nameW=fctx.measureText(siteName).width;
+    fctx.font='9px Inter,sans-serif';
+    var stampW=fctx.measureText(stampStr).width;
+    var textW=Math.max(nameW,stampW);
+    var boxW=logoSize+8+textW+padX*2;
+    var boxH=logoSize+padY*2;
+    var boxX=finalCanvas.width-boxW-10;
+    var boxY=finalCanvas.height-boxH-10;
+
+    /* Draw semi-transparent background box */
+    fctx.fillStyle='rgba(0,0,0,.65)';
+    fctx.fillRect(boxX,boxY,boxW,boxH);
+    /* Orange left border accent */
+    fctx.fillStyle='#ff7300';
+    fctx.fillRect(boxX,boxY,3,boxH);
+
+    /* Draw the logo on the left side of the watermark box */
+    var logoX=boxX+padX,logoY=boxY+padY;
+    if(LOGO_DATA_URL){
+      var logoImg=new Image();
+      await new Promise(function(resolve){
+        logoImg.onload=function(){
+          try{fctx.drawImage(logoImg,logoX,logoY,logoSize,logoSize)}catch(e){}
+          resolve();
+        };
+        logoImg.onerror=function(){resolve()};
+        logoImg.src=LOGO_DATA_URL;
+      });
+    }else{
+      /* Fallback: draw an orange circle if logo failed to load */
+      fctx.fillStyle='#ff7300';
+      fctx.beginPath();
+      fctx.arc(logoX+logoSize/2,logoY+logoSize/2,logoSize/2,0,2*Math.PI);
+      fctx.fill();
+    }
+
+    /* Draw the site name to the right of the logo */
+    var textX=logoX+logoSize+8;
+    fctx.fillStyle='#ff7300';
+    fctx.font='bold 11px Inter,sans-serif';
+    fctx.textBaseline='top';
+    fctx.fillText(siteName,textX,boxY+padY);
+    /* Draw the timestamp below the site name */
+    fctx.fillStyle='#a0a0a0';
+    fctx.font='9px Inter,sans-serif';
+    fctx.fillText(stampStr,textX,boxY+padY+13);
+
+    /* Convert to PNG data URL */
+    var dataUrl=finalCanvas.toDataURL('image/png');
+
+    /* Show the preview modal */
+    var previewImg=document.getElementById('shotPreviewImg');
+    var downloadLink=document.getElementById('shotDownloadLink');
+    var infoEl=document.getElementById('shotInfo');
+    if(previewImg)previewImg.src=dataUrl;
+    if(downloadLink){
+      var filename='skywarn-alerts-'+new Date().toISOString().slice(0,19).replace(/[:T]/g,'-')+'.png';
+      downloadLink.href=dataUrl;
+      downloadLink.download=filename;
+    }
+    if(infoEl){
+      infoEl.textContent=finalCanvas.width+'×'+finalCanvas.height+'px · PNG';
+    }
+    document.getElementById('shotModal').classList.add('visible');
+  }catch(e){
+    console.error('Screenshot error:',e);
+    if(currentTab!=='polygonmap'&&toastMsg){
+      toastMsg.innerHTML='<i class="fas fa-circle-exclamation"></i> Screenshot failed: '+e.message;
+      setTimeout(function(){if(toastMsg&&toastMsg.parentNode)toastMsg.parentNode.removeChild(toastMsg)},5000);
+    }else if(countEl){
+      countEl.innerHTML='<i class="fas fa-circle-exclamation"></i> Screenshot failed: '+e.message;
+      setTimeout(function(){if(countEl)countEl.innerHTML=prevHtml},5000);
+    }
+  }finally{
+    /* Restore UI overlays */
+    document.body.classList.remove('capturing');
+    if(countEl)countEl.innerHTML=prevHtml;
+    if(toastMsg&&toastMsg.parentNode)toastMsg.parentNode.removeChild(toastMsg);
+    /* Restore any iframes that were swapped with placeholders during capture.
+       This runs on both success and error paths so the live panel always
+       gets its interactive iframe back. */
+    iframeData.forEach(function(d){
+      try{
+        if(d.placeholder.parentNode)d.parent.replaceChild(d.iframe,d.placeholder);
+      }catch(e){console.warn('Failed to restore iframe:',e)}
+    });
+  }
+}
+
+/* Close the screenshot preview modal */
+function closeShotModal(){
+  var modal=document.getElementById('shotModal');
+  if(modal)modal.classList.remove('visible');
+}
+
+/* ── Hamburger menu & tab switching ─────────────────────────────────────── */
+
+/* Toggle the hamburger dropdown menu open/closed. Stops propagation so
+   the document click handler (which closes the menu) doesn't immediately
+   fire after the toggle. */
+function toggleHamburgerMenu(e){
+  if(e){e.stopPropagation();e.preventDefault()}
+  var btn=document.getElementById('hamburgerBtn');
+  var menu=document.getElementById('hamburgerMenu');
+  if(!btn||!menu)return;
+  var isOpen=menu.classList.contains('visible');
+  if(isOpen){
+    menu.classList.remove('visible');
+    btn.classList.remove('open');
+  }else{
+    menu.classList.add('visible');
+    btn.classList.add('open');
+  }
+}
+
+/* Switch between tabs (polygonmap / weatherfront). Updates the active
+   state on the menu items, shows/hides the tab views, and calls
+   alertMapInstance.invalidateSize() when switching back to the map tab
+   so Leaflet recalculates its dimensions after being hidden. */
+var currentTab='polygonmap';
+function switchTab(tab){
+  currentTab=tab;
+  /* Update menu item active states */
+  var items=document.querySelectorAll('.hamburger-menu-item');
+  items.forEach(function(item){
+    if(item.id==='tab-'+tab){
+      item.classList.add('active');
+    }else if(item.id&&item.id.indexOf('tab-')===0){
+      item.classList.remove('active');
+    }
+  });
+  /* Show/hide tab views */
+  var views=document.querySelectorAll('.tab-view');
+  views.forEach(function(view){
+    if(view.id==='view-'+tab){
+      view.classList.add('active');
+    }else{
+      view.classList.remove('active');
+    }
+  });
+  /* Close the hamburger menu after selecting */
+  var btn=document.getElementById('hamburgerBtn');
+  var menu=document.getElementById('hamburgerMenu');
+  if(menu)menu.classList.remove('visible');
+  if(btn)btn.classList.remove('open');
+  /* If switching to the map tab, invalidate the map size after a short
+     delay so Leaflet recalculates dimensions (it may have been display:none). */
+  if(tab==='polygonmap'&&alertMapInstance){
+    setTimeout(function(){
+      try{alertMapInstance.invalidateSize()}catch(e){}
+    },100);
+  }
+  /* Update the header subtitle to reflect the active tab */
+  var sub=document.querySelector('.app-header .brand .titles .sub');
+  if(sub){
+    if(tab==='polygonmap'){
+      sub.innerHTML='Live NWS Alert Polygon Map &middot; Warnings, Watches &amp; SPC Outlooks';
+    }else if(tab==='weatherfront'){
+      sub.innerHTML='Weatherfront &middot; Interactive Weather Dashboard';
+    }else if(tab==='stormcams'){
+      sub.innerHTML='StormCams &middot; Live Storm Camera Network';
+    }else if(tab==='weatherfeeds'){
+      sub.innerHTML='Weather Feeds &middot; SPC, NWS &amp; Twitter';
+    }
+  }
+  /* If switching to the Weather Feeds tab, load Twitter widgets and RSS feeds */
+  if(tab==='weatherfeeds'){
+    loadWeatherFeeds();
+  }
+}
+
+/* Close the hamburger menu when clicking outside of it */
+document.addEventListener('click',function(e){
+  var menu=document.getElementById('hamburgerMenu');
+  var btn=document.getElementById('hamburgerBtn');
+  if(!menu||!btn)return;
+  if(menu.classList.contains('visible')){
+    /* If the click was inside the menu or on the button, don't close
+       (the button handler toggles, menu items call switchTab which closes) */
+    if(menu.contains(e.target)||btn.contains(e.target))return;
+    menu.classList.remove('visible');
+    btn.classList.remove('open');
+  }
+});
+
+/* ── PWA (Progressive Web App) support ─────────────────────────────────────
+   Registers a service worker for offline caching and handles the "Install
+   App" prompt. The service worker (sw.js) must be a separate file at the
+   same level as this HTML for GitHub Pages compatibility.
+   - Chrome/Edge/Android: shows an install prompt via beforeinstallprompt
+   - iOS/Safari: no programmatic install, but the PWA meta tags allow
+     "Add to Home Screen" from the Share menu (the Install App menu item
+     shows instructions for iOS users) */
+
+/* Deferred prompt for the install dialog (Chrome/Edge/Android) */
+var deferredInstallPrompt=null;
+window.addEventListener('beforeinstallprompt',function(e){
+  /* Prevent the default mini-infobar from showing */
+  e.preventDefault();
+  /* Stash the event so we can trigger it later from the Install App button */
+  deferredInstallPrompt=e;
+  /* Show the Install App menu item */
+  var menuInstall=document.getElementById('menu-install');
+  if(menuInstall)menuInstall.style.display='flex';
+  console.log('[PWA] Install prompt available');
+});
+
+/* Detect if running as installed PWA */
+window.addEventListener('appinstalled',function(){
+  console.log('[PWA] App installed successfully');
+  deferredInstallPrompt=null;
+  var menuInstall=document.getElementById('menu-install');
+  if(menuInstall)menuInstall.style.display='none';
+});
+
+/* Install app - called from the hamburger menu. On Chrome/Edge/Android this
+   shows the native install prompt. On iOS/Safari, shows instructions. */
+function installPWA(){
+  /* Close the hamburger menu first */
+  var menu=document.getElementById('hamburgerMenu');
+  var btn=document.getElementById('hamburgerBtn');
+  if(menu)menu.classList.remove('visible');
+  if(btn)btn.classList.remove('open');
+
+  if(deferredInstallPrompt){
+    /* Chrome/Edge/Android - show the native install prompt */
+    deferredInstallPrompt.prompt();
+    deferredInstallPrompt.userChoice.then(function(choice){
+      if(choice.outcome==='accepted'){
+        console.log('[PWA] User accepted install');
+      }else{
+        console.log('[PWA] User dismissed install');
+      }
+      deferredInstallPrompt=null;
+      var menuInstall=document.getElementById('menu-install');
+      if(menuInstall)menuInstall.style.display='none';
+    });
+  }else{
+    /* iOS/Safari or already installed - show instructions */
+    var isIOS=/iPad|iPhone|iPod/.test(navigator.userAgent)&&!window.MSStream;
+    var isStandalone=window.matchMedia('(display-mode: standalone)').matches||window.navigator.standalone===true;
+    if(isStandalone){
+      alert('App is already installed and running!');
+    }else if(isIOS){
+      alert('To install on iOS:\n\n1. Tap the Share button (square with up arrow)\n2. Scroll down and tap "Add to Home Screen"\n3. Tap "Add" to confirm');
+    }else{
+      alert('To install this app:\n\n• Chrome/Edge: click the install icon in the address bar, or use Menu → Install App\n• Android: use Menu → Add to Home screen\n• Desktop: use the install button in the address bar');
+    }
+  }
+}
+
+/* Register the service worker for offline support. The sw.js file handles
+   caching of static assets (HTML, CSS, JS, images) so the app works offline
+   after the first visit. API calls (NWS alerts, radar, SPC) still require
+   a network connection since weather data is real-time. */
+if('serviceWorker' in navigator){
+  window.addEventListener('load',function(){
+    navigator.serviceWorker.register('./sw.js').then(function(reg){
+      console.log('[PWA] Service Worker registered:',reg.scope);
+    }).catch(function(err){
+      console.warn('[PWA] Service Worker registration failed:',err);
+    });
+  });
+}
+
+/* ── Boot sequence ──────────────────────────────────────────────────────── */
+window.addEventListener('DOMContentLoaded',function(){
+  initAlertMap();
+  fAlertMap();
+  updateLiveTime();
+  /* Auto-refresh every 5 minutes (NWS API cache TTL is 1 min, but pulling
+     all US alerts is heavy - 5 min gives a good balance of freshness
+     without hammering the API). */
+  setInterval(fAlertMap,5*60*1000);
+  setInterval(updateLiveTime,30000);
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,26 @@
+{
+  "name": "Skywarn Storm Spotters & Chasers United States",
+  "short_name": "Skywarn US",
+  "description": "Live NWS alert polygon map for the entire United States with SPC convective outlooks, radar animation, and weather feeds.",
+  "start_url": "./nws_us_alert_map.html",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#0a0a0a",
+  "theme_color": "#0a0a0a",
+  "icons": [
+    {
+      "src": "./skywarn-logo.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "./skywarn-logo.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["weather", "news", "utilities"],
+  "screenshots": []
+}
