@@ -3311,37 +3311,39 @@ async function captureScreenshot(){
     /* Draw the captured canvas filling the entire screenshot */
     fctx.drawImage(mapCanvas,0,0);
 
-    /* Draw a semi-transparent branding watermark in the bottom-right
-       corner. This keeps the content visible underneath while still
-       identifying the source. The watermark box auto-sizes to fit
-       the logo + text content. */
-    var logoSize=24;
-    var padX=10,padY=7;
+    /* Draw a CENTERED branding bar at the bottom of the screenshot.
+       Larger than before: 48px logo, bold 16px site name, 11px timestamp.
+       The bar spans the full width with a semi-transparent black background
+       and an orange top border line. Logo is on the left, text to the right
+       of it, all horizontally centered as a group. */
+    var logoSize=48;
+    var padX=16,padY=10;
     var siteName='Skywarn Storm Spotters & Chasers United States';
     var stampStr=new Date().toLocaleString('en-US',{
       weekday:'short',year:'numeric',month:'short',day:'numeric',
       hour:'2-digit',minute:'2-digit',hour12:true
     });
-    /* Measure text widths to size the watermark box */
-    fctx.font='bold 11px Inter,sans-serif';
+    /* Measure text widths at the larger font sizes */
+    fctx.font='bold 16px Inter,sans-serif';
     var nameW=fctx.measureText(siteName).width;
-    fctx.font='9px Inter,sans-serif';
+    fctx.font='11px Inter,sans-serif';
     var stampW=fctx.measureText(stampStr).width;
     var textW=Math.max(nameW,stampW);
-    var boxW=logoSize+8+textW+padX*2;
-    var boxH=logoSize+padY*2;
-    var boxX=finalCanvas.width-boxW-10;
-    var boxY=finalCanvas.height-boxH-10;
-
-    /* Draw semi-transparent background box */
-    fctx.fillStyle='rgba(0,0,0,.65)';
-    fctx.fillRect(boxX,boxY,boxW,boxH);
-    /* Orange left border accent */
+    /* Total content width = logo + gap + text block */
+    var contentW=logoSize+12+textW;
+    var barH=logoSize+padY*2;
+    var barY=finalCanvas.height-barH;
+    /* Draw full-width semi-transparent black bar at the bottom */
+    fctx.fillStyle='rgba(0,0,0,.8)';
+    fctx.fillRect(0,barY,finalCanvas.width,barH);
+    /* Orange top border line */
     fctx.fillStyle='#ff7300';
-    fctx.fillRect(boxX,boxY,3,boxH);
-
-    /* Draw the logo on the left side of the watermark box */
-    var logoX=boxX+padX,logoY=boxY+padY;
+    fctx.fillRect(0,barY-2,finalCanvas.width,2);
+    /* Center the logo+text group horizontally */
+    var groupX=Math.floor((finalCanvas.width-contentW)/2);
+    var logoX=groupX;
+    var logoY=barY+padY;
+    /* Draw the logo */
     if(LOGO_DATA_URL){
       var logoImg=new Image();
       await new Promise(function(resolve){
@@ -3359,17 +3361,16 @@ async function captureScreenshot(){
       fctx.arc(logoX+logoSize/2,logoY+logoSize/2,logoSize/2,0,2*Math.PI);
       fctx.fill();
     }
-
-    /* Draw the site name to the right of the logo */
-    var textX=logoX+logoSize+8;
+    /* Draw the site name to the right of the logo (bold, orange, 16px) */
+    var textX=logoX+logoSize+12;
     fctx.fillStyle='#ff7300';
-    fctx.font='bold 11px Inter,sans-serif';
-    fctx.textBaseline='top';
-    fctx.fillText(siteName,textX,boxY+padY);
-    /* Draw the timestamp below the site name */
+    fctx.font='bold 16px Inter,sans-serif';
+    fctx.textBaseline='middle';
+    fctx.fillText(siteName,textX,barY+padY+logoSize/2-9);
+    /* Draw the timestamp below the site name (gray, 11px) */
     fctx.fillStyle='#a0a0a0';
-    fctx.font='9px Inter,sans-serif';
-    fctx.fillText(stampStr,textX,boxY+padY+13);
+    fctx.font='11px Inter,sans-serif';
+    fctx.fillText(stampStr,textX,barY+padY+logoSize/2+10);
 
     /* Convert to PNG data URL */
     var dataUrl=finalCanvas.toDataURL('image/png');
