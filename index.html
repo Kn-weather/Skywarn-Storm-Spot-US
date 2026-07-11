@@ -196,30 +196,36 @@ body{
   backdrop-filter:blur(12px);
   -webkit-backdrop-filter:blur(12px);
   max-height:calc(100% - 80px);
-  max-width:240px;
+  max-width:280px;
+  min-width:200px;  /* ensure header content (title + counter + chevron) fits */
   display:flex;flex-direction:column;
   overflow:hidden;  /* header stays fixed, only body scrolls */
 }
 /* Frozen header row: title + counter + chevron */
 .alert-map-legend-header{
-  display:flex;align-items:center;gap:8px;
-  padding:8px 12px;cursor:pointer;
+  display:flex;align-items:center;gap:6px;
+  padding:8px 10px;cursor:pointer;
   user-select:none;
   flex-shrink:0;  /* don't shrink - stays fixed */
   border-bottom:1px solid var(--bdr);
+  overflow:hidden;
 }
 .alert-map-legend-title{
   font-size:10px;font-weight:700;color:var(--acc);
   text-transform:uppercase;letter-spacing:.06em;
-  flex:0 0 auto;
+  flex:0 1 auto;  /* can shrink if needed but won't grow */
+  min-width:0;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
 }
 .alert-map-legend-title i{margin-right:5px}
 /* Counter badge inside the header */
 .alert-map-legend-count{
-  font-size:10px;font-weight:600;color:var(--acc);
-  margin-left:auto;  /* push to right side of header */
+  font-size:9px;font-weight:600;color:var(--acc);
+  flex:0 0 auto;  /* don't shrink - keep counter visible */
   white-space:nowrap;
-  padding:2px 6px;
+  padding:2px 5px;
   background:rgba(255,115,0,.1);
   border:1px solid rgba(255,115,0,.2);
   border-radius:4px;
@@ -372,7 +378,7 @@ body{
   .app-header .brand .titles h1{font-size:12px}
   .app-header .actions button{padding:6px 8px}
   .alert-map-controls{max-width:160px;font-size:9px}
-  .alert-map-legend{max-width:160px;font-size:9px}
+  .alert-map-legend{max-width:200px;min-width:180px;font-size:9px}
   .wf-feeds-grid{grid-template-columns:1fr;gap:12px}
   .wf-feed-body{max-height:400px}
 }
@@ -388,7 +394,7 @@ body{
   .alert-map-controls{max-width:180px;max-height:calc(100vh - 160px);top:8px;left:8px;font-size:9px}
   .alert-map-controls-body{max-height:calc(100vh - 220px);padding:0 8px 6px 8px}
   /* Legend at bottom-left, compact */
-  .alert-map-legend{max-width:180px;max-height:200px;bottom:8px;left:8px;font-size:9px}
+  .alert-map-legend{max-width:220px;min-width:190px;max-height:200px;bottom:8px;left:8px;font-size:9px}
   .hamburger-menu{min-width:180px}
   /* Mobile popup: constrain width to viewport and shrink content */
   .leaflet-popup-content-wrapper{max-width:calc(100vw - 20px)!important}
@@ -415,13 +421,13 @@ body{
 @media (min-width:641px) and (max-width:1024px){
   .wf-feeds-grid{grid-template-columns:repeat(2,1fr)}
   .alert-map-controls{max-width:220px}
-  .alert-map-legend{max-width:220px}
+  .alert-map-legend{max-width:260px}
 }
 /* ── Desktop (large screens) ── */
 @media (min-width:1025px){
   .wf-feeds-grid{grid-template-columns:repeat(3,1fr)}
   .alert-map-controls{max-width:240px}
-  .alert-map-legend{max-width:240px}
+  .alert-map-legend{max-width:280px}
 }
 /* ── Landscape phone adjustments ── */
 @media (max-width:900px) and (orientation:landscape){
