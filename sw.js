@@ -4,16 +4,17 @@
    is real-time and shouldn't be served stale.
 
    Cache strategy:
-   - Static assets (HTML, CSS, JS, images, fonts): cache-first
+   - Main HTML page: NETWORK-FIRST (always fetch latest from server, fall
+     back to cache if offline). This ensures code updates are received
+     immediately instead of serving stale cached HTML.
+   - Other static assets (CSS, JS, fonts, images): cache-first
    - API calls (api.weather.gov, api.rainviewer.com, spc.noaa.gov):
      network-first (fall back to cache if offline)
    - Map tiles (cartocdn.com, tilecache.rainviewer.com): network-only
      (too many to cache, and they update frequently) */
 
-var CACHE_NAME='skywarn-us-v2';
+var CACHE_NAME='skywarn-us-v3';
 var STATIC_ASSETS=[
-  './',
-  './index.html',
   './manifest.json',
   './skywarn-logo.png',
   'https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap',
@@ -21,6 +22,8 @@ var STATIC_ASSETS=[
   'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css',
   'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js',
   'https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js'
+  /* NOTE: index.html is NOT in this list - it's fetched network-first
+     so the latest version is always loaded. See the fetch handler below. */
 ];
 
 /* Install: pre-cache the core static assets so the app shell loads
@@ -30,7 +33,6 @@ self.addEventListener('install',function(event){
     caches.open(CACHE_NAME).then(function(cache){
       console.log('[SW] Caching static assets');
       return cache.addAll(STATIC_ASSETS).catch(function(e){
-        /* Don't fail the whole install if one CDN resource can't be cached */
         console.warn('[SW] Some assets failed to cache:',e);
       });
     })
@@ -66,7 +68,6 @@ self.addEventListener('fetch',function(event){
      - Map tiles (CARTO, RainViewer tile cache) - too many, update frequently
      - CORS proxies (allorigins, corsproxy.io) - API data, should be fresh
      - Twitter/X widgets - third-party, let them handle their own caching
-     - platform.x.com - Twitter SDK
   */
   if(url.hostname.indexOf('basemaps.cartocdn.com')>=0)return;
   if(url.hostname.indexOf('tilecache.rainviewer.com')>=0)return;
@@ -78,6 +79,33 @@ self.addEventListener('fetch',function(event){
   if(url.hostname.indexOf('abs.twimg.com')>=0)return;
   if(url.hostname.indexOf('pbs.twimg.com')>=0)return;
 
+  /* MAIN HTML PAGE: network-first (always fetch latest version).
+     This is critical - without this, the SW serves the old cached
+     index.html and code updates never reach the user. */
+  var isMainPage=url.pathname==='/'||
+                 url.pathname==='/Skywarn-Storm-Spot-US/'||
+                 url.pathname==='/Skywarn-Storm-Spot-US/index.html'||
+                 url.pathname.indexOf('index.html')>=0||
+                 (url.pathname.endsWith('/')&&url.hostname.indexOf('github.io')>=0);
+  if(isMainPage){
+    event.respondWith(
+      fetch(event.request).then(function(response){
+        /* Got the latest version from network - cache it and return */
+        var responseToCache=response.clone();
+        caches.open(CACHE_NAME).then(function(cache){
+          cache.put(event.request,responseToCache);
+        });
+        return response;
+      }).catch(function(){
+        /* Offline - serve cached version as fallback */
+        return caches.match(event.request).then(function(cached){
+          return cached||new Response('<h1>Offline</h1><p>Connect to the internet to use Skywarn Storm Spotters.</p>',{headers:{'Content-Type':'text/html'}});
+        });
+      })
+    );
+    return;
+  }
+
   /* API calls: network-first (real-time weather data) */
   if(url.hostname.indexOf('api.weather.gov')>=0||
      url.hostname.indexOf('api.rainviewer.com')>=0||
@@ -87,34 +115,28 @@ self.addEventListener('fetch',function(event){
       fetch(event.request).then(function(response){
         return response;
       }).catch(function(){
-        /* Offline - try cache as fallback */
         return caches.match(event.request);
       })
     );
     return;
   }
 
-  /* Static assets: cache-first */
+  /* Other static assets: cache-first */
   event.respondWith(
     caches.match(event.request).then(function(cachedResponse){
       if(cachedResponse){
-        /* Serve from cache */
         return cachedResponse;
       }
-      /* Not in cache - fetch from network, cache the result */
       return fetch(event.request).then(function(response){
-        /* Only cache successful responses */
         if(!response||response.status!==200||response.type!=='basic'&&response.type!=='cors'){
           return response;
         }
-        /* Clone the response (can only consume once) */
         var responseToCache=response.clone();
         caches.open(CACHE_NAME).then(function(cache){
           cache.put(event.request,responseToCache);
         });
         return response;
       }).catch(function(){
-        /* Offline and not in cache - return nothing */
         return new Response('',{status:503,statusText:'Offline'});
       });
     })
