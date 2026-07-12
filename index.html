@@ -3292,6 +3292,29 @@ async function fetchRssFeed(url,elementId){
         summary=tmp.textContent||tmp.innerText||'';
         if(summary.length>200)summary=summary.substring(0,200)+'...';
       }
+      /* Fix links that are missing the protocol (e.g. "www.wpc.ncep.noaa.gov/...")
+         so the browser doesn't treat them as relative to the current page.
+         NWS feeds often have links like "www.wpc.ncep.noaa.gov/..." without
+         https:// - the browser would prepend our GitHub Pages URL. */
+      if(link&&!link.match(/^https?:\/\//)){
+        if(link.startsWith('//')){
+          link='https:'+link;
+        }else if(link.startsWith('www.')){
+          link='https://'+link;
+        }else if(link.startsWith('/')){
+          /* Relative to the feed's domain - prepend it */
+          var feedUrl;
+          try{feedUrl=new URL(url)}catch(e){feedUrl=null}
+          if(feedUrl){
+            link=feedUrl.origin+link;
+          }else{
+            link='https://www.weather.gov'+link;
+          }
+        }else if(!link.match(/^[a-z]+:\/\//)){
+          /* Doesn't start with any protocol - assume https */
+          link='https://'+link;
+        }
+      }
       html+='<div class="wf-rss-item" onclick="window.open(\''+link.replace(/'/g,"\\'")+'\',\'_blank\')">'+
         '<div class="wf-rss-title">'+escapeHtml(title)+'</div>'+
         (timeStr?'<div class="wf-rss-time">'+timeStr+'</div>':'')+
