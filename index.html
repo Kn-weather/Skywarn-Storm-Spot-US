@@ -3366,13 +3366,12 @@ function escapeHtml(s){
    can still generate a lot of markers, so we cap the total at 500 active
    markers to prevent browser overload. */
 
-var lightningSocket=null;
 var lightningMarkers=[];
-var lightningServerIdx=0;
-var lightningServers=['ws7.blitzortung.org:3000','ws8.blitzortung.org:3000','ws1.blitzortung.org:3000','ws2.blitzortung.org:3000','ws3.blitzortung.org:3000','ws4.blitzortung.org:3000','ws5.blitzortung.org:3000','ws6.blitzortung.org:3000'];
-var lightningReconnectTimer=null;
+var lightningPollTimer=null;
 var lightningActive=false;
 var LIGHTNING_MAX_MARKERS=500;
+var lightningStrikeCount=0;
+var lightningSeenStrikes={};  /* track strike IDs to avoid duplicates */
 
 /* Helper: update the visible lightning status text in the UI */
 function updateLightningStatus(msg){
@@ -3380,14 +3379,20 @@ function updateLightningStatus(msg){
   if(el)el.textContent=msg;
 }
 
-/* Toggle the lightning layer on/off. Called from the checkbox. */
+/* Toggle the lightning layer on/off. Called from the checkbox.
+   Uses HTTP polling instead of WebSocket — more reliable on mobile
+   networks where non-standard ports (3000) are often blocked. */
 function toggleLightning(){
   var cb=document.getElementById('amLayerLightning');
   if(!cb)return;
   if(cb.checked){
     lightningActive=true;
-    updateLightningStatus('Connecting...');
-    connectLightning();
+    lightningStrikeCount=0;
+    lightningSeenStrikes={};
+    updateLightningStatus('Fetching strikes...');
+    fetchLightningStrikes();
+    /* Poll every 30 seconds for new strikes */
+    lightningPollTimer=setInterval(fetchLightningStrikes,30000);
   }else{
     lightningActive=false;
     disconnectLightning();
@@ -3395,81 +3400,71 @@ function toggleLightning(){
   }
 }
 
-/* Connect to a Blitzortung WebSocket server. If it fails, try the next
-   server in the list. This provides redundancy.
-   NOTE: Blitzortung servers use port 3000 (not 443). */
-function connectLightning(){
-  disconnectLightning();
+/* Fetch recent lightning strikes from Blitzortung's JSON data server.
+   The data is at: https://data.blitzortung.org/Data/Verified_Strikes/json/
+   Files are named by time range: 0_minutes.json (last min), 1_minutes.json, etc.
+   We fetch the last 2 minutes (2 files) to get recent strikes.
+   Uses fP() for CORS proxy fallback. */
+async function fetchLightningStrikes(){
   if(!lightningActive)return;
-  if(lightningServerIdx>=lightningServers.length){
-    console.warn('[Lightning] All servers failed, restarting from ws7');
-    lightningServerIdx=0;
-  }
-  var server=lightningServers[lightningServerIdx];
-  var wsUrl='wss://'+server;
-  console.log('[Lightning] Connecting to '+wsUrl+'...');
-  updateLightningStatus('Connecting to '+server+'...');
   try{
-    lightningSocket=new WebSocket(wsUrl);
-  }catch(e){
-    console.warn('[Lightning] WebSocket creation failed:',e);
-    updateLightningStatus('Connection failed, trying next server...');
-    lightningServerIdx++;
-    if(lightningActive){
-      lightningReconnectTimer=setTimeout(connectLightning,2000);
-    }
-    return;
-  }
-  lightningSocket.onopen=function(){
-    console.log('[Lightning] Connected to '+server);
-    updateLightningStatus('Connected to '+server+' - waiting for strikes...');
-    /* Send the initialization handshake required by the server */
-    try{
-      lightningSocket.send(JSON.stringify({a:111}));
-    }catch(e){console.warn('[Lightning] Send error:',e)}
-  };
-  lightningSocket.onmessage=function(event){
-    try{
-      var data=JSON.parse(event.data);
-      if(data&&typeof data.lat==='number'&&typeof data.lon==='number'){
-        createLightningMarker(data.lat,data.lon);
-      }else if(Array.isArray(data)&&data.length>=3){
-        /* Alternative format: [timestamp, lat, lon] */
-        if(typeof data[1]==='number'&&typeof data[2]==='number'){
-          createLightningMarker(data[1],data[2]);
+    var baseUrl='https://data.blitzortung.org/Data/Verified_Strikes/json/';
+    var newStrikes=0;
+    /* Fetch the last 2 minutes of strike data */
+    for(var min=0;min<2;min++){
+      var url=baseUrl+min+'_minutes.json';
+      var txt=await fP(url);
+      if(!txt)continue;
+      try{
+        /* The data is a JSON array of arrays: [[timestamp,lat,lon],...] */
+        var strikes=JSON.parse(txt);
+        if(Array.isArray(strikes)){
+          strikes.forEach(function(s){
+            /* Each strike: [timestamp, lat, lon, ...other fields] */
+            if(Array.isArray(s)&&s.length>=3){
+              var ts=s[0];
+              var lat=s[1];
+              var lon=s[2];
+              /* Skip if we've already seen this strike (by timestamp) */
+              var id=String(ts)+'_'+String(lat)+'_'+String(lon);
+              if(lightningSeenStrikes[id])return;
+              lightningSeenStrikes[id]=true;
+              /* Clean up old IDs to prevent memory growth */
+              if(Object.keys(lightningSeenStrikes).length>5000){
+                lightningSeenStrikes={};
+              }
+              if(typeof lat==='number'&&typeof lon==='number'){
+                createLightningMarker(lat,lon);
+                newStrikes++;
+                lightningStrikeCount++;
+              }
+            }
+          });
         }
+      }catch(e){
+        /* JSON parse error - skip this file */
       }
-    }catch(err){
-      /* Ignore parsing errors from binary/compressed heartbeat packets */
     }
-  };
-  lightningSocket.onerror=function(error){
-    console.warn('[Lightning] WebSocket error on '+server);
-    updateLightningStatus('Error on '+server+', trying next...');
-  };
-  lightningSocket.onclose=function(){
-    console.log('[Lightning] Disconnected from '+server);
-    lightningSocket=null;
-    /* Auto-reconnect to the next server if still active */
-    if(lightningActive){
-      lightningServerIdx++;
-      lightningReconnectTimer=setTimeout(connectLightning,2000);
+    if(newStrikes>0){
+      updateLightningStatus('Active - '+lightningMarkers.length+' strikes on map ('+lightningStrikeCount+' total)');
+    }else{
+      updateLightningStatus('Connected - '+lightningMarkers.length+' active strikes');
     }
-  };
+    /* Clean up old seen-strikes tracking periodically */
+    if(lightningStrikeCount%100===0&&Object.keys(lightningSeenStrikes).length>2000){
+      lightningSeenStrikes={};
+    }
+  }catch(e){
+    console.warn('[Lightning] Fetch error:',e);
+    updateLightningStatus('Fetch error - retrying in 30s...');
+  }
 }
 
-/* Disconnect from the WebSocket and clean up all markers. */
+/* Disconnect and clean up all markers. */
 function disconnectLightning(){
-  if(lightningReconnectTimer){
-    clearTimeout(lightningReconnectTimer);
-    lightningReconnectTimer=null;
-  }
-  if(lightningSocket){
-    try{
-      lightningSocket.onclose=null;  /* prevent auto-reconnect */
-      lightningSocket.close();
-    }catch(e){}
-    lightningSocket=null;
+  if(lightningPollTimer){
+    clearInterval(lightningPollTimer);
+    lightningPollTimer=null;
   }
   /* Remove all lightning markers from the map */
   lightningMarkers.forEach(function(m){
@@ -3482,12 +3477,11 @@ function disconnectLightning(){
 
 /* Create a lightning strike marker on the map. The marker starts as a
    bright red circle, flashes to yellow after 300ms, then gradually fades
-   and is removed after 10 seconds. */
+   and is removed after 30 seconds (longer than WebSocket version since
+   we're polling, not real-time). */
 function createLightningMarker(lat,lon){
   if(!alertMapInstance||!lightningActive)return;
-  /* Update status to show we're receiving strikes */
-  updateLightningStatus('Connected - '+lightningMarkers.length+' active strikes');
-  /* Cap total markers to prevent browser overload on heavy storm days */
+  /* Cap total markers to prevent browser overload */
   if(lightningMarkers.length>=LIGHTNING_MAX_MARKERS){
     var oldest=lightningMarkers.shift();
     if(oldest){
@@ -3510,21 +3504,20 @@ function createLightningMarker(lat,lon){
       strike.setStyle({fillColor:'#ffcc00',radius:4});
     }catch(e){}
   },300);
-  /* Fade out gradually starting at 5 seconds */
+  /* Fade out gradually starting at 15 seconds */
   setTimeout(function(){
     try{
-      strike.setStyle({fillOpacity:0.5,opacity:0.5});
+      strike.setStyle({fillOpacity:0.4,opacity:0.4,radius:3});
     }catch(e){}
-  },5000);
-  /* Remove the strike after 10 seconds */
+  },15000);
+  /* Remove the strike after 30 seconds */
   setTimeout(function(){
     try{
       alertMapInstance.removeLayer(strike);
     }catch(e){}
-    /* Remove from our tracking array */
     var idx=lightningMarkers.indexOf(strike);
     if(idx>=0)lightningMarkers.splice(idx,1);
-  },10000);
+  },30000);
 }
 
 /* ── Screenshot capture & export ──────────────────────────────────────────
