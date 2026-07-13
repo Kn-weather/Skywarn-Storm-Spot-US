@@ -913,13 +913,6 @@ body.capturing .hamburger-menu{display:none!important}
 <div id="view-weatherfeeds" class="tab-view">
   <div class="wf-feeds-wrap">
     <div class="wf-feeds-grid" id="wfFeedsGrid">
-      <!-- Twitter: NWS Tornado - created programmatically via createTimeline() -->
-      <div class="wf-feed-card">
-        <div class="wf-feed-header"><i class="fab fa-x-twitter"></i> NWS Tornado (X/Twitter)</div>
-        <div class="wf-feed-body" id="tw-nwstornado">
-          <div style="padding:20px;text-align:center;color:var(--t3);font-size:11px"><i class="fas fa-spinner fa-spin" style="margin-right:6px"></i>Loading Twitter feed...</div>
-        </div>
-      </div>
       <!-- SPC Watches RSS -->
       <div class="wf-feed-card">
         <div class="wf-feed-header"><i class="fas fa-shield-halved"></i> SPC Watches</div>
@@ -3130,8 +3123,7 @@ var weatherFeedsLoaded=false;
    anchor element in the HTML. The widgets.js script (platform.x.com)
    auto-discovers and renders it. See loadTwitterFeeds() below. */
 function loadWeatherFeeds(){
-  /* Load Twitter timelines (poll for SDK readiness) */
-  loadTwitterFeeds();
+  /* Twitter feed removed - will re-add when a working solution is found */
   /* Only fetch RSS feeds once */
   if(weatherFeedsLoaded)return;
   weatherFeedsLoaded=true;
