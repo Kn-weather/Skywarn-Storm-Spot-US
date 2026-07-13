@@ -894,6 +894,7 @@ body.capturing .hamburger-menu{display:none!important}
         <div class="section-label">Live Lightning</div>
         <label><input type="checkbox" id="amLayerLightning" onchange="toggleLightning()"> Show Lightning Strikes</label>
         <label style="font-size:9px;color:var(--t3);margin-top:4px"><i class="fas fa-bolt" style="margin-right:4px;color:#ffcc00"></i>Blitzortung · real-time · auto-fades 10s</label>
+        <div id="lightningStatus" style="font-size:8px;color:var(--t3);margin-top:2px;font-family:monospace"></div>
       </div>
 
       <div class="divider">
@@ -3368,10 +3369,16 @@ function escapeHtml(s){
 var lightningSocket=null;
 var lightningMarkers=[];
 var lightningServerIdx=0;
-var lightningServers=['ws7.blitzortung.org','ws8.blitzortung.org','ws1.blitzortung.org','ws2.blitzortung.org','ws3.blitzortung.org','ws4.blitzortung.org','ws5.blitzortung.org','ws6.blitzortung.org'];
+var lightningServers=['ws7.blitzortung.org:3000','ws8.blitzortung.org:3000','ws1.blitzortung.org:3000','ws2.blitzortung.org:3000','ws3.blitzortung.org:3000','ws4.blitzortung.org:3000','ws5.blitzortung.org:3000','ws6.blitzortung.org:3000'];
 var lightningReconnectTimer=null;
 var lightningActive=false;
 var LIGHTNING_MAX_MARKERS=500;
+
+/* Helper: update the visible lightning status text in the UI */
+function updateLightningStatus(msg){
+  var el=document.getElementById('lightningStatus');
+  if(el)el.textContent=msg;
+}
 
 /* Toggle the lightning layer on/off. Called from the checkbox. */
 function toggleLightning(){
@@ -3379,15 +3386,18 @@ function toggleLightning(){
   if(!cb)return;
   if(cb.checked){
     lightningActive=true;
+    updateLightningStatus('Connecting...');
     connectLightning();
   }else{
     lightningActive=false;
     disconnectLightning();
+    updateLightningStatus('');
   }
 }
 
 /* Connect to a Blitzortung WebSocket server. If it fails, try the next
-   server in the list. This provides redundancy. */
+   server in the list. This provides redundancy.
+   NOTE: Blitzortung servers use port 3000 (not 443). */
 function connectLightning(){
   disconnectLightning();
   if(!lightningActive)return;
@@ -3397,11 +3407,13 @@ function connectLightning(){
   }
   var server=lightningServers[lightningServerIdx];
   var wsUrl='wss://'+server;
-  console.log('[Lightning] Connecting to '+server+'...');
+  console.log('[Lightning] Connecting to '+wsUrl+'...');
+  updateLightningStatus('Connecting to '+server+'...');
   try{
     lightningSocket=new WebSocket(wsUrl);
   }catch(e){
     console.warn('[Lightning] WebSocket creation failed:',e);
+    updateLightningStatus('Connection failed, trying next server...');
     lightningServerIdx++;
     if(lightningActive){
       lightningReconnectTimer=setTimeout(connectLightning,2000);
@@ -3410,6 +3422,7 @@ function connectLightning(){
   }
   lightningSocket.onopen=function(){
     console.log('[Lightning] Connected to '+server);
+    updateLightningStatus('Connected to '+server+' - waiting for strikes...');
     /* Send the initialization handshake required by the server */
     try{
       lightningSocket.send(JSON.stringify({a:111}));
@@ -3432,6 +3445,7 @@ function connectLightning(){
   };
   lightningSocket.onerror=function(error){
     console.warn('[Lightning] WebSocket error on '+server);
+    updateLightningStatus('Error on '+server+', trying next...');
   };
   lightningSocket.onclose=function(){
     console.log('[Lightning] Disconnected from '+server);
@@ -3471,6 +3485,8 @@ function disconnectLightning(){
    and is removed after 10 seconds. */
 function createLightningMarker(lat,lon){
   if(!alertMapInstance||!lightningActive)return;
+  /* Update status to show we're receiving strikes */
+  updateLightningStatus('Connected - '+lightningMarkers.length+' active strikes');
   /* Cap total markers to prevent browser overload on heavy storm days */
   if(lightningMarkers.length>=LIGHTNING_MAX_MARKERS){
     var oldest=lightningMarkers.shift();
