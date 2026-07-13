@@ -1583,28 +1583,11 @@ async function screenshotAlert(idx){
 
   var mapCanvasZoomedIn=null;
   var mapCanvasZoomedOut=null;
-  /* Track radar state so we can temporarily hide it during the zoomed-in
-     capture (RainViewer radar tiles don't support zoom > 10, so they show
-     "Zoom Level Not Supported" errors when zoomed in at maxZoom:11).
-     We hide the radar for the zoomed-in shot, then restore it for the
-     zoomed-out shot where it works fine. */
-  var radarWasVisible=false;
-  if(typeof radarLayerCurrent!=='undefined'&&radarLayerCurrent){
-    radarWasVisible=true;
-    radarLayerCurrent.setOpacity(0);
-  }
-  if(typeof radarLayerPrev!=='undefined'&&radarLayerPrev){
-    radarLayerPrev.setOpacity(0);
-  }
-  if(typeof radarLayerNext!=='undefined'&&radarLayerNext){
-    radarLayerNext.setOpacity(0);
-  }
-
   try{
     /* STEP 1: Zoom IN on the polygon (tight bounds, streets visible).
        maxZoom 11 allows enough zoom to see roads/streets.
-       Radar is HIDDEN during this capture to avoid "zoom level not
-       supported" errors from RainViewer. */
+       Radar stays ON during capture (maxNativeZoom:7 handles upscaling
+       without errors). */
     if(alertBounds&&alertBounds.isValid()){
       alertMapInstance.fitBounds(alertBounds,{padding:[40,40],maxZoom:11});
     }
@@ -1615,11 +1598,7 @@ async function screenshotAlert(idx){
     document.body.classList.remove('capturing');
     if(!mapCanvasZoomedIn)throw new Error('Zoomed-in map capture failed');
 
-    /* Restore radar for the zoomed-out capture (zoom 7 is within
-       RainViewer's supported range). */
-    if(radarWasVisible&&typeof radarLayerCurrent!=='undefined'&&radarLayerCurrent){
-      radarLayerCurrent.setOpacity(radarBaseOpacity);
-    }
+    /* Radar stays on for the zoomed-out capture too. */
 
     /* STEP 2: Zoom OUT for state context (maxZoom 7, large padding) */
     if(alertBounds&&alertBounds.isValid()){
