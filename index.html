@@ -696,11 +696,51 @@ body{
   margin-top:2px;
   font-family:monospace;
 }
+/* Radar dBZ legend (bottom-right of map, shown when radar is on) */
+.radar-legend{
+  position:absolute;bottom:10px;right:10px;z-index:1000;
+  background:rgba(10,10,10,.88);
+  border:1px solid var(--bdr);
+  border-radius:6px;
+  padding:8px 10px;
+  backdrop-filter:blur(12px);
+  -webkit-backdrop-filter:blur(12px);
+  font-family:Inter,sans-serif;
+  pointer-events:none;
+  min-width:180px;
+}
+.radar-legend-title{
+  font-size:9px;font-weight:700;color:var(--acc);
+  text-transform:uppercase;letter-spacing:.04em;
+  text-align:center;margin-bottom:4px;
+}
+.radar-legend-bar{
+  height:10px;border-radius:3px;
+  background:linear-gradient(to right,
+    #c1e9c1 0%,     /* 5 dBZ - light green */
+    #73bf93 16%,    /* 25 dBZ - green */
+    #ffff00 33%,    /* 35 dBZ - yellow */
+    #ffa500 50%,    /* 45 dBZ - orange */
+    #ff0000 66%,    /* 55 dBZ - red */
+    #ff00ff 100%    /* 65+ dBZ - magenta */
+  );
+  border:1px solid rgba(255,255,255,.15);
+}
+.radar-legend-labels{
+  display:flex;justify-content:space-between;
+  margin-top:2px;font-size:7px;color:var(--t2);
+  font-family:monospace;
+}
+.radar-legend-desc{
+  font-size:7px;color:var(--t3);text-align:center;
+  margin-top:1px;
+}
 /* Capturing state - hide UI chrome that shouldn't appear in screenshots.
    NOTE: .leaflet-popup-pane is intentionally NOT hidden so that any open
    alert popup window is included in the screenshot. */
 body.capturing .alert-map-controls,
 body.capturing .alert-map-legend,
+body.capturing .radar-legend,
 body.capturing .loading-overlay,
 body.capturing .leaflet-control-zoom,
 body.capturing .leaflet-control-attribution,
@@ -887,6 +927,16 @@ body.capturing .hamburger-menu{display:none!important}
   </div>
 
   <div class="alert-map-legend" id="alertMapLegend"></div>
+
+  <!-- Radar dBZ legend (bottom-right, shown when radar is on) -->
+  <div class="radar-legend" id="radarLegend" style="display:none">
+    <div class="radar-legend-title">dBZ</div>
+    <div class="radar-legend-bar"></div>
+    <div class="radar-legend-labels">
+      <span>5</span><span>25</span><span>35</span><span>45</span><span>55</span><span>65+</span>
+    </div>
+    <div class="radar-legend-desc">Light → Heavy</div>
+  </div>
 
   <div class="loading-overlay" id="loadingOverlay"><div class="spinner"></div></div>
 </div>
@@ -3038,6 +3088,8 @@ async function toggleRadarOverlay(){
   }
   if(!cb||!cb.checked){
     if(radarRefreshTimer){clearInterval(radarRefreshTimer);radarRefreshTimer=null}
+    var radarLegendEl=document.getElementById('radarLegend');
+    if(radarLegendEl)radarLegendEl.style.display='none';
     return;
   }
   /* Fetch all radar frames */
@@ -3066,6 +3118,9 @@ async function toggleRadarOverlay(){
     if(radarLayerPrev)radarLayerPrev.addTo(alertMapInstance);
   }
   radarUpdateUI(startIdx);
+  /* Show the dBZ legend bar */
+  var radarLegendEl=document.getElementById('radarLegend');
+  if(radarLegendEl)radarLegendEl.style.display='block';
   console.log('[Radar] 3-layer rolling buffer initialized at frame',startIdx+1,'/',frames.length);
   /* Set up map zoom/move handler to mark tiles as needing reload */
   radarMapMoveHandler=function(){
