@@ -780,10 +780,10 @@ body.capturing .hamburger-menu{display:none!important}
     </div>
     <div class="alert-map-controls-body">
       <div class="section-label">Alert Categories</div>
-      <label><input type="checkbox" id="amLayerWarnings" checked onchange="fAlertMap()"> Warnings</label>
-      <label><input type="checkbox" id="amLayerWatches" checked onchange="fAlertMap()"> Watches</label>
-      <label><input type="checkbox" id="amLayerAdvisories" onchange="fAlertMap()"> Advisories &amp; Statements <span style="font-size:9px;color:var(--t3);font-weight:400">(off by default - click to enable)</span></label>
-      <label><input type="checkbox" id="amLayerLabels" checked onchange="fAlertMap()"> Zone Labels</label>
+      <label style="margin:1px 0"><input type="checkbox" id="amLayerWarnings" checked onchange="fAlertMap()"> Warnings</label>
+      <label style="margin:1px 0"><input type="checkbox" id="amLayerWatches" checked onchange="fAlertMap()"> Watches</label>
+      <label style="margin:1px 0"><input type="checkbox" id="amLayerAdvisories" onchange="fAlertMap()"> Advisories &amp; Statements</label>
+      <label style="margin:1px 0"><input type="checkbox" id="amLayerLabels" checked onchange="fAlertMap()"> Zone Labels</label>
 
       <div class="divider">
         <div class="section-label">State Filter</div>
@@ -848,36 +848,29 @@ body.capturing .hamburger-menu{display:none!important}
       <div class="divider">
         <div class="section-label">SPC Convective Outlook</div>
         <select id="amSpcDay" onchange="toggleSpcOverlay()">
+          <option value="">Off</option>
           <option value="1">Day 1</option>
           <option value="2">Day 2</option>
           <option value="3">Day 3</option>
         </select>
-        <label style="margin-top:6px"><input type="checkbox" id="amSpcEnable" onchange="toggleSpcOverlay()"> Show SPC Outlook</label>
-        <div style="margin-top:6px;padding:6px;background:rgba(0,0,0,.2);border-radius:4px;border:1px solid var(--bdr)">
-          <div style="font-size:9px;color:var(--t3);text-transform:uppercase;letter-spacing:.04em;margin-bottom:4px">Risk Levels</div>
-          <label style="font-size:10px"><input type="checkbox" id="amSpcTstm" checked onchange="toggleSpcOverlay()"> <span style="display:inline-block;width:10px;height:10px;background:#c1e9c1;border:1px solid #999;border-radius:2px;vertical-align:middle;margin:0 4px"></span>TSTM</label>
-          <label style="font-size:10px"><input type="checkbox" id="amSpcMrgl" checked onchange="toggleSpcOverlay()"> <span style="display:inline-block;width:10px;height:10px;background:#73bf93;border:1px solid #999;border-radius:2px;vertical-align:middle;margin:0 4px"></span>MRGL</label>
-          <label style="font-size:10px"><input type="checkbox" id="amSpcSlgt" checked onchange="toggleSpcOverlay()"> <span style="display:inline-block;width:10px;height:10px;background:#ffff00;border:1px solid #999;border-radius:2px;vertical-align:middle;margin:0 4px"></span>SLGT</label>
-          <label style="font-size:10px"><input type="checkbox" id="amSpcEnh" checked onchange="toggleSpcOverlay()"> <span style="display:inline-block;width:10px;height:10px;background:#ffa500;border:1px solid #999;border-radius:2px;vertical-align:middle;margin:0 4px"></span>ENH</label>
-          <label style="font-size:10px"><input type="checkbox" id="amSpcMdt" checked onchange="toggleSpcOverlay()"> <span style="display:inline-block;width:10px;height:10px;background:#ff0000;border:1px solid #999;border-radius:2px;vertical-align:middle;margin:0 4px"></span>MDT</label>
-          <label style="font-size:10px"><input type="checkbox" id="amSpcHigh" checked onchange="toggleSpcOverlay()"> <span style="display:inline-block;width:10px;height:10px;background:#ff00ff;border:1px solid #999;border-radius:2px;vertical-align:middle;margin:0 4px"></span>HIGH</label>
+        <div style="margin-top:4px;display:grid;grid-template-columns:1fr 1fr;gap:2px">
+          <label style="font-size:10px"><input type="checkbox" id="amSpcTstm" checked onchange="toggleSpcOverlay()"> <span style="display:inline-block;width:10px;height:10px;background:#c1e9c1;border:1px solid #999;border-radius:2px;vertical-align:middle;margin:0 2px"></span>TSTM</label>
+          <label style="font-size:10px"><input type="checkbox" id="amSpcEnh" checked onchange="toggleSpcOverlay()"> <span style="display:inline-block;width:10px;height:10px;background:#ffa500;border:1px solid #999;border-radius:2px;vertical-align:middle;margin:0 2px"></span>ENH</label>
+          <label style="font-size:10px"><input type="checkbox" id="amSpcMrgl" checked onchange="toggleSpcOverlay()"> <span style="display:inline-block;width:10px;height:10px;background:#73bf93;border:1px solid #999;border-radius:2px;vertical-align:middle;margin:0 2px"></span>MRGL</label>
+          <label style="font-size:10px"><input type="checkbox" id="amSpcMdt" checked onchange="toggleSpcOverlay()"> <span style="display:inline-block;width:10px;height:10px;background:#ff0000;border:1px solid #999;border-radius:2px;vertical-align:middle;margin:0 2px"></span>MDT</label>
+          <label style="font-size:10px"><input type="checkbox" id="amSpcSlgt" checked onchange="toggleSpcOverlay()"> <span style="display:inline-block;width:10px;height:10px;background:#ffff00;border:1px solid #999;border-radius:2px;vertical-align:middle;margin:0 2px"></span>SLGT</label>
+          <label style="font-size:10px"><input type="checkbox" id="amSpcHigh" checked onchange="toggleSpcOverlay()"> <span style="display:inline-block;width:10px;height:10px;background:#ff00ff;border:1px solid #999;border-radius:2px;vertical-align:middle;margin:0 2px"></span>HIGH</label>
         </div>
       </div>
 
       <div class="divider">
         <div class="section-label">Radar Overlay</div>
-        <label><input type="checkbox" id="amRadarEnable" onchange="toggleRadarOverlay()"> Show Radar</label>
-        <label style="margin-top:4px">Type:
-          <select id="amRadarType" onchange="onRadarTypeChanged()" style="width:100%;background:var(--bg2);border:1px solid var(--bdr);color:var(--t1);font-family:inherit;font-size:10px;padding:3px 4px;border-radius:4px;margin-top:2px">
-            <option value="reflectivity">Composite Reflectivity</option>
-            <option value="rainrate">Rain Rate (dBZ)</option>
-          </select>
-        </label>
-        <label style="margin-top:4px">Opacity:
+        <label style="margin:1px 0"><input type="checkbox" id="amRadarEnable" onchange="toggleRadarOverlay()"> Show Radar</label>
+        <label style="margin:2px 0;font-size:9px">Opacity:
           <input type="range" id="amRadarOpacity" min="20" max="100" value="70" oninput="updateRadarOpacity()" style="width:100%;accent-color:var(--acc);cursor:pointer">
         </label>
-        <div style="margin-top:6px">
-          <div style="font-size:9px;color:var(--t3);text-transform:uppercase;letter-spacing:.04em;margin-bottom:3px">Animation</div>
+        <div style="margin-top:2px">
+          <div style="font-size:9px;color:var(--t3);text-transform:uppercase;letter-spacing:.04em;margin-bottom:2px">Animation</div>
           <div class="radar-anim-controls">
             <button class="radar-anim-btn" onclick="radarStep(-1)" title="Previous frame"><i class="fas fa-backward-step"></i></button>
             <button class="radar-anim-btn play-btn" id="amRadarPlayBtn" onclick="radarTogglePlay()" title="Play/Pause"><i class="fas fa-play"></i></button>
@@ -887,24 +880,12 @@ body.capturing .hamburger-menu{display:none!important}
           <input type="range" class="radar-anim-timeline" id="amRadarTimeline" min="0" max="0" value="0" oninput="radarSeekTo(this.value)" style="width:100%">
           <div class="radar-anim-time-display" id="amRadarTimeDisplay">—</div>
         </div>
-        <label style="font-size:9px;color:var(--t3);margin-top:4px"><i class="fas fa-info-circle" style="margin-right:4px"></i>RainViewer API · 13 frames · auto-refresh 5 min</label>
       </div>
 
       <div class="divider">
         <div class="section-label">Live Lightning</div>
-        <label><input type="checkbox" id="amLayerLightning" onchange="toggleLightning()"> Show Lightning Strikes</label>
-        <label style="font-size:9px;color:var(--t3);margin-top:4px"><i class="fas fa-bolt" style="margin-right:4px;color:#ffcc00"></i>Blitzortung · real-time · auto-fades 10s</label>
+        <label style="margin:1px 0"><input type="checkbox" id="amLayerLightning" onchange="toggleLightning()"> Show Lightning Strikes</label>
         <div id="lightningStatus" style="font-size:8px;color:var(--t3);margin-top:2px;font-family:monospace"></div>
-      </div>
-
-      <div class="divider">
-        <div class="section-label">Live Cameras <span style="font-size:8px;color:var(--t3);text-transform:none;letter-spacing:0">(Coming Soon)</span></div>
-        <label style="font-size:10px;color:var(--t3);opacity:.7;cursor:not-allowed">
-          <input type="checkbox" disabled> Camera layer (disabled)
-        </label>
-        <label style="font-size:9px;color:var(--t3);margin-top:4px;line-height:1.4">
-          <i class="fas fa-info-circle" style="margin-right:4px"></i>Pending state DOT camera integration (MDOT, etc.)
-        </label>
       </div>
     </div>
   </div>
@@ -2080,10 +2061,10 @@ async function toggleSpcOverlay(){
   /* Remove existing SPC layers */
   spcOutlookLayers.forEach(function(l){alertMapInstance.removeLayer(l)});
   spcOutlookLayers=[];
-  var enableCb=document.getElementById('amSpcEnable');
-  if(!enableCb||!enableCb.checked)return;
   var daySel=document.getElementById('amSpcDay');
-  var day=daySel?daySel.value:'1';
+  var day=daySel?daySel.value:'';
+  /* If day is empty ("Off"), don't show any SPC layers */
+  if(!day)return;
   /* Read level checkboxes */
   var levels={
     TSTM:document.getElementById('amSpcTstm')&&document.getElementById('amSpcTstm').checked,
@@ -3033,39 +3014,11 @@ function radarTogglePlay(){
   }
 }
 
-/* Called when the radar type dropdown changes. Rebuilds layers with new type. */
+/* Radar type is always 'reflectivity' (dropdown was removed per user request).
+   This function is kept for compatibility but does nothing since there's
+   no type selector to change. */
 function onRadarTypeChanged(){
-  var typeSel=document.getElementById('amRadarType');
-  if(!typeSel)return;
-  var newType=typeSel.value;
-  if(newType===radarBuiltType)return;
-  radarType=newType;
-  radarBuiltType=newType;
-  /* Rebuild the 3-layer buffer with the new color scheme */
-  if(radarLayerCurrent){
-    var idx=radarCurrentFrame;
-    var newLayer=createRadarTileLayer(newType,radarFrames[idx]);
-    if(newLayer){
-      newLayer.addTo(alertMapInstance);
-      newLayer.once('load',function(){
-        if(radarLayerCurrent)radarLayerCurrent.setOpacity(0);
-        newLayer.setOpacity(radarBaseOpacity);
-        if(radarLayerCurrent)alertMapInstance.removeLayer(radarLayerCurrent);
-        radarLayerCurrent=newLayer;
-        /* Rebuild prev and next */
-        if(radarLayerPrev){alertMapInstance.removeLayer(radarLayerPrev);radarLayerPrev=null}
-        if(radarLayerNext){alertMapInstance.removeLayer(radarLayerNext);radarLayerNext=null}
-        if(idx-1>=0){
-          radarLayerPrev=createRadarTileLayer(newType,radarFrames[idx-1]);
-          if(radarLayerPrev)radarLayerPrev.addTo(alertMapInstance);
-        }
-        if(idx+1<radarFrames.length){
-          radarLayerNext=createRadarTileLayer(newType,radarFrames[idx+1]);
-          if(radarLayerNext)radarLayerNext.addTo(alertMapInstance);
-        }
-      });
-    }
-  }
+  /* No-op - type is always 'reflectivity' */
 }
 
 /* Toggle the radar overlay on/off. Uses the 3-layer rolling buffer. */
@@ -3073,7 +3026,7 @@ async function toggleRadarOverlay(){
   if(!alertMapInstance)initAlertMap();
   if(!alertMapInstance)return;
   var cb=document.getElementById('amRadarEnable');
-  var typeSel=document.getElementById('amRadarType');
+  var type='reflectivity';  /* hardcoded - type dropdown was removed */
   var opacityEl=document.getElementById('amRadarOpacity');
   /* Remove existing radar layers and stop animation */
   if(radarLayerPrev){alertMapInstance.removeLayer(radarLayerPrev);radarLayerPrev=null}
@@ -3096,7 +3049,7 @@ async function toggleRadarOverlay(){
     if(cb)cb.checked=false;
     return;
   }
-  var type=typeSel?typeSel.value:'reflectivity';
+  /* type is already set to 'reflectivity' above */
   radarType=type;
   radarBuiltType=type;
   radarBaseOpacity=opacityEl?(parseInt(opacityEl.value,10)/100):0.7;
