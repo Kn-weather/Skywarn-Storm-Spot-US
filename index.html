@@ -1743,6 +1743,54 @@ async function screenshotAlert(idx){
     fctx.fillStyle='#ff7300';
     fctx.fillRect(mapX,mapTargetH+gap/2-1,mapTargetW,1);
 
+    /* Draw dBZ legend on the zoomed-out map (bottom-right area of that map)
+       if radar is currently active */
+    if(typeof radarLayerCurrent!=='undefined'&&radarLayerCurrent){
+      var legW=120,legH=52;
+      var legX=mapX+mapTargetW-legW-6;
+      var legY=mapTargetH+gap+mapTargetH-legH-6;
+      /* Background */
+      fctx.fillStyle='rgba(10,10,10,.88)';
+      fctx.fillRect(legX,legY,legW,legH);
+      fctx.strokeStyle='rgba(255,115,0,.18)';
+      fctx.lineWidth=1;
+      fctx.strokeRect(legX,legY,legW,legH);
+      /* Title */
+      fctx.fillStyle='#ff7300';
+      fctx.font='bold 8px Inter,sans-serif';
+      fctx.textBaseline='top';
+      fctx.textAlign='center';
+      fctx.fillText('dBZ',legX+legW/2,legY+3);
+      /* Color bar */
+      var barX=legX+8,barY2=legY+15,barW=legW-16,barH=6;
+      var grad=fctx.createLinearGradient(barX,0,barX+barW,0);
+      grad.addColorStop(0,'#c1e9c1');
+      grad.addColorStop(0.16,'#73bf93');
+      grad.addColorStop(0.33,'#ffff00');
+      grad.addColorStop(0.50,'#ffa500');
+      grad.addColorStop(0.66,'#ff0000');
+      grad.addColorStop(1,'#ff00ff');
+      fctx.fillStyle=grad;
+      fctx.fillRect(barX,barY2,barW,barH);
+      fctx.strokeStyle='rgba(255,255,255,.15)';
+      fctx.strokeRect(barX,barY2,barW,barH);
+      /* Labels */
+      fctx.fillStyle='#a0a0a0';
+      fctx.font='6px monospace';
+      fctx.textAlign='left';
+      fctx.fillText('5',barX,barY2+barH+1);
+      fctx.textAlign='center';
+      fctx.fillText('35',barX+barW*0.33,barY2+barH+1);
+      fctx.textAlign='right';
+      fctx.fillText('65+',barX+barW,barY2+barH+1);
+      /* Desc */
+      fctx.fillStyle='#606060';
+      fctx.font='6px Inter,sans-serif';
+      fctx.textAlign='center';
+      fctx.fillText('Light → Heavy',legX+legW/2,legY+legH-8);
+      fctx.textAlign='left';  /* reset */
+    }
+
     /* Draw footer branding (larger - easier to see and read) */
     var logoSize=72;
     var siteName='Skywarn Storm Spotters & Chasers United States';
