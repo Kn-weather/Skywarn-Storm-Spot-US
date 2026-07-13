@@ -3259,15 +3259,17 @@ async function fetchRssFeed(url,elementId){
           timeStr=d.toLocaleString('en-US',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit',hour12:true});
         }catch(e){timeStr=pubDate}
       }
-      /* Extract image URL from the description HTML (SPC feeds embed
-         images like <img src="https://www.spc.noaa.gov/products/watch/ww0484_radar.gif">).
-         We parse the description as HTML and look for <img> tags. */
+      /* Extract image URL from the feed item. Checks multiple sources:
+         1. <img> tags inside the <description> HTML (SPC feeds use this)
+         2. <enclosure> element (standard RSS media attachment)
+         3. <media:content> or <media:thumbnail> (media RSS extension)
+         4. <image> element inside the item (some NWS feeds use this) */
       var imgUrl='';
       var summary='';
       if(desc){
         var tmp=document.createElement('div');
         tmp.innerHTML=desc;
-        /* Find the first image */
+        /* Find the first image in the description HTML */
         var imgEl=tmp.querySelector('img');
         if(imgEl&&imgEl.src){
           imgUrl=imgEl.src;
@@ -3275,6 +3277,45 @@ async function fetchRssFeed(url,elementId){
         /* Strip HTML for the text summary */
         summary=tmp.textContent||tmp.innerText||'';
         if(summary.length>200)summary=summary.substring(0,200)+'...';
+      }
+      /* If no image found in description, check <enclosure> */
+      if(!imgUrl){
+        var enclosure=item.getElementsByTagName('enclosure')[0];
+        if(enclosure){
+          var encUrl=enclosure.getAttribute('url');
+          var encType=enclosure.getAttribute('type')||'';
+          if(encUrl&&(encType.indexOf('image')>=0||encUrl.match(/\.(jpg|jpeg|png|gif|webp)/i))){
+            imgUrl=encUrl;
+          }
+        }
+      }
+      /* Check <media:content> or <media:thumbnail> (media RSS namespace) */
+      if(!imgUrl){
+        var mediaContent=item.getElementsByTagName('media:content')[0];
+        if(mediaContent){
+          var mcUrl=mediaContent.getAttribute('url');
+          var mcType=mediaContent.getAttribute('type')||'';
+          if(mcUrl&&(mcType.indexOf('image')>=0||mcUrl.match(/\.(jpg|jpeg|png|gif|webp)/i))){
+            imgUrl=mcUrl;
+          }
+        }
+      }
+      if(!imgUrl){
+        var mediaThumb=item.getElementsByTagName('media:thumbnail')[0];
+        if(mediaThumb){
+          var mtUrl=mediaThumb.getAttribute('url');
+          if(mtUrl)imgUrl=mtUrl;
+        }
+      }
+      /* Check <image> element inside the item (some NWS/NHC feeds) */
+      if(!imgUrl){
+        var itemImage=item.getElementsByTagName('image')[0];
+        if(itemImage){
+          var imgUrlEl=itemImage.getElementsByTagName('url')[0];
+          if(imgUrlEl&&imgUrlEl.textContent){
+            imgUrl=imgUrlEl.textContent;
+          }
+        }
       }
       /* Fix links that are missing the protocol (e.g. "www.wpc.ncep.noaa.gov/...")
          so the browser doesn't treat them as relative to the current page.
@@ -3297,6 +3338,18 @@ async function fetchRssFeed(url,elementId){
         }else if(!link.match(/^[a-z]+:\/\//)){
           /* Doesn't start with any protocol - assume https */
           link='https://'+link;
+        }
+      }
+      /* Fix image URL protocol if needed (some feeds use // instead of https://) */
+      if(imgUrl&&imgUrl.startsWith('//')){
+        imgUrl='https:'+imgUrl;
+      }
+      /* Fix image URL if it's protocol-relative or missing protocol */
+      if(imgUrl&&!imgUrl.match(/^https?:\/\//)){
+        if(imgUrl.startsWith('//')){
+          imgUrl='https:'+imgUrl;
+        }else{
+          imgUrl='https://'+imgUrl;
         }
       }
       html+='<div class="wf-rss-item" onclick="window.open(\''+link.replace(/'/g,"\\'")+'\',\'_blank\')">'+
