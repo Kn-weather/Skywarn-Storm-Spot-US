@@ -3353,36 +3353,43 @@ function toggleLightning(){
   }
 }
 
-/* Fetch recent lightning strikes from Blitzortung's JSON data server.
-   The data is at: https://data.blitzortung.org/Data/Verified_Strikes/json/
-   Files are named by time range: 0_minutes.json (last min), 1_minutes.json, etc.
-   We fetch the last 2 minutes (2 files) to get recent strikes.
-   Uses fP() for CORS proxy fallback. */
+/* Fetch recent lightning strikes from Blitzortung's public data server.
+   NOTE: Blitzortung's strike data is behind authentication (401/403).
+   The free public data only includes station lists, not strike data.
+   The WebSocket (port 3000) is blocked by most mobile carriers.
+   
+   As a fallback, we try multiple approaches:
+   1. Try the Blitzortung data server (may work with CORS proxy)
+   2. If that fails, show a link to the Blitzortung live map
+   
+   The status indicator shows the user what's happening. */
 async function fetchLightningStrikes(){
   if(!lightningActive)return;
   try{
-    var baseUrl='https://data.blitzortung.org/Data/Verified_Strikes/json/';
+    /* Try Blitzortung's public data endpoints */
+    var urls=[
+      'https://data.blitzortung.org/Data/Protected_Strikes/json/0_minutes.json',
+      'https://data.blitzortung.org/Data/Verified_Strikes/json/0_minutes.json'
+    ];
     var newStrikes=0;
-    /* Fetch the last 2 minutes of strike data */
-    for(var min=0;min<2;min++){
-      var url=baseUrl+min+'_minutes.json';
-      var txt=await fP(url);
+    var dataFound=false;
+    for(var ui=0;ui<urls.length;ui++){
+      var txt=await fP(urls[ui]);
       if(!txt)continue;
+      /* Check if response is HTML (error page) instead of JSON */
+      if(txt.indexOf('<!DOCTYPE')>=0||txt.indexOf('<html')>=0){
+        continue;
+      }
       try{
-        /* The data is a JSON array of arrays: [[timestamp,lat,lon],...] */
         var strikes=JSON.parse(txt);
+        dataFound=true;
         if(Array.isArray(strikes)){
           strikes.forEach(function(s){
-            /* Each strike: [timestamp, lat, lon, ...other fields] */
             if(Array.isArray(s)&&s.length>=3){
-              var ts=s[0];
-              var lat=s[1];
-              var lon=s[2];
-              /* Skip if we've already seen this strike (by timestamp) */
+              var ts=s[0],lat=s[1],lon=s[2];
               var id=String(ts)+'_'+String(lat)+'_'+String(lon);
               if(lightningSeenStrikes[id])return;
               lightningSeenStrikes[id]=true;
-              /* Clean up old IDs to prevent memory growth */
               if(Object.keys(lightningSeenStrikes).length>5000){
                 lightningSeenStrikes={};
               }
@@ -3394,16 +3401,30 @@ async function fetchLightningStrikes(){
             }
           });
         }
+        break;  /* success - stop trying URLs */
       }catch(e){
-        /* JSON parse error - skip this file */
+        /* JSON parse error - try next URL */
       }
     }
-    if(newStrikes>0){
-      updateLightningStatus('Active - '+lightningMarkers.length+' strikes on map ('+lightningStrikeCount+' total)');
+    if(dataFound){
+      if(newStrikes>0){
+        updateLightningStatus('Active - '+lightningMarkers.length+' strikes ('+lightningStrikeCount+' total)');
+      }else{
+        updateLightningStatus('Connected - '+lightningMarkers.length+' active strikes');
+      }
     }else{
-      updateLightningStatus('Connected - '+lightningMarkers.length+' active strikes');
+      /* Data not accessible - show link to live map */
+      updateLightningStatus('Strike data requires auth - use Blitzortung live map');
+      var statusEl=document.getElementById('lightningStatus');
+      if(statusEl){
+        statusEl.innerHTML='Data unavailable (auth required). <a href="https://blitzortung.org/en/live_maps.php" target="_blank" style="color:var(--acc)">Open Blitzortung Live Map →</a>';
+      }
+      /* Stop polling since we can't get data */
+      if(lightningPollTimer){
+        clearInterval(lightningPollTimer);
+        lightningPollTimer=null;
+      }
     }
-    /* Clean up old seen-strikes tracking periodically */
     if(lightningStrikeCount%100===0&&Object.keys(lightningSeenStrikes).length>2000){
       lightningSeenStrikes={};
     }
