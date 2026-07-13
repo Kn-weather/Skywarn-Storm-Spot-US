@@ -749,6 +749,10 @@ body.capturing .hamburger-menu{display:none!important}
     <i class="fas fa-rss"></i>
     <span>Weather Feeds</span>
   </div>
+  <div class="hamburger-menu-item" id="tab-lightning" onclick="switchTab('lightning')">
+    <i class="fas fa-bolt"></i>
+    <span>Lightning Map</span>
+  </div>
   <div class="hamburger-menu-divider"></div>
   <div class="hamburger-menu-item" id="menu-install" onclick="installPWA()" style="display:none">
     <i class="fas fa-download"></i>
@@ -882,11 +886,6 @@ body.capturing .hamburger-menu{display:none!important}
         </div>
       </div>
 
-      <div class="divider">
-        <div class="section-label">Live Lightning</div>
-        <label style="margin:1px 0"><input type="checkbox" id="amLayerLightning" onchange="toggleLightning()"> Show Lightning Strikes</label>
-        <div id="lightningStatus" style="font-size:8px;color:var(--t3);margin-top:2px;font-family:monospace"></div>
-      </div>
     </div>
   </div>
 
@@ -942,6 +941,13 @@ body.capturing .hamburger-menu{display:none!important}
         <div class="wf-feed-body" id="rss-nws-alerts"><div class="wf-rss-empty">Loading...</div></div>
       </div>
     </div>
+  </div>
+</div>
+
+<!-- Tab View: Lightning Map -->
+<div id="view-lightning" class="tab-view">
+  <div class="wf-frame-wrap" data-tab-label="Lightning Map" data-tab-icon="fa-bolt">
+    <iframe src="https://maps.blitzortung.org/en/#3/37.02/-84.36" title="Blitzortung Lightning Map" allow="fullscreen; geolocation"></iframe>
   </div>
 </div>
 
@@ -4023,6 +4029,8 @@ function switchTab(tab){
       sub.innerHTML='StormCams &middot; Live Storm Camera Network';
     }else if(tab==='weatherfeeds'){
       sub.innerHTML='Weather Feeds &middot; SPC, NWS &amp; Twitter';
+    }else if(tab==='lightning'){
+      sub.innerHTML='Lightning Map &middot; Blitzortung Real-Time Strikes';
     }
   }
   /* If switching to the Weather Feeds tab, load Twitter widgets and RSS feeds */
