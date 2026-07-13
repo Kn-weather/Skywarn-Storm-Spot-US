@@ -933,10 +933,25 @@ body.capturing .hamburger-menu{display:none!important}
         <div class="wf-feed-header"><i class="fas fa-bullseye"></i> SPC Convective Outlooks</div>
         <div class="wf-feed-body" id="rss-spc-outlooks"><div class="wf-rss-empty">Loading...</div></div>
       </div>
-      <!-- NWS All Active Alerts RSS -->
+      <!-- NWS Headlines RSS -->
       <div class="wf-feed-card">
         <div class="wf-feed-header"><i class="fas fa-newspaper"></i> NWS Headlines</div>
         <div class="wf-feed-body" id="rss-nws-alerts"><div class="wf-rss-empty">Loading...</div></div>
+      </div>
+      <!-- WPC (Weather Prediction Center) RSS -->
+      <div class="wf-feed-card">
+        <div class="wf-feed-header"><i class="fas fa-cloud-rain"></i> WPC Storm Summaries</div>
+        <div class="wf-feed-body" id="rss-wpc"><div class="wf-rss-empty">Loading...</div></div>
+      </div>
+      <!-- NHC (National Hurricane Center) RSS -->
+      <div class="wf-feed-card">
+        <div class="wf-feed-header"><i class="fas fa-hurricane"></i> NHC Atlantic Tropical</div>
+        <div class="wf-feed-body" id="rss-nhc-atl"><div class="wf-rss-empty">Loading...</div></div>
+      </div>
+      <!-- NHC Eastern Pacific RSS -->
+      <div class="wf-feed-card">
+        <div class="wf-feed-header"><i class="fas fa-hurricane"></i> NHC Eastern Pacific</div>
+        <div class="wf-feed-body" id="rss-nhc-ep"><div class="wf-rss-empty">Loading...</div></div>
       </div>
     </div>
   </div>
@@ -3139,6 +3154,11 @@ function loadWeatherFeeds(){
   fetchRssFeed('https://www.spc.noaa.gov/products/spcacrss.xml','rss-spc-outlooks');
   /* NWS news/headlines feed (correct URL - the old alerts/feed returned HTML) */
   fetchRssFeed('https://www.weather.gov/rss_page.php?site_name=nws','rss-nws-alerts');
+  /* WPC (Weather Prediction Center) - storm summary discussions */
+  fetchRssFeed('https://www.wpc.ncep.noaa.gov/discussions/hpcdiscussions.php?disc=pmdspd','rss-wpc');
+  /* NHC (National Hurricane Center) - Atlantic and Eastern Pacific tropical feeds */
+  fetchRssFeed('https://www.nhc.noaa.gov/index-at.xml','rss-nhc-atl');
+  fetchRssFeed('https://www.nhc.noaa.gov/index-ep.xml','rss-nhc-ep');
 }
 
 /* Load Twitter/X timeline using createTimeline() - the programmatic API.
