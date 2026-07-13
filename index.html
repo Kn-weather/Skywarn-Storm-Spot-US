@@ -891,6 +891,12 @@ body.capturing .hamburger-menu{display:none!important}
       </div>
 
       <div class="divider">
+        <div class="section-label">Live Lightning</div>
+        <label><input type="checkbox" id="amLayerLightning" onchange="toggleLightning()"> Show Lightning Strikes</label>
+        <label style="font-size:9px;color:var(--t3);margin-top:4px"><i class="fas fa-bolt" style="margin-right:4px;color:#ffcc00"></i>Blitzortung · real-time · auto-fades 10s</label>
+      </div>
+
+      <div class="divider">
         <div class="section-label">Live Cameras <span style="font-size:8px;color:var(--t3);text-transform:none;letter-spacing:0">(Coming Soon)</span></div>
         <label style="font-size:10px;color:var(--t3);opacity:.7;cursor:not-allowed">
           <input type="checkbox" disabled> Camera layer (disabled)
@@ -3339,6 +3345,170 @@ function textContent(parent,tagName){
 function escapeHtml(s){
   if(!s)return '';
   return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+/* ── Live Lightning Layer (Blitzortung WebSocket) ──────────────────────────
+   Connects to the Blitzortung lightning detection network's WebSocket
+   server to receive real-time lightning strike data. Each strike is
+   displayed as a colored circle marker on the map that flashes and fades
+   out over 10 seconds, then is removed to prevent browser lag.
+
+   Blitzortung runs multiple WebSocket servers (ws1-ws8.blitzortung.org).
+   If one fails to connect, we try the next. The server requires an
+   initialization handshake: sending { a: 111 } after connecting.
+
+   Strike data comes as JSON with {lat, lon} or as arrays. We handle both.
+
+   Performance: our map already uses preferCanvas:true, so circle markers
+   are rendered on canvas (not SVG) - much faster for thousands of strikes.
+   Markers are auto-removed after 10 seconds. On heavy storm days this
+   can still generate a lot of markers, so we cap the total at 500 active
+   markers to prevent browser overload. */
+
+var lightningSocket=null;
+var lightningMarkers=[];
+var lightningServerIdx=0;
+var lightningServers=['ws7.blitzortung.org','ws8.blitzortung.org','ws1.blitzortung.org','ws2.blitzortung.org','ws3.blitzortung.org','ws4.blitzortung.org','ws5.blitzortung.org','ws6.blitzortung.org'];
+var lightningReconnectTimer=null;
+var lightningActive=false;
+var LIGHTNING_MAX_MARKERS=500;
+
+/* Toggle the lightning layer on/off. Called from the checkbox. */
+function toggleLightning(){
+  var cb=document.getElementById('amLayerLightning');
+  if(!cb)return;
+  if(cb.checked){
+    lightningActive=true;
+    connectLightning();
+  }else{
+    lightningActive=false;
+    disconnectLightning();
+  }
+}
+
+/* Connect to a Blitzortung WebSocket server. If it fails, try the next
+   server in the list. This provides redundancy. */
+function connectLightning(){
+  disconnectLightning();
+  if(!lightningActive)return;
+  if(lightningServerIdx>=lightningServers.length){
+    console.warn('[Lightning] All servers failed, restarting from ws7');
+    lightningServerIdx=0;
+  }
+  var server=lightningServers[lightningServerIdx];
+  var wsUrl='wss://'+server;
+  console.log('[Lightning] Connecting to '+server+'...');
+  try{
+    lightningSocket=new WebSocket(wsUrl);
+  }catch(e){
+    console.warn('[Lightning] WebSocket creation failed:',e);
+    lightningServerIdx++;
+    if(lightningActive){
+      lightningReconnectTimer=setTimeout(connectLightning,2000);
+    }
+    return;
+  }
+  lightningSocket.onopen=function(){
+    console.log('[Lightning] Connected to '+server);
+    /* Send the initialization handshake required by the server */
+    try{
+      lightningSocket.send(JSON.stringify({a:111}));
+    }catch(e){console.warn('[Lightning] Send error:',e)}
+  };
+  lightningSocket.onmessage=function(event){
+    try{
+      var data=JSON.parse(event.data);
+      if(data&&typeof data.lat==='number'&&typeof data.lon==='number'){
+        createLightningMarker(data.lat,data.lon);
+      }else if(Array.isArray(data)&&data.length>=3){
+        /* Alternative format: [timestamp, lat, lon] */
+        if(typeof data[1]==='number'&&typeof data[2]==='number'){
+          createLightningMarker(data[1],data[2]);
+        }
+      }
+    }catch(err){
+      /* Ignore parsing errors from binary/compressed heartbeat packets */
+    }
+  };
+  lightningSocket.onerror=function(error){
+    console.warn('[Lightning] WebSocket error on '+server);
+  };
+  lightningSocket.onclose=function(){
+    console.log('[Lightning] Disconnected from '+server);
+    lightningSocket=null;
+    /* Auto-reconnect to the next server if still active */
+    if(lightningActive){
+      lightningServerIdx++;
+      lightningReconnectTimer=setTimeout(connectLightning,2000);
+    }
+  };
+}
+
+/* Disconnect from the WebSocket and clean up all markers. */
+function disconnectLightning(){
+  if(lightningReconnectTimer){
+    clearTimeout(lightningReconnectTimer);
+    lightningReconnectTimer=null;
+  }
+  if(lightningSocket){
+    try{
+      lightningSocket.onclose=null;  /* prevent auto-reconnect */
+      lightningSocket.close();
+    }catch(e){}
+    lightningSocket=null;
+  }
+  /* Remove all lightning markers from the map */
+  lightningMarkers.forEach(function(m){
+    if(m&&alertMapInstance){
+      try{alertMapInstance.removeLayer(m)}catch(e){}
+    }
+  });
+  lightningMarkers=[];
+}
+
+/* Create a lightning strike marker on the map. The marker starts as a
+   bright red circle, flashes to yellow after 300ms, then gradually fades
+   and is removed after 10 seconds. */
+function createLightningMarker(lat,lon){
+  if(!alertMapInstance||!lightningActive)return;
+  /* Cap total markers to prevent browser overload on heavy storm days */
+  if(lightningMarkers.length>=LIGHTNING_MAX_MARKERS){
+    var oldest=lightningMarkers.shift();
+    if(oldest){
+      try{alertMapInstance.removeLayer(oldest)}catch(e){}
+    }
+  }
+  /* Create a small circle marker for the strike */
+  var strike=L.circleMarker([lat,lon],{
+    radius:5,
+    fillColor:'#ff3300',
+    color:'#fff',
+    weight:1,
+    opacity:1,
+    fillOpacity:0.8
+  }).addTo(alertMapInstance);
+  lightningMarkers.push(strike);
+  /* Flash effect: change to yellow after 300ms */
+  setTimeout(function(){
+    try{
+      strike.setStyle({fillColor:'#ffcc00',radius:4});
+    }catch(e){}
+  },300);
+  /* Fade out gradually starting at 5 seconds */
+  setTimeout(function(){
+    try{
+      strike.setStyle({fillOpacity:0.5,opacity:0.5});
+    }catch(e){}
+  },5000);
+  /* Remove the strike after 10 seconds */
+  setTimeout(function(){
+    try{
+      alertMapInstance.removeLayer(strike);
+    }catch(e){}
+    /* Remove from our tracking array */
+    var idx=lightningMarkers.indexOf(strike);
+    if(idx>=0)lightningMarkers.splice(idx,1);
+  },10000);
 }
 
 /* ── Screenshot capture & export ──────────────────────────────────────────
