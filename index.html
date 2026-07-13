@@ -918,6 +918,11 @@ body.capturing .hamburger-menu{display:none!important}
         <div class="wf-feed-header"><i class="fas fa-shield-halved"></i> SPC Watches</div>
         <div class="wf-feed-body" id="rss-spc-watches"><div class="wf-rss-empty">Loading...</div></div>
       </div>
+      <!-- SPC PDS Watches RSS -->
+      <div class="wf-feed-card">
+        <div class="wf-feed-header"><i class="fas fa-shield-halved" style="color:#ff0000"></i> SPC PDS Watches</div>
+        <div class="wf-feed-body" id="rss-spc-pds"><div class="wf-rss-empty">Loading...</div></div>
+      </div>
       <!-- SPC Mesoscale Discussions RSS -->
       <div class="wf-feed-card">
         <div class="wf-feed-header"><i class="fas fa-comment-dots"></i> SPC Mesoscale Discussions</div>
@@ -3129,6 +3134,7 @@ function loadWeatherFeeds(){
   weatherFeedsLoaded=true;
   /* SPC RSS feeds */
   fetchRssFeed('https://www.spc.noaa.gov/products/spcwwrss.xml','rss-spc-watches');
+  fetchRssFeed('https://www.spc.noaa.gov/products/spcpdswwrss.xml','rss-spc-pds');
   fetchRssFeed('https://www.spc.noaa.gov/products/spcmdrss.xml','rss-spc-meso');
   fetchRssFeed('https://www.spc.noaa.gov/products/spcacrss.xml','rss-spc-outlooks');
   /* NWS news/headlines feed (correct URL - the old alerts/feed returned HTML) */
