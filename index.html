@@ -2872,18 +2872,19 @@ function buildRadarTileUrl(type,path){
 }
 
 /* Create a single radar tile layer with the standard options.
-   maxNativeZoom:10 tells Leaflet that RainViewer only serves tiles up to
-   zoom level 10. Beyond that, Leaflet upscales the zoom 10 tiles instead
-   of requesting non-existent tiles (which caused "zoom level not supported"
+   maxNativeZoom:7 tells Leaflet that RainViewer only serves tiles up to
+   zoom level 7. Beyond that, Leaflet upscales the z7 tiles instead of
+   requesting non-existent tiles (which caused "zoom level not supported"
    errors). maxZoom:18 allows the radar to stay visible at all map zoom
-   levels by upscaling. */
+   levels by upscaling. The radar will look slightly softer at high zoom
+   but stays visible with no errors. */
 function createRadarTileLayer(type,frame){
   if(!frame)return null;
   var url=buildRadarTileUrl(type,frame.path);
   return L.tileLayer(url,{
     opacity:0,
     maxZoom:18,         /* allow radar at all zoom levels */
-    maxNativeZoom:10,   /* RainViewer only serves tiles up to z10 - upscale beyond */
+    maxNativeZoom:7,    /* RainViewer only serves tiles up to z7 - upscale beyond */
     attribution:'Radar: <a href="https://www.rainviewer.com/">RainViewer</a>',
     crossOrigin:true
   });
