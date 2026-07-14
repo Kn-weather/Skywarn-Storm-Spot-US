@@ -765,7 +765,7 @@ body.capturing .hamburger-menu{display:none!important}
   <div class="actions">
     <div class="stat" id="liveStat"><span class="dot"></span><span id="liveText">LIVE</span></div>
     <button id="screenshotBtn" onclick="captureScreenshot()"><i class="fas fa-camera"></i> <span class="btn-label">Screenshot</span></button>
-    <button id="refreshBtn" onclick="manualRefresh()"><i class="fas fa-rotate"></i> Refresh</button>
+    <button id="refreshBtn" onclick="manualRefresh()" style="flex-direction:column;gap:0;padding:4px 10px"><span style="display:flex;align-items:center;gap:4px"><i class="fas fa-rotate"></i> Refresh</span><span id="refreshTimeLabel" style="font-size:7px;color:var(--t3);font-weight:400"></span></button>
   </div>
 </div>
 
@@ -2594,14 +2594,21 @@ function renderConsoleLog(){
   el.innerHTML=html;
 }
 
-/* Update the "Last Refresh" display in Settings tab */
+/* Update the "Last Refresh" display in Settings tab and Refresh button */
 function updateLastRefreshTime(){
   lastRefreshTimestamp=new Date();
+  var timeStr=lastRefreshTimestamp.toLocaleString('en-US',{
+    weekday:'short',month:'short',day:'numeric',
+    hour:'numeric',minute:'2-digit',second:'2-digit',hour12:true
+  });
+  /* Settings tab */
   var el=document.getElementById('lastRefreshTime');
-  if(el){
-    el.textContent=lastRefreshTimestamp.toLocaleString('en-US',{
-      weekday:'short',month:'short',day:'numeric',
-      hour:'numeric',minute:'2-digit',second:'2-digit',hour12:true
+  if(el)el.textContent=timeStr;
+  /* Refresh button sub-label */
+  var btnEl=document.getElementById('refreshTimeLabel');
+  if(btnEl){
+    btnEl.textContent=lastRefreshTimestamp.toLocaleTimeString('en-US',{
+      hour:'numeric',minute:'2-digit',hour12:true
     });
   }
 }
