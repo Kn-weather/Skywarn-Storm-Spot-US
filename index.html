@@ -804,6 +804,10 @@ body.capturing .hamburger-menu{display:none!important}
     <i class="fas fa-arrows-rotate"></i>
     <span>Update App (Hard Refresh)</span>
   </div>
+  <div class="hamburger-menu-item" id="tab-settings" onclick="switchTab('settings')">
+    <i class="fas fa-gear"></i>
+    <span>Site Settings</span>
+  </div>
   <div class="hamburger-menu-item" onclick="captureScreenshot()">
     <i class="fas fa-camera"></i>
     <span>Screenshot</span>
@@ -1009,6 +1013,48 @@ body.capturing .hamburger-menu{display:none!important}
 <div id="view-lightning" class="tab-view">
   <div class="wf-frame-wrap" data-tab-label="Lightning Map" data-tab-icon="fa-bolt">
     <iframe src="https://maps.blitzortung.org/?MapInteractive=1&NavigationControl=1&FullScreenControl=0&Cookies=1&CookiesPredefined=1&CookiesStatistics=1&CookiesAdvertisements=0&CookiesMaps=1&InfoDiv=0&MenuDiv=1&GeolocateControl=1&ScaleControl=1&LinksChecked=1&LinksRange=10&MapStyle=0&MapStyleRange=0#3/37.02/-84.36" title="Blitzortung Lightning Map" allow="fullscreen; geolocation"></iframe>
+  </div>
+</div>
+
+<!-- Tab View: Site Settings -->
+<div id="view-settings" class="tab-view">
+  <div class="wf-feeds-wrap">
+    <div style="max-width:800px;margin:0 auto">
+      <h2 style="font-size:18px;color:var(--acc);margin-bottom:16px;text-transform:uppercase;letter-spacing:.04em"><i class="fas fa-gear" style="margin-right:8px"></i> Site Settings</h2>
+
+      <!-- Refresh info -->
+      <div class="wf-feed-card" style="margin-bottom:16px">
+        <div class="wf-feed-header"><i class="fas fa-clock-rotate-left"></i> Last Refresh</div>
+        <div class="wf-feed-body" style="padding:14px">
+          <div id="lastRefreshTime" style="font-size:14px;color:var(--t1);margin-bottom:8px">Never</div>
+          <div style="font-size:10px;color:var(--t3)">Auto-refreshes every 5 minutes</div>
+        </div>
+      </div>
+
+      <!-- Alert Sound Settings -->
+      <div class="wf-feed-card" style="margin-bottom:16px">
+        <div class="wf-feed-header"><i class="fas fa-volume-high"></i> Alert Sounds</div>
+        <div class="wf-feed-body" style="padding:14px">
+          <label style="display:flex;align-items:center;gap:8px;margin-bottom:8px;font-size:12px;color:var(--t1)">
+            <input type="checkbox" id="settingTorWarningSound" checked style="accent-color:var(--acc)">
+            Play sound when new Tornado Warning is issued
+          </label>
+          <label style="display:flex;align-items:center;gap:8px;margin-bottom:8px;font-size:12px;color:var(--t1)">
+            <input type="checkbox" id="settingTorWatchSound" checked style="accent-color:var(--acc)">
+            Play sound when new Tornado Watch is issued
+          </label>
+          <button onclick="testAlertSound()" style="background:var(--acc);color:#000;border:none;padding:6px 14px;border-radius:4px;cursor:pointer;font-size:11px;font-weight:600;font-family:inherit"><i class="fas fa-play" style="margin-right:4px"></i>Test Sound</button>
+        </div>
+      </div>
+
+      <!-- Console / Update Log -->
+      <div class="wf-feed-card">
+        <div class="wf-feed-header"><i class="fas fa-list-ul"></i> Update Log (Last 20)</div>
+        <div class="wf-feed-body" id="settingsConsole" style="padding:8px 14px;max-height:500px;overflow-y:auto;font-family:monospace;font-size:10px;color:var(--t2);line-height:1.6">
+          <div style="color:var(--t3);text-align:center;padding:20px">No updates logged yet</div>
+        </div>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -2469,6 +2515,17 @@ async function fAlertMap(){
       updateCountLabel('');
     }
     if(isDeltaUpdate)hideLoading();
+    /* Check for new critical alerts and play sound if needed */
+    checkForNewCriticalAlerts(isDeltaUpdate?Object.fromEntries(Object.keys(alertLayerCache).map(function(k){return[k,true]})):null);
+    /* Log the update to the console */
+    if(isDeltaUpdate){
+      var deltaMsg='Refreshed: '+drawnAlerts.length+' alerts';
+      if(newCount>0)deltaMsg+=' (+ '+newCount+' new)';
+      logConsole(deltaMsg,'info');
+    }else{
+      logConsole('Initial load: '+drawnAlerts.length+' alerts','info');
+    }
+    updateLastRefreshTime();
   }catch(e){
     console.error('Alert map error:',e);
     if(countEl)countEl.innerHTML='<i class="fas fa-circle-exclamation"></i> Error loading alerts';
@@ -2482,6 +2539,99 @@ function manualRefresh(){
   ZONE_GEOMETRY_CACHE={};
   alertLayerCache={};
   fAlertMap();
+  updateLastRefreshTime();
+}
+
+/* ── Alert sound + console log + last refresh time ────────────────────── */
+var ALERT_SOUND_URL='https://www.myinstants.com/media/sounds/police-beep.mp3';
+var lastRefreshTimestamp=null;
+var consoleLog=[];  /* array of {time, message, type} */
+
+/* Play the alert sound effect. Called when a new Tornado Warning or
+   Tornado Watch is detected that wasn't in the previous cache. */
+function playAlertSound(){
+  try{
+    var audio=new Audio(ALERT_SOUND_URL);
+    audio.volume=0.7;
+    audio.play().catch(function(e){
+      console.warn('[Sound] Could not play alert sound:',e);
+    });
+  }catch(e){console.warn('[Sound] Error:',e)}
+}
+
+/* Test the alert sound (called from Settings tab button) */
+function testAlertSound(){
+  playAlertSound();
+}
+window.testAlertSound=testAlertSound;
+
+/* Add a message to the console log (shown in Settings tab) */
+function logConsole(message,type){
+  var time=new Date().toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit',second:'2-digit',hour12:true});
+  consoleLog.unshift({time:time,message:message,type:type||'info'});
+  if(consoleLog.length>20)consoleLog.pop();
+  renderConsoleLog();
+}
+
+/* Render the console log in the Settings tab */
+function renderConsoleLog(){
+  var el=document.getElementById('settingsConsole');
+  if(!el)return;
+  if(consoleLog.length===0){
+    el.innerHTML='<div style="color:var(--t3);text-align:center;padding:20px">No updates logged yet</div>';
+    return;
+  }
+  var colors={info:'var(--t2)',new:'var(--suc)',expired:'var(--t3)',warning:'#fbbf24',error:'#fb7185'};
+  var html='';
+  consoleLog.forEach(function(entry){
+    var color=colors[entry.type]||colors.info;
+    var icon=entry.type==='new'?'fa-plus-circle':entry.type==='expired'?'fa-minus-circle':entry.type==='warning'?'fa-triangle-exclamation':entry.type==='error'?'fa-circle-exclamation':'fa-circle-info';
+    html+='<div style="color:'+color+';padding:2px 0;border-bottom:1px solid rgba(255,255,255,.03)">'+
+      '<span style="color:var(--t3)">'+entry.time+'</span> <i class="fas '+icon+'" style="margin-right:4px"></i>'+
+      entry.message+
+      '</div>';
+  });
+  el.innerHTML=html;
+}
+
+/* Update the "Last Refresh" display in Settings tab */
+function updateLastRefreshTime(){
+  lastRefreshTimestamp=new Date();
+  var el=document.getElementById('lastRefreshTime');
+  if(el){
+    el.textContent=lastRefreshTimestamp.toLocaleString('en-US',{
+      weekday:'short',month:'short',day:'numeric',
+      hour:'numeric',minute:'2-digit',second:'2-digit',hour12:true
+    });
+  }
+}
+
+/* Check for new Tornado Warnings/Watches after a delta update and play
+   sound if any are new. Called at the end of fAlertMap. */
+function checkForNewCriticalAlerts(prevAlertIds){
+  var torWarnSound=document.getElementById('settingTorWarningSound');
+  var torWatchSound=document.getElementById('settingTorWatchSound');
+  var torWarnEnabled=!torWarnSound||torWarnSound.checked;
+  var torWatchEnabled=!torWatchSound||torWatchSound.checked;
+  var newTorWarnings=0,newTorWatches=0;
+  drawnAlerts.forEach(function(a){
+    var id=a.id||'';
+    if(prevAlertIds&&prevAlertIds[id])return;
+    var e=a.event.toLowerCase();
+    if(e==='tornado warning'&&torWarnEnabled){
+      newTorWarnings++;
+    }else if(e==='tornado watch'&&torWatchEnabled){
+      newTorWatches++;
+    }
+  });
+  if(newTorWarnings>0){
+    logConsole('NEW Tornado Warning issued! ('+newTorWarnings+' new)','new');
+    playAlertSound();
+  }
+  if(newTorWatches>0){
+    logConsole('NEW Tornado Watch issued! ('+newTorWatches+' new)','new');
+    playAlertSound();
+  }
 }
 
 /* ── Hard refresh: clears all caches and reloads the app from the server ──
@@ -4159,6 +4309,8 @@ function switchTab(tab){
       sub.innerHTML='Weather Feeds &middot; SPC, NWS &amp; Twitter';
     }else if(tab==='lightning'){
       sub.innerHTML='Lightning Map &middot; Blitzortung Real-Time Strikes';
+    }else if(tab==='settings'){
+      sub.innerHTML='Site Settings &middot; Refresh Info, Sounds &amp; Console';
     }
   }
   /* If switching to the Weather Feeds tab, load Twitter widgets and RSS feeds */
