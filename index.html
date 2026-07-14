@@ -822,14 +822,14 @@ body.capturing .hamburger-menu{display:none!important}
     </div>
     <div class="alert-map-controls-body">
       <div class="section-label">Alert Categories</div>
-      <label style="margin:1px 0"><input type="checkbox" id="amLayerWarnings" checked onchange="fAlertMap()"> Warnings</label>
-      <label style="margin:1px 0"><input type="checkbox" id="amLayerWatches" checked onchange="fAlertMap()"> Watches</label>
-      <label style="margin:1px 0"><input type="checkbox" id="amLayerAdvisories" onchange="fAlertMap()"> Advisories &amp; Statements</label>
-      <label style="margin:1px 0"><input type="checkbox" id="amLayerLabels" checked onchange="fAlertMap()"> Zone Labels</label>
+      <label style="margin:1px 0"><input type="checkbox" id="amLayerWarnings" checked onchange="alertLayerCache={};fAlertMap()"> Warnings</label>
+      <label style="margin:1px 0"><input type="checkbox" id="amLayerWatches" checked onchange="alertLayerCache={};fAlertMap()"> Watches</label>
+      <label style="margin:1px 0"><input type="checkbox" id="amLayerAdvisories" onchange="alertLayerCache={};fAlertMap()"> Advisories &amp; Statements</label>
+      <label style="margin:1px 0"><input type="checkbox" id="amLayerLabels" checked onchange="alertLayerCache={};fAlertMap()"> Zone Labels</label>
 
       <div class="divider">
         <div class="section-label">State Filter</div>
-        <select id="amStateFilter" onchange="fAlertMap()">
+        <select id="amStateFilter" onchange="alertLayerCache={};fAlertMap()">
           <option value="">All United States</option>
           <option value="AL">Alabama</option>
           <option value="AK">Alaska</option>
@@ -1083,6 +1083,7 @@ var alertMapLayers={warnings:[],watches:[],advisories:[]};
 var drawnAlerts=[];           /* all alerts currently drawn (or hidden) */
 var alertPopupState=null;     /* {latlng, overlappingAlerts, currentIndex} */
 var wwasCache=null;           /* cached alert features from last fetch */
+var alertLayerCache={};       /* keyed by alert ID → {layer, alert, event, cat, color} for delta updates */
 
 /* Critical alerts that ALWAYS render on load regardless of category toggle
    state. This guarantees the user sees Tornado Warnings, Severe Thunderstorm
@@ -1312,6 +1313,7 @@ function saveAlertTypeHidden(){
 function resetAlertTypeHidden(){
   ALERT_TYPE_HIDDEN={};
   saveAlertTypeHidden();
+  alertLayerCache={};  /* force full redraw */
   fAlertMap();
 }
 /* Hide all currently-drawn alert types at once. Adds every event name
@@ -1323,6 +1325,7 @@ function hideAllAlertTypes(){
     ALERT_TYPE_HIDDEN[a.event]=true;
   });
   saveAlertTypeHidden();
+  alertLayerCache={};  /* force full redraw */
   fAlertMap();
 }
 function toggleAlertType(eventName){
@@ -2237,26 +2240,28 @@ function hideLoading(){
 async function fAlertMap(){
   if(!alertMapInstance)initAlertMap();
   if(!alertMapInstance)return;
-  /* Clear existing alert layers */
-  alertMapLayers.warnings.forEach(function(l){alertMapInstance.removeLayer(l)});
-  alertMapLayers.watches.forEach(function(l){alertMapInstance.removeLayer(l)});
-  alertMapLayers.advisories.forEach(function(l){alertMapInstance.removeLayer(l)});
-  alertMapLayers.warnings=[];alertMapLayers.watches=[];alertMapLayers.advisories=[];
 
   var countEl=document.getElementById('alertMapCount');
-  if(countEl)countEl.innerHTML='<i class="fas fa-satellite-dish"></i> Loading alerts...';
-  showLoading();
+  var isDeltaUpdate=Object.keys(alertLayerCache).length>0;
+
+  if(!isDeltaUpdate){
+    /* First load or forced refresh - clear everything and start fresh */
+    alertMapLayers.warnings.forEach(function(l){alertMapInstance.removeLayer(l)});
+    alertMapLayers.watches.forEach(function(l){alertMapInstance.removeLayer(l)});
+    alertMapLayers.advisories.forEach(function(l){alertMapInstance.removeLayer(l)});
+    alertMapLayers.warnings=[];alertMapLayers.watches=[];alertMapLayers.advisories=[];
+    if(countEl)countEl.innerHTML='<i class="fas fa-satellite-dish"></i> Loading alerts...';
+    showLoading();
+  }else{
+    /* Delta update - just show a subtle loading indicator */
+    if(countEl)countEl.innerHTML=countEl.innerHTML+' <span style="opacity:.5">updating...</span>';
+  }
 
   try{
-    /* Build URL: optionally filter by state, otherwise fetch all US alerts.
-       NWS API supports ?area=XX for a single state, or no parameter for
-       the entire active alert set (all 50 states + territories + marine). */
     var stateFilter=document.getElementById('amStateFilter');
     var state=(stateFilter&&stateFilter.value)?stateFilter.value.toUpperCase():'';
     var url='https://api.weather.gov/alerts/active';
-    if(state){
-      url+='?area='+state;
-    }
+    if(state){url+='?area='+state}
     var txt=await fP(url);
     if(!txt){
       if(countEl)countEl.innerHTML='<i class="fas fa-circle-exclamation"></i> Alerts unavailable';
@@ -2268,37 +2273,70 @@ async function fAlertMap(){
     wwasCache=features;
     var warnCount=0,watchCount=0,advCount=0,undrawn=0;
     var presentTypes=[];
-    drawnAlerts=[];
     var showWarnings=document.getElementById('amLayerWarnings');
     var showWatches=document.getElementById('amLayerWatches');
     var showAdvisories=document.getElementById('amLayerAdvisories');
 
-    /* Pre-filter by category toggle. We also track presentTypes here for
-       ALL alerts in scope (not just drawn ones) so that advisory types
-       still appear in the legend even when the Advisories category is
-       off - this lets the user see what advisories are active and click
-       them to enable the category. The expensive zone-geometry fetch
-       only happens for alerts that pass the filter (drawTasks). */
+    /* Build a set of new alert IDs for delta comparison */
+    var newAlertIds={};
+    features.forEach(function(alert){
+      if(!alert||!alert.properties)return;
+      var id=alert.properties.id||alert.id||'';
+      if(id)newAlertIds[id]=true;
+    });
+
+    /* DELTA: Remove cached alerts that are no longer active (expired) */
+    if(isDeltaUpdate){
+      var removedCount=0;
+      Object.keys(alertLayerCache).forEach(function(id){
+        if(!newAlertIds[id]){
+          /* This alert has expired - remove its layer from the map */
+          var cached=alertLayerCache[id];
+          if(cached&&cached.layer){
+            alertMapInstance.removeLayer(cached.layer);
+          }
+          delete alertLayerCache[id];
+          removedCount++;
+        }
+      });
+      if(removedCount>0){
+        console.log('[Alerts] Delta: removed '+removedCount+' expired alerts');
+      }
+    }
+
+    /* Rebuild drawnAlerts from cache + will add new ones */
+    drawnAlerts=[];
+
+    /* Pre-filter: determine which alerts need to be drawn.
+       For delta updates, skip alerts that are already in the cache. */
     var drawTasks=[];
+    var newCount=0;
     features.forEach(function(alert){
       if(!alert||!alert.properties)return;
       var event=alert.properties.event||'Unknown';
       var cat=alertCategory(event);
       var color=getAlertColor(event);
+      var id=alert.properties.id||alert.id||'';
 
-      /* Track present alert types for the legend - ALWAYS tracked
-         regardless of category state or per-type hide state, so the
-         legend checkbox stays visible (just dimmed) when the category
-         is off or the type is hidden. */
+      /* Track present alert types for the legend */
       var existing=presentTypes.find(function(pt){return pt.event===event});
       if(existing){existing.count++}else{
         presentTypes.push({event:event,color:color,cat:cat,count:1});
       }
 
-      /* Determine if this alert should be drawn. Critical alerts
-         (Tornado Warning, SVR Warning, Hurricane Warning, Tornado Watch)
-         always draw regardless of category toggle - they bypass the
-         filter so the user always sees them on initial load. */
+      /* DELTA: If this alert is already cached, add its data to drawnAlerts
+         but don't re-draw it. Only draw NEW alerts. */
+      if(isDeltaUpdate&&id&&alertLayerCache[id]){
+        /* Already on the map - just rebuild drawnAlerts entry from cached data */
+        var cached=alertLayerCache[id];
+        drawnAlerts.push(cached.alertData);
+        if(cat==='warnings')warnCount++;
+        else if(cat==='watches')watchCount++;
+        else advCount++;
+        return;  /* Skip drawing - it's already on the map */
+      }
+
+      /* This is a new alert - determine if it should be drawn */
       var isCritical=!!CRITICAL_ALWAYS_ON[event];
       var showLayer=isCritical;
       if(!showLayer){
@@ -2308,103 +2346,62 @@ async function fAlertMap(){
       }
       if(!showLayer)return;
       drawTasks.push({alert:alert,event:event,cat:cat});
+      newCount++;
     });
 
-    /* Draw each alert. Strategy: split into two batches.
-       Phase 1 (instant): alerts with inline geometry - draw immediately.
-       Phase 2 (background): alerts needing zone-geometry resolution.
-       After Phase 1 we hide the loading overlay and update the count
-       badge, so the user sees the map populate right away. Phase 2
-       fetches zone geometries with a concurrency limit of 8 (enough
-       parallelism to be fast, low enough to not overwhelm the NWS API
-       or the CORS proxy). */
+    if(isDeltaUpdate&&newCount>0){
+      console.log('[Alerts] Delta: adding '+newCount+' new alerts');
+    }
+
+    /* Draw each NEW alert (alerts already on the map are skipped) */
     function drawAlert(t,geoms){
       var alert=t.alert,event=t.event,cat=t.cat;
       var color=getAlertColor(event);
       var p=alert.properties;
       if(geoms.length===0)return false;
-      /* Store ALL useful NWS fields for the popup. We store more than we
-         currently display so future popup enhancements don't need to
-         re-fetch. Fields come from the NWS API alert.properties object:
-           event      - "Tornado Warning", "Severe Thunderstorm Watch", etc.
-           headline   - NWS-formatted headline line
-           areaDesc   - semicolon-separated list of affected areas
-           sent       - ISO timestamp when NWS issued the alert
-           effective  - ISO timestamp when the alert became active
-           onset      - ISO timestamp when the hazard begins
-           expires    - ISO timestamp when the alert expires
-           ends       - ISO timestamp when the alert ends (may differ from expires)
-           senderName - NWS office that issued the alert (e.g. "NWS Grand Rapids")
-           description- full NWS description text (the big block of info)
-           instruction- NWS recommended actions (what to do)
-           id         - alert ID/URL for reference */
-      drawnAlerts.push({
-        event:event,
-        color:color,
-        cat:cat,
+      var alertId=p.id||alert.id||'';
+      var alertData={
+        event:event,color:color,cat:cat,
         areaDesc:p.areaDesc||'Unknown',
-        sent:p.sent||'',
-        effective:p.effective||'',
-        onset:p.onset||'',
-        expires:p.expires||'',
-        ends:p.ends||'Unknown',
-        headline:p.headline||'',
-        description:p.description||'',
-        instruction:p.instruction||'',
-        senderName:p.senderName||'',
-        id:p.id||alert.id||'',
-        geoms:geoms
-      });
-      /* Count regardless of visibility */
+        sent:p.sent||'',effective:p.effective||'',
+        onset:p.onset||'',expires:p.expires||'',
+        ends:p.ends||'Unknown',headline:p.headline||'',
+        description:p.description||'',instruction:p.instruction||'',
+        senderName:p.senderName||'',id:alertId,geoms:geoms
+      };
+      drawnAlerts.push(alertData);
       if(cat==='warnings')warnCount++;
       else if(cat==='watches')watchCount++;
       else advCount++;
-      /* Skip drawing if user has hidden this alert type */
       if(ALERT_TYPE_HIDDEN[event])return true;
       var geomData=geoms.length===1?geoms[0]:{type:'GeometryCollection',geometries:geoms};
       var polygon=L.geoJSON(geomData,{
         style:{color:color,weight:2,fillColor:color,fillOpacity:0.25},
         onEachFeature:function(feature,layer){
-          /* Use a click handler instead of bindPopup(function) because
-             Leaflet's bindPopup function callback doesn't receive the
-             click event - it only gets the layer. That means we can't
-             know WHERE the user clicked, so the old code fell back to
-             the map center (which is rarely inside the polygon), causing
-             the "No active alerts at this location" bug. By handling
-             the click ourselves we get e.latlng and can do accurate
-             point-in-polygon overlap detection. */
           layer.on('click',function(e){
             var ll=e.latlng;
             var html=buildAlertPopup(ll);
-            L.popup({maxWidth:240,minWidth:180})
-              .setLatLng(ll)
-              .setContent(html)
-              .openOn(alertMapInstance);
-            /* Stop propagation so the map-level click handler doesn't
-               also fire and overwrite _lastClickLatLng with stale data. */
-            if(e.originalEvent&&e.originalEvent.stopPropagation){
-              e.originalEvent.stopPropagation();
-            }
+            L.popup({maxWidth:240,minWidth:180}).setLatLng(ll).setContent(html).openOn(alertMapInstance);
+            if(e.originalEvent&&e.originalEvent.stopPropagation){e.originalEvent.stopPropagation()}
           });
         }
       }).addTo(alertMapInstance);
       alertMapLayers[cat].push(polygon);
+      /* Store in cache for future delta updates */
+      if(alertId){
+        alertLayerCache[alertId]={layer:polygon,alertData:alertData,event:event,cat:cat,color:color};
+      }
       return true;
     }
 
     function updateCountLabel(progressText){
       var scopeLabel=state?('State: '+state):'United States';
-      /* Count Tornado Warnings and Severe Thunderstorm Warnings specifically.
-         These are the two alert types storm spotters care about most, so the
-         counter focuses on them instead of showing all warnings/watches/advisories. */
       var torCount=0,svrCount=0;
       presentTypes.forEach(function(pt){
         var e=pt.event.toLowerCase();
         if(e==='tornado warning')torCount+=pt.count;
         else if(e==='severe thunderstorm warning')svrCount+=pt.count;
       });
-      /* Build the label: just TOR + SVR counts, plus a Tornado Warning icon
-         if any are active. If neither is active, show "No active TOR/SVR". */
       var label;
       var torActive=torCount>0;
       var icon=torActive?'fa-tornado':'fa-triangle-exclamation';
@@ -2422,55 +2419,34 @@ async function fAlertMap(){
       if(countEl)countEl.innerHTML=label;
     }
 
-    /* Phase 1: Draw alerts with inline geometry (instant, no fetch) */
+    /* Phase 1: Draw NEW alerts with inline geometry (instant) */
     var zoneTasks=[];
     drawTasks.forEach(function(t){
       var alert=t.alert;
       if(alert.geometry){
-        var geoms=[alert.geometry];
-        drawAlert(t,geoms);
+        drawAlert(t,[alert.geometry]);
       }else{
-        /* Needs zone resolution - queue for Phase 2 */
         zoneTasks.push(t);
       }
     });
 
-    /* Build legend after Phase 1 so it appears immediately */
     buildAlertLegend(presentTypes);
     updateCountLabel(zoneTasks.length>0?('resolving '+zoneTasks.length+'...'):'');
-    /* Hide the loading overlay NOW - the map is interactive, the rest
-       streams in progressively. This is the key fix for the spinner
-       problem: we don't block the UI while zone geometries fetch. */
-    hideLoading();
+    if(!isDeltaUpdate)hideLoading();
+    else if(zoneTasks.length===0)hideLoading();
 
-    /* Phase 2: Resolve zone geometries for remaining alerts with
-       concurrency-limited batch fetching. Each alert can reference
-       multiple UGC zones, so we collect ALL unique UGCs across ALL
-       zone-tasks, fetch them in a single concurrent pool, then draw
-       each alert as its zones become available. */
+    /* Phase 2: Resolve zone geometries for NEW alerts needing them */
     if(zoneTasks.length>0){
-      /* Collect all unique UGCs across all zone-tasks */
-      var allUgcs=[];
-      var ugcSeen={};
+      var allUgcs=[],ugcSeen={};
       var taskUgcs=zoneTasks.map(function(t){
         var us=alertUgcs(t.alert);
-        us.forEach(function(u){
-          if(!ugcSeen[u]){ugcSeen[u]=1;allUgcs.push(u)}
-        });
+        us.forEach(function(u){if(!ugcSeen[u]){ugcSeen[u]=1;allUgcs.push(u)}});
         return us;
       });
-
-      /* Fetch all unique zones with concurrency limit 8 */
-      await asyncPool(8,allUgcs,function(ugc){
-        return getZoneGeometry(ugc);
-      });
-
-      /* Now draw each zone-task using its (now-cached) zone geometries */
+      await asyncPool(8,allUgcs,function(ugc){return getZoneGeometry(ugc)});
       var zoneDone=0;
       for(var zi=0;zi<zoneTasks.length;zi++){
-        var zt=zoneTasks[zi];
-        var zus=taskUgcs[zi];
-        var zgeoms=[];
+        var zt=zoneTasks[zi],zus=taskUgcs[zi],zgeoms=[];
         for(var ui=0;ui<zus.length;ui++){
           var g=ZONE_GEOMETRY_CACHE[zus[ui]];
           if(g)zgeoms.push(g);
@@ -2484,17 +2460,15 @@ async function fAlertMap(){
           drawAlert(zt,zgeoms);
         }
         zoneDone++;
-        /* Update progress every 5 alerts so the count badge stays responsive */
         if(zoneDone%5===0||zoneDone===zoneTasks.length){
           updateCountLabel(zoneDone+'/'+zoneTasks.length+' resolved');
-          /* Yield to the event loop so the browser can paint and stay responsive */
           await new Promise(function(r){setTimeout(r,0)});
         }
       }
-      /* Final update with no progress text */
       buildAlertLegend(presentTypes);
       updateCountLabel('');
     }
+    if(isDeltaUpdate)hideLoading();
   }catch(e){
     console.error('Alert map error:',e);
     if(countEl)countEl.innerHTML='<i class="fas fa-circle-exclamation"></i> Error loading alerts';
@@ -2504,9 +2478,9 @@ async function fAlertMap(){
 
 /* ── Manual refresh button handler ──────────────────────────────────────── */
 function manualRefresh(){
-  /* Clear zone geometry cache so we re-fetch fresh polygons on next render.
-     This is mostly defensive - zone boundaries change rarely. */
+  /* Clear zone geometry cache and alert layer cache for full redraw */
   ZONE_GEOMETRY_CACHE={};
+  alertLayerCache={};
   fAlertMap();
 }
 
