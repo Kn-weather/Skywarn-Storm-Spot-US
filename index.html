@@ -800,10 +800,6 @@ body.capturing .hamburger-menu{display:none!important}
     <i class="fas fa-rotate"></i>
     <span>Refresh Data</span>
   </div>
-  <div class="hamburger-menu-item" onclick="hardRefreshApp()">
-    <i class="fas fa-arrows-rotate"></i>
-    <span>Update App (Hard Refresh)</span>
-  </div>
   <div class="hamburger-menu-item" id="tab-settings" onclick="switchTab('settings')">
     <i class="fas fa-gear"></i>
     <span>Site Settings</span>
@@ -1048,10 +1044,23 @@ body.capturing .hamburger-menu{display:none!important}
       </div>
 
       <!-- Console / Update Log -->
-      <div class="wf-feed-card">
+      <div class="wf-feed-card" style="margin-bottom:16px">
         <div class="wf-feed-header"><i class="fas fa-list-ul"></i> Update Log (Last 20)</div>
         <div class="wf-feed-body" id="settingsConsole" style="padding:8px 14px;max-height:500px;overflow-y:auto;font-family:monospace;font-size:10px;color:var(--t2);line-height:1.6">
           <div style="color:var(--t3);text-align:center;padding:20px">No updates logged yet</div>
+        </div>
+      </div>
+
+      <!-- App Update -->
+      <div class="wf-feed-card">
+        <div class="wf-feed-header"><i class="fas fa-arrows-rotate"></i> App Update</div>
+        <div class="wf-feed-body" style="padding:14px">
+          <div style="font-size:11px;color:var(--t2);margin-bottom:10px;line-height:1.5">
+            Force-update the app to get the latest code changes from the server. Clears all caches and reloads fresh.
+          </div>
+          <button onclick="hardRefreshApp()" style="background:var(--acc);color:#000;border:none;padding:8px 16px;border-radius:6px;cursor:pointer;font-size:12px;font-weight:600;font-family:inherit;display:flex;align-items:center;gap:6px">
+            <i class="fas fa-arrows-rotate"></i> Update App (Hard Refresh)
+          </button>
         </div>
       </div>
     </div>
