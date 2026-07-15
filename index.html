@@ -1643,6 +1643,7 @@ async function screenshotAlert(idx){
   var alerts=alertPopupState.overlappingAlerts;
   if(idx<0||idx>=alerts.length)return;
   var a=alerts[idx];
+  currentScreenshotType=a.event;  /* e.g. "Tornado Warning" */
   /* Close the popup so it doesn't appear in the map capture */
   alertMapInstance.closePopup();
   /* Calculate the alert's bounds so we can zoom to it */
@@ -3811,6 +3812,7 @@ function createLightningMarker(lat,lon){
 /* Cache the logo as a data URL so it can be drawn to canvas without CORS
    taint. Fetched once on first screenshot, then reused. */
 var LOGO_DATA_URL=null;
+var currentScreenshotType='Weather Map';  /* updated when screenshot is taken */
 async function preloadLogoDataUrl(){
   if(LOGO_DATA_URL)return LOGO_DATA_URL;
   try{
@@ -4000,6 +4002,7 @@ async function captureScreenshot(){
     alert('Screenshot library not loaded');
     return;
   }
+  currentScreenshotType='Live Weather Map';
   var btn=document.getElementById('screenshotBtn');
   if(btn){btn.classList.add('flash');setTimeout(function(){btn.classList.remove('flash')},400)}
 
@@ -4271,7 +4274,7 @@ async function shareScreenshot(platform){
   }
   var dataUrl=previewImg.src;
   var siteName='Skywarn Storm Spotters & Chasers United States';
-  var shareText='Weather alert from '+siteName+' — '+new Date().toLocaleString('en-US',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit',hour12:true});
+  var shareText=currentScreenshotType+' — '+siteName+' — '+new Date().toLocaleString('en-US',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit',hour12:true});
 
   if(platform==='facebook'){
     /* Facebook doesn't allow direct image upload via URL share.
