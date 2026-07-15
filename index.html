@@ -1083,6 +1083,9 @@ body.capturing .hamburger-menu{display:none!important}
       <div class="shot-modal-actions">
         <button class="shot-btn shot-btn-secondary" onclick="closeShotModal()"><i class="fas fa-xmark"></i> Close</button>
         <a id="shotDownloadLink" class="shot-btn shot-btn-primary" download=""><i class="fas fa-download"></i> Download PNG</a>
+        <button class="shot-btn shot-btn-secondary" onclick="shareScreenshot('facebook')" style="background:#1877f2;color:#fff;border-color:#1877f2"><i class="fab fa-facebook"></i> Facebook</button>
+        <button class="shot-btn shot-btn-secondary" onclick="shareScreenshot('discord')" style="background:#5865f2;color:#fff;border-color:#5865f2"><i class="fab fa-discord"></i> Discord</button>
+        <button class="shot-btn shot-btn-secondary" onclick="shareScreenshot('native')" id="shareNativeBtn" style="display:none"><i class="fas fa-share-nodes"></i> Share</button>
       </div>
     </div>
   </div>
@@ -4254,6 +4257,122 @@ function closeShotModal(){
   var modal=document.getElementById('shotModal');
   if(modal)modal.classList.remove('visible');
 }
+
+/* Share the current screenshot to Facebook, Discord, or native share.
+   The screenshot is a PNG data URL stored in the preview image.
+   - Facebook: Opens Facebook share dialog with the screenshot image
+   - Discord: Opens Discord (web or app) — user attaches manually
+   - Native: Uses the Web Share API (mobile) to share the image file */
+async function shareScreenshot(platform){
+  var previewImg=document.getElementById('shotPreviewImg');
+  if(!previewImg||!previewImg.src){
+    alert('No screenshot to share');
+    return;
+  }
+  var dataUrl=previewImg.src;
+  var siteName='Skywarn Storm Spotters & Chasers United States';
+  var shareText='Weather alert from '+siteName+' — '+new Date().toLocaleString('en-US',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit',hour12:true});
+
+  if(platform==='facebook'){
+    /* Facebook doesn't allow direct image upload via URL share.
+       We convert the data URL to a Blob and open it in a new tab,
+       then redirect to Facebook's share dialog with pre-filled text. */
+    try{
+      var blob=dataURLtoBlob(dataUrl);
+      if(!blob){alert('Could not prepare image for sharing');return}
+      /* Try to use the Web Share API first (works on mobile) */
+      if(navigator.canShare&&navigator.canShare({files:[new File([blob],'skywarn-screenshot.png',{type:'image/png'})]})){
+        await navigator.share({
+          title:siteName,
+          text:shareText,
+          files:[new File([blob],'skywarn-screenshot.png',{type:'image/png'})]
+        });
+        return;
+      }
+      /* Fallback: open Facebook share dialog with text, user attaches image manually */
+      var fbUrl='https://www.facebook.com/sharer/sharer.php?u='+encodeURIComponent(window.location.href)+'&quote='+encodeURIComponent(shareText);
+      window.open(fbUrl,'_blank','width=600,height=400');
+      /* Also download the image so the user can attach it */
+      var a=document.createElement('a');
+      a.href=dataUrl;
+      a.download='skywarn-screenshot.png';
+      a.click();
+      alert('Image downloaded. Attach it to your Facebook post.');
+    }catch(e){
+      console.error('Share error:',e);
+      alert('Could not share to Facebook. Try downloading the PNG instead.');
+    }
+  }else if(platform==='discord'){
+    /* Discord doesn't have a web share URL. We download the image and
+       open Discord so the user can attach it manually. */
+    try{
+      var blob2=dataURLtoBlob(dataUrl);
+      if(blob2&&navigator.canShare&&navigator.canShare({files:[new File([blob2],'skywarn-screenshot.png',{type:'image/png'})]})){
+        await navigator.share({
+          title:siteName,
+          text:shareText,
+          files:[new File([blob2],'skywarn-screenshot.png',{type:'image/png'})]
+        });
+        return;
+      }
+      /* Fallback: download the image, then open Discord */
+      var a2=document.createElement('a');
+      a2.href=dataUrl;
+      a2.download='skywarn-screenshot.png';
+      a2.click();
+      window.open('https://discord.com/channels/@me','_blank');
+      alert('Image downloaded. Attach it to your Discord message.');
+    }catch(e){
+      console.error('Share error:',e);
+      alert('Could not share to Discord. Try downloading the PNG instead.');
+    }
+  }else if(platform==='native'){
+    /* Native Web Share API (mobile - shows the native share sheet) */
+    try{
+      var blob3=dataURLtoBlob(dataUrl);
+      if(blob3&&navigator.canShare&&navigator.canShare({files:[new File([blob3],'skywarn-screenshot.png',{type:'image/png'})]})){
+        await navigator.share({
+          title:siteName,
+          text:shareText,
+          files:[new File([blob3],'skywarn-screenshot.png',{type:'image/png'})]
+        });
+      }else if(navigator.share){
+        await navigator.share({title:siteName,text:shareText});
+      }else{
+        alert('Sharing not supported on this device. Try downloading the PNG instead.');
+      }
+    }catch(e){
+      console.error('Share error:',e);
+    }
+  }
+}
+
+/* Convert a data URL to a Blob object for sharing */
+function dataURLtoBlob(dataUrl){
+  try{
+    var arr=dataUrl.split(',');
+    var mime=arr[0].match(/:(.*?);/)[1];
+    var bstr=atob(arr[1]);
+    var n=bstr.length;
+    var u8arr=new Uint8Array(n);
+    for(var i=0;i<n;i++){
+      u8arr[i]=bstr.charCodeAt(i);
+    }
+    return new Blob([u8arr],{type:mime});
+  }catch(e){
+    console.warn('dataURLtoBlob error:',e);
+    return null;
+  }
+}
+
+/* Show the native share button if the Web Share API is available */
+if(navigator.share||navigator.canShare){
+  document.addEventListener('DOMContentLoaded',function(){
+    var btn=document.getElementById('shareNativeBtn');
+    if(btn)btn.style.display='inline-flex';
+  });
+}
+window.shareScreenshot=shareScreenshot;
 
 /* ── Hamburger menu & tab switching ─────────────────────────────────────── */
 
