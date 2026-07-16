@@ -1934,6 +1934,24 @@ function cycleAlertPopup(delta){
   }
 }
 
+/* Cycle through overlapping SPC outlook polygons in the popup */
+var spcPopupCurrentIdx=0;
+function cycleSpcPopup(delta,total){
+  spcPopupCurrentIdx+=delta;
+  if(spcPopupCurrentIdx<0)spcPopupCurrentIdx=total-1;
+  if(spcPopupCurrentIdx>=total)spcPopupCurrentIdx=0;
+  /* Update which item is visible */
+  var items=document.querySelectorAll('.spc-popup-item');
+  items.forEach(function(item){
+    var idx=parseInt(item.getAttribute('data-idx'),10);
+    item.style.display=idx===spcPopupCurrentIdx?'block':'none';
+  });
+  /* Update counter */
+  var counter=document.querySelector('.spc-popup-counter');
+  if(counter)counter.textContent=(spcPopupCurrentIdx+1)+' of '+total;
+}
+window.cycleSpcPopup=cycleSpcPopup;
+
 /* ── Zone geometry cache - avoids re-fetching same NWS zone polygon ───────
    Two-tier cache:
    1. ZONE_GEOMETRY_CACHE - in-memory, per-page-load (fast)
@@ -2353,11 +2371,117 @@ async function toggleSpcOverlay(){
         dashArray:cat==='TSTM'?'4,3':null
       },
       onEachFeature:function(feature,lyr){
-        lyr.bindPopup('<div style="font-family:Inter,sans-serif;font-size:11px;max-width:220px">'+
-          '<h3 style="font-size:12px;color:'+SPC_COLORS[feature.properties.category]+';margin-bottom:4px">SPC '+feature.properties.label+'</h3>'+
-          '<div style="font-size:9px;color:var(--t3)">Day '+day+' Convective Outlook</div>'+
-          '<div style="font-size:9px;color:var(--t3);margin-top:4px">Source: spc.noaa.gov</div>'+
-          '</div>');
+        /* Use click handler to check for overlapping SPC outlooks */
+        lyr.on('click',function(e){
+          var ll=e.latlng;
+          /* Find all SPC categorical outlooks that overlap this point */
+          var overlappingSpc=[];
+          spcOutlookLayers.forEach(function(spcLayer){
+            spcLayer.eachLayer(function(subLayer){
+              if(subLayer.getBounds&&subLayer.getBounds().contains(ll)){
+                if(subLayer.getLatLngs){
+                  var rings=subLayer.getLatLngs();
+                  var flatRings=[];
+                  if(Array.isArray(rings[0])&&Array.isArray(rings[0][0])){
+                    rings.forEach(function(poly){poly.forEach(function(ring){flatRings.push(ring)})});
+                  }else{
+                    rings.forEach(function(ring){flatRings.push(ring)});
+                  }
+                  for(var ri=0;ri<flatRings.length;ri++){
+                    if(pointInRing(ll,flatRings[ri])){
+                      /* Get the category from the feature properties */
+                      var featProps=subLayer.feature&&subLayer.feature.properties;
+                      if(featProps){
+                        overlappingSpc.push({
+                          label:featProps.label||'Unknown',
+                          category:featProps.category||'',
+                          color:SPC_COLORS[featProps.category]||'#888'
+                        });
+                      }
+                      break;
+                    }
+                  }
+                }
+              }
+            });
+          });
+          /* Also check probability layers */
+          for(var probKey in spcProbLayers){
+            spcProbLayers[probKey].forEach(function(probLayer){
+              probLayer.eachLayer(function(subLayer){
+                if(subLayer.getBounds&&subLayer.getBounds().contains(ll)){
+                  if(subLayer.getLatLngs){
+                    var rings=subLayer.getLatLngs();
+                    var flatRings=[];
+                    if(Array.isArray(rings[0])&&Array.isArray(rings[0][0])){
+                      rings.forEach(function(poly){poly.forEach(function(ring){flatRings.push(ring)})});
+                    }else{
+                      rings.forEach(function(ring){flatRings.push(ring)});
+                    }
+                    for(var ri=0;ri<flatRings.length;ri++){
+                      if(pointInRing(ll,flatRings[ri])){
+                        var featProps=subLayer.feature&&subLayer.feature.properties;
+                        var probLabel=featProps&&(featProps.LABEL2||featProps.label||'');
+                        if(!probLabel){
+                          /* Try to get from the layer's popup content */
+                          if(subLayer.getPopup){
+                            var popup=subLayer.getPopup();
+                            if(popup&&popup.getContent){
+                              var c=popup.getContent();
+                              if(typeof c==='string'){
+                                var m=c.match(/SPC\s+([^<]+)/);
+                                if(m)probLabel=m[1];
+                              }
+                            }
+                          }
+                        }
+                        if(probLabel){
+                          overlappingSpc.push({
+                            label:probLabel,
+                            category:probKey,
+                            color:'#ff7300'
+                          });
+                        }
+                        break;
+                      }
+                    }
+                  }
+                }
+              });
+            });
+          }
+          /* Build popup */
+          var html;
+          if(overlappingSpc.length===0){
+            html='<div style="font-family:Inter,sans-serif;font-size:11px;max-width:220px">'+
+              '<div style="color:var(--t3);font-size:10px">No SPC outlook at this location</div></div>';
+          }else if(overlappingSpc.length===1){
+            var s=overlappingSpc[0];
+            html='<div style="font-family:Inter,sans-serif;font-size:11px;max-width:220px">'+
+              '<h3 style="font-size:12px;color:'+s.color+';margin-bottom:4px">SPC '+s.label+'</h3>'+
+              '<div style="font-size:9px;color:var(--t3)">Day '+day+' Convective Outlook</div>'+
+              '<div style="font-size:9px;color:var(--t3);margin-top:4px">Source: spc.noaa.gov</div></div>';
+          }else{
+            /* Multiple overlapping - show with prev/next arrows */
+            html='<div style="font-family:Inter,sans-serif;font-size:11px;max-width:240px">';
+            overlappingSpc.forEach(function(s,idx){
+              var display=idx===0?'block':'none';
+              html+='<div class="spc-popup-item" data-idx="'+idx+'" style="display:'+display+'">'+
+                '<h3 style="font-size:12px;color:'+s.color+';margin-bottom:4px">SPC '+s.label+'</h3>'+
+                '<div style="font-size:9px;color:var(--t3)">Day '+day+' Convective Outlook</div>'+
+                '<div style="font-size:9px;color:var(--t3);margin-top:4px">Source: spc.noaa.gov</div>'+
+                '</div>';
+            });
+            html+='<div style="display:flex;align-items:center;justify-content:space-between;margin-top:6px;padding:3px 6px;background:rgba(255,115,0,.1);border-radius:3px">'+
+              '<button type="button" onclick="event.stopPropagation();event.preventDefault();cycleSpcPopup(-1,'+overlappingSpc.length+');return false;" style="background:rgba(255,115,0,.12);border:1px solid var(--bdr-a);color:var(--acc);width:20px;height:20px;border-radius:3px;cursor:pointer;font-size:8px;display:flex;align-items:center;justify-content:center;padding:0"><i class="fas fa-chevron-left"></i></button>'+
+              '<span class="spc-popup-counter" style="font-size:8px;color:var(--t2);font-weight:600">1 of '+overlappingSpc.length+'</span>'+
+              '<button type="button" onclick="event.stopPropagation();event.preventDefault();cycleSpcPopup(1,'+overlappingSpc.length+');return false;" style="background:rgba(255,115,0,.12);border:1px solid var(--bdr-a);color:var(--acc);width:20px;height:20px;border-radius:3px;cursor:pointer;font-size:8px;display:flex;align-items:center;justify-content:center;padding:0"><i class="fas fa-chevron-right"></i></button>'+
+              '</div>';
+            html+='</div>';
+          }
+          L.popup({maxWidth:260,minWidth:200}).setLatLng(ll).setContent(html).openOn(alertMapInstance);
+          if(e.originalEvent&&e.originalEvent.stopPropagation){e.originalEvent.stopPropagation()}
+        });
       }
     }).addTo(alertMapInstance);
     spcOutlookLayers.push(layer);
