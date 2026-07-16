@@ -682,6 +682,169 @@ body{
   padding-bottom:4px;
   border-bottom:1px solid var(--bdr);
 }
+
+/* ── Spotter Safety ── */
+.safety-section{
+  background:var(--bg2);
+  border:1px solid var(--bdr);
+  border-radius:8px;
+  padding:14px 16px;
+  margin-bottom:14px;
+}
+.safety-section-title{
+  font-size:13px;
+  font-weight:700;
+  color:var(--acc);
+  text-transform:uppercase;
+  letter-spacing:.04em;
+  margin-bottom:10px;
+  padding-bottom:6px;
+  border-bottom:1px solid var(--bdr);
+  display:flex;
+  align-items:center;
+  gap:8px;
+}
+.safety-section-title i{font-size:12px}
+.safety-list{
+  margin:0;
+  padding-left:20px;
+  counter-reset:safety-counter;
+}
+.safety-list li{
+  font-size:12px;
+  color:var(--t2);
+  line-height:1.6;
+  margin-bottom:8px;
+  padding-left:4px;
+}
+.safety-list li:last-child{margin-bottom:0}
+.safety-list li::marker{
+  color:var(--acc);
+  font-weight:700;
+}
+.safety-src{
+  font-size:9px;
+  color:var(--t3);
+  margin-top:10px;
+  font-style:italic;
+  padding-top:8px;
+  border-top:1px dashed var(--bdr);
+}
+
+/* ACES banner — big horizontal A C E S letters */
+.aces-banner{
+  display:grid;
+  grid-template-columns:repeat(4,1fr);
+  gap:8px;
+  margin:18px 0 14px;
+}
+.aces-letter{
+  aspect-ratio:1/1;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  font-size:30px;
+  font-weight:900;
+  font-family:'Inter',sans-serif;
+  letter-spacing:.02em;
+  border-radius:10px;
+  border:2px solid var(--acc);
+  color:var(--acc);
+  background:rgba(255,115,0,.06);
+  text-shadow:0 0 12px rgba(255,115,0,.35);
+  transition:transform .15s,background .15s;
+}
+.aces-letter[data-letter="A"]{border-color:#ff7300;color:#ff7300}
+.aces-letter[data-letter="C"]{border-color:#ffb340;color:#ffb340;background:rgba(255,179,64,.06)}
+.aces-letter[data-letter="E"]{border-color:#ffd60a;color:#ffd60a;background:rgba(255,214,10,.06)}
+.aces-letter[data-letter="S"]{border-color:#39d353;color:#39d353;background:rgba(57,211,83,.06)}
+@media(max-width:480px){
+  .aces-letter{font-size:24px;border-radius:8px}
+}
+
+/* ACES detail cards */
+.aces-card{
+  display:flex;
+  align-items:stretch;
+  gap:12px;
+  background:var(--bg2);
+  border:1px solid var(--bdr);
+  border-radius:8px;
+  padding:12px 14px;
+  margin-bottom:10px;
+  border-left:4px solid var(--acc);
+  transition:border-color .15s,transform .15s;
+}
+.aces-card:hover{transform:translateX(2px)}
+.aces-card[data-letter="A"]{border-left-color:#ff7300}
+.aces-card[data-letter="C"]{border-left-color:#ffb340}
+.aces-card[data-letter="E"]{border-left-color:#ffd60a}
+.aces-card[data-letter="S"]{border-left-color:#39d353}
+.aces-card-letter{
+  flex:0 0 36px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  font-size:22px;
+  font-weight:900;
+  font-family:'Inter',sans-serif;
+  background:rgba(255,115,0,.1);
+  color:var(--acc);
+  border-radius:6px;
+}
+.aces-card[data-letter="A"] .aces-card-letter{background:rgba(255,115,0,.12);color:#ff7300}
+.aces-card[data-letter="C"] .aces-card-letter{background:rgba(255,179,64,.12);color:#ffb340}
+.aces-card[data-letter="E"] .aces-card-letter{background:rgba(255,214,10,.12);color:#ffd60a}
+.aces-card[data-letter="S"] .aces-card-letter{background:rgba(57,211,83,.12);color:#39d353}
+.aces-card-body{flex:1;min-width:0}
+.aces-card-title{
+  font-size:13px;
+  font-weight:700;
+  color:var(--t1);
+  margin-bottom:4px;
+  text-transform:uppercase;
+  letter-spacing:.03em;
+}
+.aces-card-body p{
+  font-size:11px;
+  color:var(--t2);
+  line-height:1.6;
+  margin:0;
+}
+
+/* Closing callout */
+.safety-callout{
+  display:flex;
+  align-items:flex-start;
+  gap:12px;
+  background:linear-gradient(135deg,rgba(255,115,0,.1),rgba(255,115,0,.03));
+  border:1px solid rgba(255,115,0,.4);
+  border-radius:8px;
+  padding:14px 16px;
+  margin:16px 0 14px;
+  font-size:12px;
+  color:var(--t2);
+  line-height:1.6;
+}
+.safety-callout i{
+  font-size:18px;
+  color:var(--acc);
+  margin-top:2px;
+}
+.safety-callout strong{color:var(--acc)}
+
+/* Footer attribution */
+.safety-footer{
+  font-size:10px;
+  color:var(--t3);
+  font-style:italic;
+  text-align:center;
+  padding:12px 8px 4px;
+  line-height:1.6;
+  border-top:1px dashed var(--bdr);
+  margin-top:8px;
+}
+.safety-footer em{color:var(--t2)}
 /* Weather Feeds tab */
 .wf-feeds-wrap{
   position:fixed;top:calc(53px + env(safe-area-inset-top));left:0;right:0;bottom:0;
@@ -890,6 +1053,10 @@ body.capturing .hamburger-menu{display:none!important}
   <div class="hamburger-menu-item" id="tab-reference" onclick="switchTab('reference')">
     <i class="fas fa-book"></i>
     <span>Reference Library</span>
+  </div>
+  <div class="hamburger-menu-item" id="tab-safety" onclick="switchTab('safety')">
+    <i class="fas fa-hard-hat"></i>
+    <span>Spotter Safety</span>
   </div>
   <div class="hamburger-menu-divider"></div>
   <div class="hamburger-menu-item" id="menu-install" onclick="installPWA()" style="display:none">
@@ -1195,6 +1362,102 @@ body.capturing .hamburger-menu{display:none!important}
 
       <!-- Content -->
       <div id="refContent"></div>
+    </div>
+  </div>
+</div>
+
+<!-- Tab View: Spotter Safety -->
+<div id="view-safety" class="tab-view">
+  <div class="wf-feeds-wrap">
+    <div style="max-width:780px;margin:0 auto">
+
+      <!-- Title -->
+      <h2 style="font-size:20px;color:var(--acc);margin-bottom:6px;text-transform:uppercase;letter-spacing:.04em">
+        <i class="fas fa-hard-hat" style="margin-right:8px"></i> Spotter Safety
+      </h2>
+      <p style="font-size:12px;color:var(--t2);line-height:1.6;margin-bottom:18px">
+        As a spotter, your personal safety is the primary objective. Review and follow these guidelines before every deployment.
+      </p>
+
+      <!-- Core Safety Guidelines -->
+      <div class="safety-section">
+        <h3 class="safety-section-title">
+          <i class="fas fa-shield-halved"></i> Core Safety Guidelines
+        </h3>
+        <ol class="safety-list">
+          <li>The spotter's personal safety is the primary objective of every spotter.</li>
+          <li>The spotter should adhere to the concept of <strong>ACES</strong> at all times.</li>
+          <li>The spotter should obey federal, state, and local laws and directives from public safety officials.</li>
+          <li>The spotter should never put themselves in harm's way. This includes attempting to walk or drive over obstructions (e.g., flooded roadways and downed power lines) and positioning themselves under objects that have a potential to fall or be blown over due to severe weather.</li>
+        </ol>
+        <div class="safety-src">&copy; 2026 University Corporation for Atmospheric Research (UCAR). The COMET&reg; Program.</div>
+      </div>
+
+      <!-- ACES banner -->
+      <div class="aces-banner">
+        <div class="aces-letter" data-letter="A">A</div>
+        <div class="aces-letter" data-letter="C">C</div>
+        <div class="aces-letter" data-letter="E">E</div>
+        <div class="aces-letter" data-letter="S">S</div>
+      </div>
+
+      <!-- ACES intro -->
+      <div class="safety-section">
+        <h3 class="safety-section-title">
+          <i class="fas fa-circle-info"></i> The ACES Concept
+        </h3>
+        <p style="font-size:12px;color:var(--t2);line-height:1.6">
+          The ACES concept, commonly used by emergency management personnel, stands for <strong>Awareness</strong>, <strong>Communication</strong>, <strong>Escape Routes</strong>, and <strong>Safe Zones</strong>. If you remember ACES, you can remain safe in any situation, including spotting.
+        </p>
+      </div>
+
+      <!-- ACES cards -->
+      <div class="aces-card" data-letter="A">
+        <div class="aces-card-letter">A</div>
+        <div class="aces-card-body">
+          <div class="aces-card-title">Awareness</div>
+          <p>Constantly observe the situation around you &mdash; sometimes called situational awareness. Continuously monitoring risks can save your life, especially in rapidly changing weather conditions. Knowing nearby river crossings, power poles, or trees helps you prepare for hazards. When aware of imminent threats and thinking ahead, you can position yourself to minimize risk.</p>
+        </div>
+      </div>
+
+      <div class="aces-card" data-letter="C">
+        <div class="aces-card-letter">C</div>
+        <div class="aces-card-body">
+          <div class="aces-card-title">Communication</div>
+          <p>Communicating your whereabouts to others on a regular basis and having multiple lines of communication available can keep you and others safe from hazards. Always let someone know where you are and where you are going.</p>
+        </div>
+      </div>
+
+      <div class="aces-card" data-letter="E">
+        <div class="aces-card-letter">E</div>
+        <div class="aces-card-body">
+          <div class="aces-card-title">Escape Routes</div>
+          <p>Escape routes are important when you need to get away from danger. An escape route is a clear path that allows you to reach your safe zone well before harm arrives. Anytime you are acting as a spotter, continually note and monitor escape routes available to you. A proper escape route always leads to a safe zone.</p>
+        </div>
+      </div>
+
+      <div class="aces-card" data-letter="S">
+        <div class="aces-card-letter">S</div>
+        <div class="aces-card-body">
+          <div class="aces-card-title">Safe Zones</div>
+          <p>A safe zone or shelter is an area in which you are safe during a hazardous condition. Your safe zone can be a location to shelter in place or an area completely away from the hazardous event. In severe weather, your safe zone could be the lowest portion of a sturdy building away from all windows. For mobile spotting, it could be an area away from the severe weather. Always clearly identify and continually monitor your safe zone.</p>
+        </div>
+      </div>
+
+      <!-- Closing reminder -->
+      <div class="safety-callout">
+        <i class="fas fa-lightbulb"></i>
+        <div>
+          <strong>Remembering ACES</strong> &mdash; remain aware of your surroundings, have open lines of communication, know your escape routes, and know your safe zones &mdash; wherever you go can increase your safety.
+        </div>
+      </div>
+
+      <!-- Footer attribution -->
+      <div class="safety-footer">
+        Produced by The COMET&reg; Program. Adapted from the <em>Role of the SKYWARN&reg; Spotter</em>.<br>
+        &copy; 2026 University Corporation for Atmospheric Research. All rights reserved.
+      </div>
+
     </div>
   </div>
 </div>
@@ -4872,6 +5135,8 @@ function switchTab(tab){
       sub.innerHTML='Site Settings &middot; Refresh Info, Sounds &amp; Console';
     }else if(tab==='reference'){
       sub.innerHTML='Reference Library &middot; SKYWARN Terms &amp; Criteria';
+    }else if(tab==='safety'){
+      sub.innerHTML='Spotter Safety &middot; ACES &amp; Field Guidelines';
     }
   }
   /* If switching to the Weather Feeds tab, load Twitter widgets and RSS feeds */
