@@ -586,6 +586,102 @@ body{
   flex:1;width:100%;height:100%;border:none;
   background:#0a0a0a;
 }
+/* Reference Library category tabs */
+.ref-cat-tabs{
+  display:flex;
+  gap:6px;
+  overflow-x:auto;
+  -webkit-overflow-scrolling:touch;
+  scrollbar-width:thin;
+  scrollbar-color:var(--acc) transparent;
+  padding-bottom:6px;
+  margin-bottom:12px;
+  /* Hide scrollbar on WebKit but keep functional */
+}
+.ref-cat-tabs::-webkit-scrollbar{height:3px}
+.ref-cat-tabs::-webkit-scrollbar-track{background:transparent}
+.ref-cat-tabs::-webkit-scrollbar-thumb{background:var(--acc);border-radius:2px}
+.ref-cat-tab{
+  flex:0 0 auto;
+  display:inline-flex;
+  align-items:center;
+  gap:6px;
+  background:var(--bg2);
+  border:1px solid var(--bdr);
+  color:var(--t2);
+  font-family:inherit;
+  font-size:11px;
+  font-weight:600;
+  text-transform:uppercase;
+  letter-spacing:.03em;
+  padding:7px 12px;
+  border-radius:14px;
+  cursor:pointer;
+  white-space:nowrap;
+  transition:background .15s,color .15s,border-color .15s,transform .1s;
+}
+.ref-cat-tab:hover{border-color:var(--acc);color:var(--t1)}
+.ref-cat-tab:active{transform:scale(.96)}
+.ref-cat-tab.active{
+  background:var(--acc);
+  border-color:var(--acc);
+  color:#0a0a0a;
+}
+.ref-cat-tab .ref-cat-count{
+  display:inline-block;
+  background:rgba(255,255,255,.15);
+  color:inherit;
+  font-size:9px;
+  font-weight:700;
+  padding:1px 5px;
+  border-radius:8px;
+  min-width:14px;
+  text-align:center;
+}
+.ref-cat-tab:not(.active) .ref-cat-count{
+  background:rgba(255,115,0,.12);
+  color:var(--acc);
+}
+.ref-cat-tab.active .ref-cat-count{
+  background:rgba(0,0,0,.25);
+  color:#0a0a0a;
+}
+/* Reference content card */
+.ref-item{
+  background:var(--bg2);
+  border:1px solid var(--bdr);
+  border-radius:6px;
+  padding:10px 14px;
+  margin-bottom:8px;
+  transition:border-color .15s;
+}
+.ref-item:hover{border-color:rgba(255,115,0,.4)}
+.ref-item-title{font-size:13px;font-weight:700;color:var(--t1);margin-bottom:4px}
+.ref-item-def{font-size:11px;color:var(--t2);line-height:1.55}
+.ref-item-src{font-size:9px;color:var(--t3);margin-top:6px;font-style:italic}
+.ref-diagram-slot{
+  margin-top:10px;
+  padding:14px;
+  background:repeating-linear-gradient(45deg,rgba(255,115,0,.04),rgba(255,115,0,.04) 10px,transparent 10px,transparent 20px);
+  border:1px dashed rgba(255,115,0,.35);
+  border-radius:6px;
+  text-align:center;
+  color:var(--t3);
+  font-size:10px;
+  font-style:italic;
+}
+.ref-diagram-slot i{display:block;font-size:18px;margin-bottom:4px;color:rgba(255,115,0,.5)}
+.ref-diagram-slot img{max-width:100%;height:auto;border-radius:4px;display:block;margin:0 auto}
+.ref-cat-header{
+  font-size:13px;
+  font-weight:700;
+  color:var(--acc);
+  text-transform:uppercase;
+  letter-spacing:.04em;
+  margin:4px 0 8px;
+  padding-bottom:4px;
+  border-bottom:1px solid var(--bdr);
+}
 /* Weather Feeds tab */
 .wf-feeds-wrap{
   position:fixed;top:calc(53px + env(safe-area-inset-top));left:0;right:0;bottom:0;
@@ -1083,8 +1179,21 @@ body.capturing .hamburger-menu{display:none!important}
   <div class="wf-feeds-wrap">
     <div style="max-width:900px;margin:0 auto">
       <h2 style="font-size:18px;color:var(--acc);margin-bottom:6px;text-transform:uppercase;letter-spacing:.04em"><i class="fas fa-book" style="margin-right:8px"></i> Reference Library</h2>
-      <p style="font-size:11px;color:var(--t3);margin-bottom:16px">SKYWARN meteorological terms, cloud types, radar, and reporting criteria</p>
-      <input type="text" id="refSearch" placeholder="Search terms..." oninput="filterReference()" style="width:100%;background:var(--bg2);border:1px solid var(--bdr);color:var(--t1);font-family:inherit;font-size:12px;padding:8px 12px;border-radius:6px;margin-bottom:16px">
+      <p style="font-size:11px;color:var(--t3);margin-bottom:12px">SKYWARN meteorological terms, cloud types, radar, and reporting criteria</p>
+
+      <!-- Category tabs (horizontal scroll on mobile) -->
+      <div id="refCategoryTabs" class="ref-cat-tabs"></div>
+
+      <!-- Search box -->
+      <div style="position:relative;margin-bottom:14px">
+        <i class="fas fa-magnifying-glass" style="position:absolute;left:12px;top:50%;transform:translateY(-50%);color:var(--t3);font-size:11px"></i>
+        <input type="text" id="refSearch" placeholder="Search within category..." oninput="filterReference()" style="width:100%;background:var(--bg2);border:1px solid var(--bdr);color:var(--t1);font-family:inherit;font-size:12px;padding:9px 12px 9px 32px;border-radius:6px">
+      </div>
+
+      <!-- Category count summary -->
+      <div id="refCountSummary" style="font-size:10px;color:var(--t3);margin-bottom:10px;text-transform:uppercase;letter-spacing:.05em"></div>
+
+      <!-- Content -->
       <div id="refContent"></div>
     </div>
   </div>
@@ -4874,6 +4983,26 @@ if('serviceWorker' in navigator){
    68 terms across 8 categories: Cloud Types, Radar Terms, Severe Weather,
    Hydrology, Winter Weather, SKYWARN Criteria, Diagrams. */
 
+var REFERENCE_CATEGORIES=[
+  'Cloud Types','Radar Terms','Severe Weather','Hydrology',
+  'Winter Weather','SKYWARN Criteria','Diagrams'
+];
+
+/* Optional diagram image map. Drop image filenames here once uploaded.
+   Key = term name (must match REFERENCE_TERMS[].term exactly).
+   Value = image path relative to the page (e.g. "diagrams/storm_cross.png").
+   The placeholder slot will be replaced with the image automatically. */
+var REFERENCE_IMAGES={
+  'Thunderstorm Features Diagram':'',
+  'Supercell Side View Diagram':'',
+  'Atmospheric Shear & Storm Structure':'',
+  'Atmospheric Thermodynamics & Convection Flowchart':'',
+  'Storm Spotter Checklist':'',
+  'NOAA Severe Weather Reporting Checklist':'',
+  'Storm Spotter\'s Dictionary':'',
+  'Hail Size Reference':''
+};
+
 var REFERENCE_TERMS=[
   {term:'Anvil',definition:'The flat, spreading top of a cumulonimbus cloud, often shaped like a blacksmith\'s anvil. A crisp-edged anvil indicates a strengthening storm; wispy edges suggest a weakening storm.',category:'Cloud Types',source:'NWS / Storm Spotter\'s Dictionary'},
   {term:'Beaver\'s Tail',definition:'A low cloud band with a relatively broad, flat appearance suggestive of a beaver\'s tail. It is attached to a supercell\'s updraft base and extends to the east or northeast.',category:'Cloud Types',source:'Storm Spotter\'s Dictionary — NWS Fort Worth'},
@@ -4946,16 +5075,102 @@ var REFERENCE_TERMS=[
 ];
 
 var refLoaded=false;
+var refCurrentCategory='All';
+
 function loadReference(){
   if(refLoaded)return;
   refLoaded=true;
-  renderReference(REFERENCE_TERMS);
+  buildRefCategoryTabs();
+  renderReference();
 }
 
-function renderReference(terms){
+/* Build the horizontal scrollable category tab bar */
+function buildRefCategoryTabs(){
+  var bar=document.getElementById('refCategoryTabs');
+  if(!bar)return;
+  /* Count terms per category */
+  var counts={};
+  REFERENCE_TERMS.forEach(function(t){
+    counts[t.category]=(counts[t.category]||0)+1;
+  });
+  var html='';
+  /* "All" tab first */
+  html+='<button class="ref-cat-tab '+(refCurrentCategory==='All'?'active':'')+'" data-cat="All" onclick="setRefCategory(\'All\')">';
+  html+='<i class="fas fa-layer-group" style="font-size:9px"></i> All';
+  html+='<span class="ref-cat-count">'+REFERENCE_TERMS.length+'</span>';
+  html+='</button>';
+  /* One tab per category */
+  REFERENCE_CATEGORIES.forEach(function(cat){
+    var n=counts[cat]||0;
+    if(n===0)return; /* skip empty categories */
+    html+='<button class="ref-cat-tab '+(refCurrentCategory===cat?'active':'')+'" data-cat="'+cat.replace(/"/g,'&quot;')+'" onclick="setRefCategory(\''+cat.replace(/'/g,'\\\'')+'\')">';
+    html+='<span>'+cat+'</span>';
+    html+='<span class="ref-cat-count">'+n+'</span>';
+    html+='</button>';
+  });
+  bar.innerHTML=html;
+}
+
+function setRefCategory(cat){
+  refCurrentCategory=cat;
+  /* Update active state on tabs */
+  var tabs=document.querySelectorAll('.ref-cat-tab');
+  tabs.forEach(function(t){
+    t.classList.toggle('active',t.getAttribute('data-cat')===cat);
+  });
+  /* Clear search when switching categories for clarity */
+  var search=document.getElementById('refSearch');
+  if(search)search.value='';
+  renderReference();
+  /* Scroll selected tab into view on mobile */
+  var active=document.querySelector('.ref-cat-tab.active');
+  if(active && active.scrollIntoView){
+    active.scrollIntoView({behavior:'smooth',block:'nearest',inline:'center'});
+  }
+}
+
+/* Returns the filtered list based on current category + search query */
+function getFilteredReference(){
+  var search=document.getElementById('refSearch');
+  var q=search?search.value.toLowerCase().trim():'';
+  var list=REFERENCE_TERMS;
+  if(refCurrentCategory!=='All'){
+    list=list.filter(function(t){return t.category===refCurrentCategory});
+  }
+  if(q){
+    list=list.filter(function(t){
+      return t.term.toLowerCase().indexOf(q)>=0
+          || t.definition.toLowerCase().indexOf(q)>=0
+          || t.category.toLowerCase().indexOf(q)>=0;
+    });
+  }
+  return list;
+}
+
+function renderReference(){
   var el=document.getElementById('refContent');
   if(!el)return;
-  /* Group by category */
+  var terms=getFilteredReference();
+  /* Count summary */
+  var summary=document.getElementById('refCountSummary');
+  if(summary){
+    var label=refCurrentCategory==='All'?'All Categories':refCurrentCategory;
+    summary.textContent='Showing '+terms.length+' term'+(terms.length===1?'':'s')+' \u00B7 '+label;
+  }
+
+  /* If a single category is selected, don't repeat the category header — just render items */
+  if(refCurrentCategory!=='All'){
+    var html='';
+    if(terms.length===0){
+      html='<div style="text-align:center;color:var(--t3);padding:40px;font-size:12px">No results found</div>';
+    }else{
+      terms.forEach(function(t){html+=renderRefItem(t,false)});
+    }
+    el.innerHTML=html;
+    return;
+  }
+
+  /* "All" view — group by category */
   var categories={};
   terms.forEach(function(t){
     if(!categories[t.category])categories[t.category]=[];
@@ -4964,16 +5179,8 @@ function renderReference(terms){
   var html='';
   Object.keys(categories).forEach(function(cat){
     html+='<div style="margin-bottom:20px">';
-    html+='<h3 style="font-size:13px;font-weight:700;color:var(--acc);text-transform:uppercase;letter-spacing:.04em;margin-bottom:8px;padding-bottom:4px;border-bottom:1px solid var(--bdr)">'+cat+'</h3>';
-    categories[cat].forEach(function(t){
-      html+='<div style="background:var(--bg2);border:1px solid var(--bdr);border-radius:6px;padding:10px 14px;margin-bottom:8px">';
-      html+='<div style="font-size:13px;font-weight:700;color:var(--t1);margin-bottom:4px">'+t.term+'</div>';
-      html+='<div style="font-size:11px;color:var(--t2);line-height:1.5">'+t.definition+'</div>';
-      if(t.source){
-        html+='<div style="font-size:9px;color:var(--t3);margin-top:6px;font-style:italic">Source: '+t.source+'</div>';
-      }
-      html+='</div>';
-    });
+    html+='<h3 class="ref-cat-header">'+cat+'</h3>';
+    categories[cat].forEach(function(t){html+=renderRefItem(t,false)});
     html+='</div>';
   });
   if(terms.length===0){
@@ -4982,18 +5189,35 @@ function renderReference(terms){
   el.innerHTML=html;
 }
 
-function filterReference(){
-  var search=document.getElementById('refSearch');
-  if(!search)return;
-  var q=search.value.toLowerCase();
-  if(!q){
-    renderReference(REFERENCE_TERMS);
-    return;
+/* Render a single reference term card */
+function renderRefItem(t,showCat){
+  var html='<div class="ref-item">';
+  html+='<div class="ref-item-title">'+t.term+'</div>';
+  html+='<div class="ref-item-def">'+t.definition+'</div>';
+  /* If this term has an image mapped, show it; otherwise show a placeholder slot for Diagrams */
+  var img=REFERENCE_IMAGES[t.term];
+  if(t.category==='Diagrams'){
+    if(img){
+      html+='<div class="ref-diagram-slot" style="padding:6px;background:transparent;border:none">';
+      html+='<img src="'+img+'" alt="'+t.term+'" loading="lazy">';
+      html+='</div>';
+    }else{
+      html+='<div class="ref-diagram-slot">';
+      html+='<i class="fas fa-image"></i>';
+      html+='<div>Diagram image coming soon</div>';
+      html+='<div style="font-size:9px;margin-top:2px;opacity:.7">Upload \u2014 slot reserved in code</div>';
+      html+='</div>';
+    }
   }
-  var filtered=REFERENCE_TERMS.filter(function(t){
-    return t.term.toLowerCase().indexOf(q)>=0||t.definition.toLowerCase().indexOf(q)>=0||t.category.toLowerCase().indexOf(q)>=0;
-  });
-  renderReference(filtered);
+  if(t.source){
+    html+='<div class="ref-item-src">Source: '+t.source+'</div>';
+  }
+  html+='</div>';
+  return html;
+}
+
+function filterReference(){
+  renderReference();
 }
 
 /* ── Boot sequence ──────────────────────────────────────────────────────── */
