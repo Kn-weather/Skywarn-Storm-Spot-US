@@ -895,13 +895,20 @@ body.capturing .hamburger-menu{display:none!important}
           <option value="2">Day 2</option>
           <option value="3">Day 3</option>
         </select>
-        <div style="margin-top:4px;display:grid;grid-template-columns:1fr 1fr;gap:2px">
+        <div style="font-size:8px;color:var(--t3);text-transform:uppercase;letter-spacing:.04em;margin-top:4px;margin-bottom:2px">Categorical Risk</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:2px">
           <label style="font-size:10px"><input type="checkbox" id="amSpcTstm" checked onchange="toggleSpcOverlay()"> <span style="display:inline-block;width:10px;height:10px;background:#c1e9c1;border:1px solid #999;border-radius:2px;vertical-align:middle;margin:0 2px"></span>TSTM</label>
           <label style="font-size:10px"><input type="checkbox" id="amSpcEnh" checked onchange="toggleSpcOverlay()"> <span style="display:inline-block;width:10px;height:10px;background:#ffa500;border:1px solid #999;border-radius:2px;vertical-align:middle;margin:0 2px"></span>ENH</label>
           <label style="font-size:10px"><input type="checkbox" id="amSpcMrgl" checked onchange="toggleSpcOverlay()"> <span style="display:inline-block;width:10px;height:10px;background:#73bf93;border:1px solid #999;border-radius:2px;vertical-align:middle;margin:0 2px"></span>MRGL</label>
           <label style="font-size:10px"><input type="checkbox" id="amSpcMdt" checked onchange="toggleSpcOverlay()"> <span style="display:inline-block;width:10px;height:10px;background:#ff0000;border:1px solid #999;border-radius:2px;vertical-align:middle;margin:0 2px"></span>MDT</label>
           <label style="font-size:10px"><input type="checkbox" id="amSpcSlgt" checked onchange="toggleSpcOverlay()"> <span style="display:inline-block;width:10px;height:10px;background:#ffff00;border:1px solid #999;border-radius:2px;vertical-align:middle;margin:0 2px"></span>SLGT</label>
           <label style="font-size:10px"><input type="checkbox" id="amSpcHigh" checked onchange="toggleSpcOverlay()"> <span style="display:inline-block;width:10px;height:10px;background:#ff00ff;border:1px solid #999;border-radius:2px;vertical-align:middle;margin:0 2px"></span>HIGH</label>
+        </div>
+        <div style="font-size:8px;color:var(--t3);text-transform:uppercase;letter-spacing:.04em;margin-top:4px;margin-bottom:2px">Probability Layers</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:2px">
+          <label style="font-size:9px"><input type="checkbox" id="amSpcTorn" onchange="toggleSpcOverlay()"> Tornado</label>
+          <label style="font-size:9px"><input type="checkbox" id="amSpcHail" onchange="toggleSpcOverlay()"> Hail</label>
+          <label style="font-size:9px"><input type="checkbox" id="amSpcWind" onchange="toggleSpcOverlay()"> Wind</label>
         </div>
       </div>
 
@@ -2223,9 +2230,12 @@ var spcProbLayers={torn:[],hail:[],wind:[]};  /* probability layer state */
    given day. These are separate GeoJSON files from the categorical
    outlook. Each feature has LABEL2 (e.g. "2% Tornado Risk") and
    fill/stroke colors in properties. */
-async function fetchSpcProbLayers(day){
+async function fetchSpcProbLayers(day,enabledProbs){
   var dayStr=String(day);
-  for(var layerKey in SPC_PROB_LAYERS){
+  /* If no specific layers requested, fetch all */
+  var layersToFetch=enabledProbs||['torn','hail','wind'];
+  for(var li=0;li<layersToFetch.length;li++){
+    var layerKey=layersToFetch[li];
     var url='https://www.spc.noaa.gov/products/outlook/day'+dayStr+'otlk_'+layerKey+'.lyr.geojson';
     var txt=await fP(url);
     if(!txt)continue;
@@ -2359,8 +2369,19 @@ async function toggleSpcOverlay(){
      Risk", "5% Hail Risk", "5% Wind Risk", etc.
      Day 3 doesn't have probability layers (SPC only issues them for
      Day 1 and Day 2), so we skip them for day 3. */
+  /* Fetch probability layers based on checkboxes (Day 1 & 2 only) */
   if(day!=='3'){
-    fetchSpcProbLayers(day);  /* async, doesn't block */
+    var probSettings={
+      torn:document.getElementById('amSpcTorn')&&document.getElementById('amSpcTorn').checked,
+      hail:document.getElementById('amSpcHail')&&document.getElementById('amSpcHail').checked,
+      wind:document.getElementById('amSpcWind')&&document.getElementById('amSpcWind').checked
+    };
+    /* Only fetch layers that are checked */
+    var enabledProbs=[];
+    for(var pk in probSettings){if(probSettings[pk])enabledProbs.push(pk)}
+    if(enabledProbs.length>0){
+      fetchSpcProbLayers(day,enabledProbs);
+    }
   }
 }
 
