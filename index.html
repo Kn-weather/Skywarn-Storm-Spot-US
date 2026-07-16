@@ -791,6 +791,10 @@ body.capturing .hamburger-menu{display:none!important}
     <i class="fas fa-bolt"></i>
     <span>Lightning Map</span>
   </div>
+  <div class="hamburger-menu-item" id="tab-reference" onclick="switchTab('reference')">
+    <i class="fas fa-book"></i>
+    <span>Reference Library</span>
+  </div>
   <div class="hamburger-menu-divider"></div>
   <div class="hamburger-menu-item" id="menu-install" onclick="installPWA()" style="display:none">
     <i class="fas fa-download"></i>
@@ -1070,6 +1074,18 @@ body.capturing .hamburger-menu{display:none!important}
           </button>
         </div>
       </div>
+    </div>
+  </div>
+</div>
+
+<!-- Tab View: Reference Library -->
+<div id="view-reference" class="tab-view">
+  <div class="wf-feeds-wrap">
+    <div style="max-width:900px;margin:0 auto">
+      <h2 style="font-size:18px;color:var(--acc);margin-bottom:6px;text-transform:uppercase;letter-spacing:.04em"><i class="fas fa-book" style="margin-right:8px"></i> Reference Library</h2>
+      <p style="font-size:11px;color:var(--t3);margin-bottom:16px">SKYWARN meteorological terms, cloud types, radar, and reporting criteria</p>
+      <input type="text" id="refSearch" placeholder="Search terms..." oninput="filterReference()" style="width:100%;background:var(--bg2);border:1px solid var(--bdr);color:var(--t1);font-family:inherit;font-size:12px;padding:8px 12px;border-radius:6px;margin-bottom:16px">
+      <div id="refContent"></div>
     </div>
   </div>
 </div>
@@ -4745,11 +4761,17 @@ function switchTab(tab){
       sub.innerHTML='Lightning Map &middot; Blitzortung Real-Time Strikes';
     }else if(tab==='settings'){
       sub.innerHTML='Site Settings &middot; Refresh Info, Sounds &amp; Console';
+    }else if(tab==='reference'){
+      sub.innerHTML='Reference Library &middot; SKYWARN Terms &amp; Criteria';
     }
   }
   /* If switching to the Weather Feeds tab, load Twitter widgets and RSS feeds */
   if(tab==='weatherfeeds'){
     loadWeatherFeeds();
+  }
+  /* If switching to the Reference Library tab, load the reference data */
+  if(tab==='reference'){
+    loadReference();
   }
 }
 
@@ -4845,6 +4867,133 @@ if('serviceWorker' in navigator){
       console.warn('[PWA] Service Worker registration failed:',err);
     });
   });
+}
+
+/* ── Reference Library ─────────────────────────────────────────────────────
+   SKYWARN meteorological reference terms extracted from StormSpotter Pro.
+   68 terms across 8 categories: Cloud Types, Radar Terms, Severe Weather,
+   Hydrology, Winter Weather, SKYWARN Criteria, Diagrams. */
+
+var REFERENCE_TERMS=[
+  {term:'Anvil',definition:'The flat, spreading top of a cumulonimbus cloud, often shaped like a blacksmith\'s anvil. A crisp-edged anvil indicates a strengthening storm; wispy edges suggest a weakening storm.',category:'Cloud Types',source:'NWS / Storm Spotter\'s Dictionary'},
+  {term:'Beaver\'s Tail',definition:'A low cloud band with a relatively broad, flat appearance suggestive of a beaver\'s tail. It is attached to a supercell\'s updraft base and extends to the east or northeast.',category:'Cloud Types',source:'Storm Spotter\'s Dictionary — NWS Fort Worth'},
+  {term:'Cumulonimbus',definition:'A tall, vertically-developed thunderstorm cloud capable of producing severe weather including lightning, heavy rain, hail, and tornadoes.',category:'Cloud Types',source:'NWS'},
+  {term:'Flanking Line',definition:'A line of cumulus, or towering cumulus, clouds connecting to and extending outward from the most active part of a supercell, normally on the southwest side.',category:'Cloud Types',source:'Storm Spotter\'s Dictionary — NWS Fort Worth'},
+  {term:'Inflow Bands',definition:'Bands of low clouds, arranged parallel to the low-level winds, that move into or toward a thunderstorm. They may indicate the strength of the inflow of moist air into a storm, as well as a storm\'s overall intensity.',category:'Cloud Types',source:'Storm Spotter\'s Dictionary — NWS Fort Worth'},
+  {term:'Mammatus Clouds',definition:'Rounded, smooth, pouch-like protrusions hanging from the underside of a thunderstorm anvil. Mammatus clouds often accompany severe thunderstorms but do not themselves produce severe weather and are not an indicator of tornadic activity.',category:'Cloud Types',source:'Storm Spotter\'s Dictionary — NWS Fort Worth'},
+  {term:'Overshooting Top',definition:'A dome-like protrusion above the anvil caused by a powerful updraft punching through the tropopause. The taller and wider the overshoot, the stronger the storm.',category:'Cloud Types',source:'COMET/SKYWARN'},
+  {term:'Rain-Free Base',definition:'The lowered, precipitation-free base of a thunderstorm updraft. The vast majority of tornadoes develop from the rain-free base.',category:'Cloud Types',source:'COMET/SKYWARN'},
+  {term:'Scud',definition:'Ragged, non-rotating cloud fragments found beneath a thunderstorm base. Often mistaken for wall clouds or funnels, but scud does not rotate.',category:'Cloud Types',source:'NWS'},
+  {term:'Shelf Cloud',definition:'A low, wedge-shaped cloud attached to a thunderstorm\'s gust front. Shelf clouds are associated with outflow and can indicate the approach of damaging winds (sometimes excess of 80 mph) but are NOT tornadic.',category:'Cloud Types',source:'NWS / COMET'},
+  {term:'Tail Cloud',definition:'A cloud extension from a wall cloud that typically points toward the region of heavy precipitation in the storm, slanting downward toward the precipitation shaft.',category:'Cloud Types',source:'COMET/SKYWARN'},
+  {term:'Virga',definition:'Precipitation that evaporates before reaching the ground, appearing as wispy streaks beneath a cloud base that do not extend to the surface. Still indicative of possible strong winds aloft.',category:'Cloud Types',source:'COMET/SKYWARN'},
+  {term:'Wall Cloud',definition:'A persistent, rotating lowering of a cumulonimbus cloud base beneath the rain-free base, typically circular or oval-shaped. It appears underneath the updraft and is often (but not always) a precursor to tornado development.',category:'Cloud Types',source:'NWS / Storm Spotter\'s Dictionary'},
+  {term:'Correlation Coefficient (CC)',definition:'A dual-pol radar product. Values near 1.0 indicate uniform targets (rain). Low CC collocated with rotation and high reflectivity may indicate a Tornado Debris Signature.',category:'Radar Terms',source:'NWS'},
+  {term:'Dual-Pol Radar',definition:'Polarimetric radar that transmits both horizontal and vertical pulses, enabling identification of hail, tornado debris, and precipitation type.',category:'Radar Terms',source:'NWS'},
+  {term:'Hook Echo',definition:'A hook-shaped radar reflectivity signature associated with a mesocyclone and potential tornado. Formed by precipitation wrapping around the rotating updraft.',category:'Radar Terms',source:'NWS'},
+  {term:'RFD (Rear-Flank Downdraft)',definition:'A descending current of dry air wrapping around the back side of a supercell mesocyclone. The RFD often precedes tornado development and appears as a clear slot in the cloud base.',category:'Radar Terms',source:'NWS'},
+  {term:'Reflectivity',definition:'A radar measurement of precipitation intensity expressed in dBZ. Higher values indicate heavier precipitation; values above 65 dBZ may indicate large hail.',category:'Radar Terms',source:'NWS'},
+  {term:'TDS (Tornado Debris Signature)',definition:'A dual-pol radar signature: low Correlation Coefficient collocated with high reflectivity and strong rotation (couplet). Confirms a tornado is lofting debris.',category:'Radar Terms',source:'NWS'},
+  {term:'Velocity',definition:'Doppler radar measurement of wind motion — toward (negative/green) or away (positive/red) from the radar, expressed in knots. A tight couplet of inbound/outbound velocities indicates rotation.',category:'Radar Terms',source:'NWS'},
+  {term:'Anticyclonic',definition:'Rotation in a clockwise direction when viewed from above, similar to a high pressure area. Anticyclonic features rotate from right to left when viewed from the ground.',category:'Severe Weather',source:'Storm Spotter\'s Dictionary — NWS Fort Worth'},
+  {term:'Clear Slot',definition:'A local region of clearing skies or reduced cloud cover indicating an intrusion of drier air. A clear slot is often seen on the west or southwest side of a wall cloud and is visual evidence of a rear flank downdraft.',category:'Severe Weather',source:'Storm Spotter\'s Dictionary — NWS Fort Worth'},
+  {term:'Cyclonic',definition:'Rotation in a counterclockwise direction when viewed from above, similar to a low pressure area. Cyclonic features rotate from left to right when viewed from the ground.',category:'Severe Weather',source:'Storm Spotter\'s Dictionary — NWS Fort Worth'},
+  {term:'Downburst',definition:'A column of air that rapidly sinks toward the ground, usually accompanied by precipitation as in a shower or thunderstorm.',category:'Severe Weather',source:'Storm Spotter\'s Dictionary — NWS Fort Worth'},
+  {term:'Downdraft',definition:'A column of air that rapidly sinks toward the ground, usually accompanied by precipitation as in a shower or thunderstorm.',category:'Severe Weather',source:'Storm Spotter\'s Dictionary — NWS Fort Worth'},
+  {term:'Funnel Cloud',definition:'A condensation funnel extending from the base of a thunderstorm, associated with a rotating column of air that is NOT in contact with the ground. Once it touches the ground, it becomes a tornado.',category:'Severe Weather',source:'Storm Spotter\'s Dictionary — NWS Fort Worth'},
+  {term:'Gust Front',definition:'The leading edge of a thunderstorm downdraft that is often marked by a wind shift and gusty winds. Gust fronts are sometimes associated with a shelf cloud or roll cloud.',category:'Severe Weather',source:'Storm Spotter\'s Dictionary — NWS Fort Worth'},
+  {term:'Gustnado',definition:'A surface-based circulation associated with thunderstorm outflow. Gustnadoes are not associated with updrafts and are not attached to cloud bases, so they are not considered true tornadoes.',category:'Severe Weather',source:'Storm Spotter\'s Dictionary — NWS Fort Worth'},
+  {term:'Hail Size Reference',definition:'A supercell with a large amount of visible precipitation encircling the mesocyclone. HP supercells can be difficult to observe visually, as the precipitation often obscures the updraft-related cloud features.',category:'Severe Weather',source:'Storm Spotter\'s Dictionary — NWS Fort Worth'},
+  {term:'High Precipitation (HP) Supercell',definition:'A supercell with a large amount of visible precipitation encircling the mesocyclone. HP supercells can be difficult to observe visually, as the precipitation often obscures the updraft-related cloud features.',category:'Severe Weather',source:'Storm Spotter\'s Dictionary — NWS Fort Worth'},
+  {term:'Low Precipitation (LP) Supercell',definition:'A supercell with little visible precipitation falling from it. LP supercells often have flared-out updraft towers with striations, making them easy to recognize visually. However, they can be difficult to detect on radar.',category:'Severe Weather',source:'Storm Spotter\'s Dictionary — NWS Fort Worth'},
+  {term:'Mesocyclone',definition:'A rotating updraft within a supercell thunderstorm, typically 2–10 km in diameter. The mesocyclone is the parent circulation from which tornadoes may develop.',category:'Severe Weather',source:'NWS'},
+  {term:'Microburst',definition:'A localized downburst less than 4 km in horizontal extent. Can produce wind speeds exceeding 100 mph and is a significant aviation hazard.',category:'Severe Weather',source:'NWS'},
+  {term:'Outflow Boundary',definition:'The boundary between cool downdraft air and warm ambient air. Can persist for hours and trigger new storm development along its leading edge.',category:'Severe Weather',source:'NWS'},
+  {term:'Tornado',definition:'A violently rotating column of air in contact with both the ground and the base of a convective cloud. Tornadoes can range in color from nearly white to nearly black and may or may not have a visible condensation funnel.',category:'Severe Weather',source:'NWS / COMET'},
+  {term:'Updraft',definition:'The lifeblood of a thunderstorm — a column of warm, moist air rising into the storm. Without it, the thunderstorm would weaken and dissipate. Tilted updrafts typically produce longer-lasting storms than vertical updrafts.',category:'Severe Weather',source:'COMET/SKYWARN'},
+  {term:'Wind Shear',definition:'A change in wind speed and/or direction with height. Deep-layer shear (0–6 km) determines storm organization; mid-level shear (3–6 km) supports mesocyclone rotation; low-level shear (0–1 km) is critical for tornado formation.',category:'Severe Weather',source:'NWS'},
+  {term:'Debris Flow',definition:'A rapidly moving mixture of mud, rock, and water down a slope, often triggered by heavy rainfall on unstable hillsides.',category:'Hydrology',source:'NWS'},
+  {term:'Flash Flood',definition:'A rapid rise of swift-moving water, resulting in a threat to life and property. Flash floods can occur within minutes or hours of excessive rainfall, dam/levee failure, or rapid snowmelt.',category:'Hydrology',source:'Storm Spotter\'s Dictionary — NWS Fort Worth'},
+  {term:'Flash Flood Warning',definition:'An urgent weather product indicating a flash flood is imminent or occurring. Take immediate action to move to higher ground.',category:'Hydrology',source:'Storm Spotter\'s Dictionary — NWS Fort Worth'},
+  {term:'Flood Stage',definition:'The river level at which water overflows its banks and begins causing damage to property.',category:'Hydrology',source:'NWS'},
+  {term:'River Flood',definition:'Overflowing of rivers beyond their banks due to sustained heavy rain or snowmelt, typically developing over hours to days.',category:'Hydrology',source:'NWS'},
+  {term:'Runoff',definition:'Surface water flow over land rather than infiltrating the ground, particularly significant over impervious urban surfaces.',category:'Hydrology',source:'NWS'},
+  {term:'Urban Flooding',definition:'Flooding due to impervious surfaces (roads, parking lots) overwhelming drainage systems during heavy rain events.',category:'Hydrology',source:'NWS'},
+  {term:'Blizzard',definition:'Sustained or frequent gusts ≥35 mph with falling or blowing snow reducing visibility to less than ¼ mile for 3 or more hours.',category:'Winter Weather',source:'NWS'},
+  {term:'Freezing Rain',definition:'Rain that freezes on contact with surfaces at or below 32°F, creating a glaze of ice. Report any ice accumulation to NWS.',category:'Winter Weather',source:'NWS'},
+  {term:'Ice Accretion',definition:'Buildup of ice on surfaces, wires, and structures from freezing rain or freezing drizzle.',category:'Winter Weather',source:'NWS'},
+  {term:'Lake-Effect Snow',definition:'Snow produced when cold air passes over warm lake water, picking up moisture and depositing heavy snowfall on downwind shores.',category:'Winter Weather',source:'NWS'},
+  {term:'Sleet',definition:'Frozen raindrops (ice pellets) that refreeze before reaching the ground. Distinct from freezing rain, which freezes on contact with surfaces.',category:'Winter Weather',source:'NWS'},
+  {term:'Snow Squall',definition:'A brief but intense burst of moderate to heavy snow reducing visibility rapidly, often accompanied by gusty winds.',category:'Winter Weather',source:'NWS'},
+  {term:'Tornado',definition:'Report IMMEDIATELY — any confirmed or suspected tornado on the ground. Give location, direction of travel, and any visible debris.',category:'SKYWARN Criteria',source:'SKYWARN'},
+  {term:'Funnel Cloud',definition:'Report any rotating funnel cloud, even if not touching the ground. Note whether it is descending.',category:'SKYWARN Criteria',source:'SKYWARN'},
+  {term:'Wall Cloud',definition:'Report any wall cloud, especially if rotating or lowering rapidly. Note size, rotation direction, and any associated features.',category:'SKYWARN Criteria',source:'SKYWARN'},
+  {term:'Severe Hail',definition:'Report hail ≥ 1.00 inch (quarter size) in diameter. Measure the largest stone along the longest dimension. Note ground cover depth if applicable.',category:'SKYWARN Criteria',source:'SKYWARN'},
+  {term:'Severe Wind',definition:'Report measured or estimated winds ≥ 58 mph (50 knots). Include any observed damage as supporting evidence.',category:'SKYWARN Criteria',source:'SKYWARN'},
+  {term:'Flooding',definition:'Report water flowing over roadways or significant urban/flash flooding. Note depth if possible and whether it is rising or falling.',category:'SKYWARN Criteria',source:'SKYWARN'},
+  {term:'Thunderstorm Damage',definition:'Report any storm damage: downed trees, power lines, structural damage, or vehicles displaced. Damage is reportable even without confirmed wind speed.',category:'SKYWARN Criteria',source:'SKYWARN'},
+  {term:'Low Visibility',definition:'Report visibility reduced to less than 1 mile in precipitation, fog, or blowing dust/snow.',category:'SKYWARN Criteria',source:'SKYWARN'},
+  {term:'Snowfall Rates',definition:'Report snowfall accumulating at 1 inch or more per hour. Also report total accumulation at NWS-requested intervals.',category:'SKYWARN Criteria',source:'SKYWARN'},
+  {term:'Freezing Rain',definition:'Report any ice accumulation from freezing rain regardless of amount. Note thickness on surfaces if measurable.',category:'SKYWARN Criteria',source:'SKYWARN'},
+  {term:'Minimum Severe Criteria',definition:'National minimum thresholds for NWS reports: Hail ≥ 1 inch diameter, Wind ≥ 58 mph (50 knots), any Tornado, or Thunderstorm Damage. Only ONE criterion needs to be met.',category:'SKYWARN Criteria',source:'COMET/SKYWARN'},
+  {term:'Thunderstorm Features Diagram',definition:'Cross-section diagram showing key thunderstorm components and their approximate heights above surface: anvil (~12–15 km), overshooting top, downdraft, updraft, shelf cloud, flanking-line towers, wall cloud, rain-free base, and precipitation types (light rain, heavy rain curtain, large hail, tornado).',category:'Diagrams',source:'Bureau of Meteorology — Commonwealth of Australia 2025'},
+  {term:'Supercell Side View Diagram',definition:'Detailed side-view cross-section of a supercell cumulonimbus showing: overshooting top, mesocyclone, mammatus clouds, ice crystal clouds, up- and downdrafts, fall streaks, cumulus, rear flank downdraft (RFD), pseudocoldfront, forward flank downdraft (FFD), downburst, inflow tail, evaporating precipitation, wall cloud, and tornado.',category:'Diagrams',source:'COMET / NWS'},
+  {term:'Atmospheric Shear & Storm Structure',definition:'Infographic showing wind shear layers and their roles: Low-level shear (0–1 km) controls near-surface rotation and tornado formation. Deep-layer shear (0–6 km) determines storm organization. Mid-level shear (3–6 km) maintains tilted updrafts and supports mesocyclone rotation. Jet stream influence (9–12 km) enhances ventilation and storm intensity. Formula: Shear + Lift + Instability = Strong, Long-Lived Storms.',category:'Diagrams',source:'NWS / COMET'},
+  {term:'Atmospheric Thermodynamics & Convection Flowchart',definition:'Comprehensive reference flowchart covering: Moisture & Humidity (vapor pressure, dew point, mixing ratio), Thermodynamics (potential temperature, CAPE, CIN), Stability & Convection (lapse rates, LCL, LFC), Vertical Structure (hypsometric equation), Convective Weather Indices (Lifted Index, K-Index, Total Totals, Showalter, SWEAT), and human/aviation applications (Heat Index, Wind Chill, Density Altitude).',category:'Diagrams',source:'NWS / COMET'},
+  {term:'Storm Spotter Checklist',definition:'NWS Fort Worth field checklist covering: Shelf Cloud identification (slopes down/away from rain, found near front/middle of storm), Wall Cloud identification (slopes toward rain, forms under smooth flat updraft base), Supercell low-level clues (rain-free base, inflow bands, shelf cloud), mid/upper-level clues (crisp cauliflower updraft texture), tornado threat indicators (rounded updraft tower, striations, circular updraft base, increasing spin, clear slot formation, rain burst behind wall cloud), and Wind Speed Estimation chart (32–112+ mph).',category:'Diagrams',source:'NWS Fort Worth — weather.gov/fortworth'},
+  {term:'NOAA Severe Weather Reporting Checklist',definition:'Quick-reference card from NWS Fort Worth covering key convective weather terms for field spotters. Includes: Anticyclonic, Anvil, Beaver\'s Tail, Clear Slot, Cyclonic, Downburst, Downdraft, Flanking Line, Flash Flood, Flash Flood Warning, Funnel Cloud, Gust Front, Gustnado, HP Supercell, Inflow Bands, LP Supercell, Mammatus Clouds, and more.',category:'Diagrams',source:'NWS Fort Worth — weather.gov/fortworth'},
+  {term:'Storm Spotter\'s Dictionary',definition:'Quick-reference card from NWS Fort Worth covering key convective weather terms for field spotters. Includes: Anticyclonic, Anvil, Beaver\'s Tail, Clear Slot, Cyclonic, Downburst, Downdraft, Flanking Line, Flash Flood, Flash Flood Warning, Funnel Cloud, Gust Front, Gustnado, HP Supercell, Inflow Bands, LP Supercell, Mammatus Clouds, and more.',category:'Diagrams',source:'NWS Fort Worth — weather.gov/fortworth'},
+];
+
+var refLoaded=false;
+function loadReference(){
+  if(refLoaded)return;
+  refLoaded=true;
+  renderReference(REFERENCE_TERMS);
+}
+
+function renderReference(terms){
+  var el=document.getElementById('refContent');
+  if(!el)return;
+  /* Group by category */
+  var categories={};
+  terms.forEach(function(t){
+    if(!categories[t.category])categories[t.category]=[];
+    categories[t.category].push(t);
+  });
+  var html='';
+  Object.keys(categories).forEach(function(cat){
+    html+='<div style="margin-bottom:20px">';
+    html+='<h3 style="font-size:13px;font-weight:700;color:var(--acc);text-transform:uppercase;letter-spacing:.04em;margin-bottom:8px;padding-bottom:4px;border-bottom:1px solid var(--bdr)">'+cat+'</h3>';
+    categories[cat].forEach(function(t){
+      html+='<div style="background:var(--bg2);border:1px solid var(--bdr);border-radius:6px;padding:10px 14px;margin-bottom:8px">';
+      html+='<div style="font-size:13px;font-weight:700;color:var(--t1);margin-bottom:4px">'+t.term+'</div>';
+      html+='<div style="font-size:11px;color:var(--t2);line-height:1.5">'+t.definition+'</div>';
+      if(t.source){
+        html+='<div style="font-size:9px;color:var(--t3);margin-top:6px;font-style:italic">Source: '+t.source+'</div>';
+      }
+      html+='</div>';
+    });
+    html+='</div>';
+  });
+  if(terms.length===0){
+    html='<div style="text-align:center;color:var(--t3);padding:40px;font-size:12px">No results found</div>';
+  }
+  el.innerHTML=html;
+}
+
+function filterReference(){
+  var search=document.getElementById('refSearch');
+  if(!search)return;
+  var q=search.value.toLowerCase();
+  if(!q){
+    renderReference(REFERENCE_TERMS);
+    return;
+  }
+  var filtered=REFERENCE_TERMS.filter(function(t){
+    return t.term.toLowerCase().indexOf(q)>=0||t.definition.toLowerCase().indexOf(q)>=0||t.category.toLowerCase().indexOf(q)>=0;
+  });
+  renderReference(filtered);
 }
 
 /* ── Boot sequence ──────────────────────────────────────────────────────── */
