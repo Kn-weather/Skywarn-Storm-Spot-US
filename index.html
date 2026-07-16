@@ -2075,6 +2075,14 @@ var SPC_LABELS={
   MDT:'Moderate (Level 4)',
   HIGH:'High (Level 5)'
 };
+/* SPC probability layer configs: tornado, hail, wind.
+   These are separate GeoJSON files with probability contours.
+   Colors come from the GeoJSON properties (fill/stroke). */
+var SPC_PROB_LAYERS={
+  torn:{label:'Tornado',icon:'fa-tornado'},
+  hail:{label:'Hail',icon:'fa-cloud-meatball'},
+  wind:{label:'Wind',icon:'fa-wind'}
+};
 /* SPC outlook cache - keyed by day number. Avoids re-fetching the same
    GeoJSON when the user just toggles level checkboxes. Persisted to
    localStorage for 6 hours (SPC issues new outlooks 5x/day for Day 1,
@@ -2209,6 +2217,66 @@ async function fetchSpcOutlook(day){
    so we can remove them on toggle/refresh. */
 var spcOutlookLayers=[];
 var spcOutlookFetching=false;
+var spcProbLayers={torn:[],hail:[],wind:[]};  /* probability layer state */
+
+/* Fetch and draw SPC probability layers (tornado, hail, wind) for a
+   given day. These are separate GeoJSON files from the categorical
+   outlook. Each feature has LABEL2 (e.g. "2% Tornado Risk") and
+   fill/stroke colors in properties. */
+async function fetchSpcProbLayers(day){
+  var dayStr=String(day);
+  for(var layerKey in SPC_PROB_LAYERS){
+    var url='https://www.spc.noaa.gov/products/outlook/day'+dayStr+'otlk_'+layerKey+'.lyr.geojson';
+    var txt=await fP(url);
+    if(!txt)continue;
+    try{
+      var data=JSON.parse(txt);
+      if(!data||!data.features||!Array.isArray(data.features))continue;
+      data.features.forEach(function(feature){
+        if(!feature||!feature.geometry||!feature.properties)return;
+        var props=feature.properties;
+        var label2=props.LABEL2||'';
+        var fill=props.fill||'#888';
+        var stroke=props.stroke||fill;
+        /* Parse geometry to get polygon rings */
+        var rings=[];
+        var geom=feature.geometry;
+        if(geom.type==='Polygon'){
+          if(geom.coordinates&&geom.coordinates[0]&&geom.coordinates[0].length>=3){
+            rings.push(geom.coordinates[0]);
+          }
+        }else if(geom.type==='MultiPolygon'){
+          geom.coordinates.forEach(function(poly){
+            if(poly[0]&&poly[0].length>=3)rings.push(poly[0]);
+          });
+        }
+        rings.forEach(function(ring){
+          var layer=L.geoJSON({type:'Polygon',coordinates:[ring]},{
+            style:{color:stroke,weight:1.5,fillColor:fill,fillOpacity:0.25,dashArray:'4,3'},
+            onEachFeature:function(f,l){
+              l.bindPopup('<div style="font-family:Inter,sans-serif;font-size:11px;max-width:200px">'+
+                '<h3 style="font-size:12px;color:'+stroke+';margin-bottom:4px">SPC '+label2+'</h3>'+
+                '<div style="font-size:9px;color:var(--t3)">Day '+dayStr+' Probability Outlook</div>'+
+                '</div>');
+            }
+          }).addTo(alertMapInstance);
+          spcProbLayers[layerKey].push(layer);
+        });
+      });
+      console.log('[SPC] Loaded '+layerKey+' layer for day',dayStr);
+    }catch(e){
+      console.warn('[SPC] Error parsing '+layerKey+' layer:',e);
+    }
+  }
+}
+
+/* Remove all SPC probability layers from the map */
+function clearSpcProbLayers(){
+  for(var key in spcProbLayers){
+    spcProbLayers[key].forEach(function(l){alertMapInstance.removeLayer(l)});
+    spcProbLayers[key]=[];
+  }
+}
 
 /* Toggle handler for the SPC outlook overlay. Reads the day selector and
    the level checkboxes, fetches (or uses cached) outlook data, removes
@@ -2216,9 +2284,11 @@ var spcOutlookFetching=false;
 async function toggleSpcOverlay(){
   if(!alertMapInstance)initAlertMap();
   if(!alertMapInstance)return;
-  /* Remove existing SPC layers */
+  /* Remove existing SPC categorical layers */
   spcOutlookLayers.forEach(function(l){alertMapInstance.removeLayer(l)});
   spcOutlookLayers=[];
+  /* Remove existing SPC probability layers */
+  clearSpcProbLayers();
   var daySel=document.getElementById('amSpcDay');
   var day=daySel?daySel.value:'';
   /* If day is empty ("Off"), don't show any SPC layers */
@@ -2282,6 +2352,16 @@ async function toggleSpcOverlay(){
     }).addTo(alertMapInstance);
     spcOutlookLayers.push(layer);
   });
+
+  /* Also fetch and draw the probability layers (tornado, hail, wind).
+     These are drawn with dashed outlines to distinguish them from the
+     categorical outlook. They show probability contours like "2% Tornado
+     Risk", "5% Hail Risk", "5% Wind Risk", etc.
+     Day 3 doesn't have probability layers (SPC only issues them for
+     Day 1 and Day 2), so we skip them for day 3. */
+  if(day!=='3'){
+    fetchSpcProbLayers(day);  /* async, doesn't block */
+  }
 }
 
 
