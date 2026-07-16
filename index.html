@@ -2279,14 +2279,18 @@ async function fetchSpcProbLayers(day,enabledProbs){
           });
         }
         rings.forEach(function(ring){
-          var layer=L.geoJSON({type:'Polygon',coordinates:[ring]},{
-            style:{color:stroke,weight:1.5,fillColor:fill,fillOpacity:0.25,dashArray:'4,3'},
-            onEachFeature:function(f,l){
-              l.bindPopup('<div style="font-family:Inter,sans-serif;font-size:11px;max-width:200px">'+
-                '<h3 style="font-size:12px;color:'+stroke+';margin-bottom:4px">SPC '+label2+'</h3>'+
-                '<div style="font-size:9px;color:var(--t3)">Day '+dayStr+' Probability Outlook</div>'+
-                '</div>');
-            }
+          /* Store the label2 in the GeoJSON properties so the click handler
+             can find it when checking for overlapping polygons */
+          var probFeature={
+            type:'Feature',
+            properties:{LABEL2:label2,fill:fill,stroke:stroke,probType:layerKey},
+            geometry:{type:'Polygon',coordinates:[ring]}
+          };
+          var layer=L.geoJSON({type:'FeatureCollection',features:[probFeature]},{
+            style:{color:stroke,weight:1.5,fillColor:fill,fillOpacity:0.25,dashArray:'4,3'}
+            /* No bindPopup - the categorical layer's click handler detects
+               probability layers too. This prevents probability polygons
+               from intercepting clicks and showing their own popup. */
           }).addTo(alertMapInstance);
           spcProbLayers[layerKey].push(layer);
         });
@@ -2421,25 +2425,13 @@ async function toggleSpcOverlay(){
                     for(var ri=0;ri<flatRings.length;ri++){
                       if(pointInRing(ll,flatRings[ri])){
                         var featProps=subLayer.feature&&subLayer.feature.properties;
-                        var probLabel=featProps&&(featProps.LABEL2||featProps.label||'');
-                        if(!probLabel){
-                          /* Try to get from the layer's popup content */
-                          if(subLayer.getPopup){
-                            var popup=subLayer.getPopup();
-                            if(popup&&popup.getContent){
-                              var c=popup.getContent();
-                              if(typeof c==='string'){
-                                var m=c.match(/SPC\s+([^<]+)/);
-                                if(m)probLabel=m[1];
-                              }
-                            }
-                          }
-                        }
+                        var probLabel=featProps&&(featProps.LABEL2||'');
+                        var probColor=featProps&&(featProps.stroke||featProps.fill||'#ff7300');
                         if(probLabel){
                           overlappingSpc.push({
                             label:probLabel,
                             category:probKey,
-                            color:'#ff7300'
+                            color:probColor
                           });
                         }
                         break;
