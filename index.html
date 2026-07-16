@@ -2287,7 +2287,8 @@ async function fetchSpcProbLayers(day,enabledProbs){
             geometry:{type:'Polygon',coordinates:[ring]}
           };
           var layer=L.geoJSON({type:'FeatureCollection',features:[probFeature]},{
-            style:{color:stroke,weight:1.5,fillColor:fill,fillOpacity:0.25,dashArray:'4,3'}
+            style:{color:stroke,weight:1.5,fillColor:fill,fillOpacity:0.25,dashArray:'4,3'},
+            interactive:false  /* clicks pass through to categorical layer below */
             /* No bindPopup - the categorical layer's click handler detects
                probability layers too. This prevents probability polygons
                from intercepting clicks and showing their own popup. */
