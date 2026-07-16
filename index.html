@@ -2288,10 +2288,88 @@ async function fetchSpcProbLayers(day,enabledProbs){
           };
           var layer=L.geoJSON({type:'FeatureCollection',features:[probFeature]},{
             style:{color:stroke,weight:1.5,fillColor:fill,fillOpacity:0.25,dashArray:'4,3'},
-            interactive:false  /* clicks pass through to categorical layer below */
-            /* No bindPopup - the categorical layer's click handler detects
-               probability layers too. This prevents probability polygons
-               from intercepting clicks and showing their own popup. */
+            onEachFeature:function(f,l){
+              /* Click handler for probability layers - same overlap detection
+                 as categorical layers. This ensures popups work even when
+                 no categorical layer is present (e.g. only probability
+                 layers are checked). */
+              l.on('click',function(e){
+                var ll=e.latlng;
+                var overlappingSpc=[];
+                /* Check categorical layers */
+                spcOutlookLayers.forEach(function(spcLayer){
+                  spcLayer.eachLayer(function(subLayer){
+                    if(subLayer.getBounds&&subLayer.getBounds().contains(ll)){
+                      if(subLayer.getLatLngs){
+                        var rings=subLayer.getLatLngs();
+                        var flatRings=[];
+                        if(Array.isArray(rings[0])&&Array.isArray(rings[0][0])){
+                          rings.forEach(function(poly){poly.forEach(function(ring){flatRings.push(ring)})});
+                        }else{
+                          rings.forEach(function(ring){flatRings.push(ring)});
+                        }
+                        for(var ri=0;ri<flatRings.length;ri++){
+                          if(pointInRing(ll,flatRings[ri])){
+                            var fp=subLayer.feature&&subLayer.feature.properties;
+                            if(fp){
+                              overlappingSpc.push({label:fp.label||'Unknown',category:fp.category||'',color:SPC_COLORS[fp.category]||'#888'});
+                            }
+                            break;
+                          }
+                        }
+                      }
+                    }
+                  });
+                });
+                /* Check probability layers */
+                for(var probKey in spcProbLayers){
+                  spcProbLayers[probKey].forEach(function(probLayer){
+                    probLayer.eachLayer(function(subLayer){
+                      if(subLayer.getBounds&&subLayer.getBounds().contains(ll)){
+                        if(subLayer.getLatLngs){
+                          var rings=subLayer.getLatLngs();
+                          var flatRings=[];
+                          if(Array.isArray(rings[0])&&Array.isArray(rings[0][0])){
+                            rings.forEach(function(poly){poly.forEach(function(ring){flatRings.push(ring)})});
+                          }else{
+                            rings.forEach(function(ring){flatRings.push(ring)});
+                          }
+                          for(var ri=0;ri<flatRings.length;ri++){
+                            if(pointInRing(ll,flatRings[ri])){
+                              var fp=subLayer.feature&&subLayer.feature.properties;
+                              var pl=fp&&(fp.LABEL2||'');
+                              var pc=fp&&(fp.stroke||fp.fill||'#ff7300');
+                              if(pl){
+                                overlappingSpc.push({label:pl,category:probKey,color:pc});
+                              }
+                              break;
+                            }
+                          }
+                        }
+                      }
+                    });
+                  });
+                }
+                /* Build popup */
+                var html;
+                if(overlappingSpc.length===0){
+                  html='<div style="font-family:Inter,sans-serif;font-size:11px;max-width:220px"><div style="color:var(--t3);font-size:10px">No SPC outlook at this location</div></div>';
+                }else if(overlappingSpc.length===1){
+                  var s=overlappingSpc[0];
+                  html='<div style="font-family:Inter,sans-serif;font-size:11px;max-width:220px"><h3 style="font-size:12px;color:'+s.color+';margin-bottom:4px">SPC '+s.label+'</h3><div style="font-size:9px;color:var(--t3)">Day '+dayStr+' Convective Outlook</div><div style="font-size:9px;color:var(--t3);margin-top:4px">Source: spc.noaa.gov</div></div>';
+                }else{
+                  html='<div style="font-family:Inter,sans-serif;font-size:11px;max-width:240px">';
+                  overlappingSpc.forEach(function(s,idx){
+                    var display=idx===0?'block':'none';
+                    html+='<div class="spc-popup-item" data-idx="'+idx+'" style="display:'+display+'"><h3 style="font-size:12px;color:'+s.color+';margin-bottom:4px">SPC '+s.label+'</h3><div style="font-size:9px;color:var(--t3)">Day '+dayStr+' Convective Outlook</div><div style="font-size:9px;color:var(--t3);margin-top:4px">Source: spc.noaa.gov</div></div>';
+                  });
+                  html+='<div style="display:flex;align-items:center;justify-content:space-between;margin-top:6px;padding:3px 6px;background:rgba(255,115,0,.1);border-radius:3px"><button type="button" onclick="event.stopPropagation();event.preventDefault();cycleSpcPopup(-1,'+overlappingSpc.length+');return false;" style="background:rgba(255,115,0,.12);border:1px solid var(--bdr-a);color:var(--acc);width:20px;height:20px;border-radius:3px;cursor:pointer;font-size:8px;display:flex;align-items:center;justify-content:center;padding:0"><i class="fas fa-chevron-left"></i></button><span class="spc-popup-counter" style="font-size:8px;color:var(--t2);font-weight:600">1 of '+overlappingSpc.length+'</span><button type="button" onclick="event.stopPropagation();event.preventDefault();cycleSpcPopup(1,'+overlappingSpc.length+');return false;" style="background:rgba(255,115,0,.12);border:1px solid var(--bdr-a);color:var(--acc);width:20px;height:20px;border-radius:3px;cursor:pointer;font-size:8px;display:flex;align-items:center;justify-content:center;padding:0"><i class="fas fa-chevron-right"></i></button></div>';
+                  html+='</div>';
+                }
+                L.popup({maxWidth:260,minWidth:200}).setLatLng(ll).setContent(html).openOn(alertMapInstance);
+                if(e.originalEvent&&e.originalEvent.stopPropagation){e.originalEvent.stopPropagation()}
+              });
+            }
           }).addTo(alertMapInstance);
           spcProbLayers[layerKey].push(layer);
         });
