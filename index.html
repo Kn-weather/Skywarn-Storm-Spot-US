@@ -7144,10 +7144,84 @@ function sndScreenshot(){
    fetches the latest sounding and renders it inline in the popup. */
 
 var sndPinLayer=null;        /* Leaflet layerGroup holding all station pins */
-var sndPopupCache={};        /* stationId -> {data, params, ts} cache */
+var sndPopupCache={};        /* stationId -> {data, params, img, ts} cache */
 var sndPinMarkers={};        /* stationId -> Leaflet marker (for icon updates) */
 var sndStaleStations={};     /* stationId -> true if latest cycle returned no data */
 var sndStaleRefreshTimer=null; /* setInterval handle for background stale re-check */
+
+/* localStorage persistence keys */
+var SND_CACHE_KEY='skywarn_snd_cache_v1';   /* per-station skew-T cache */
+var SND_STALE_KEY='skywarn_snd_stale_v1';   /* per-station stale state */
+
+/* Save the popup cache to localStorage. Called after every successful fetch. */
+function sndSaveCache(){
+  try{
+    /* Only persist lightweight fields — drop the parsed 'data' levels array
+       to keep storage small. We re-fetch when the user opens the full tab. */
+    var lite={};
+    for(var id in sndPopupCache){
+      var c=sndPopupCache[id];
+      lite[id]={
+        ts:c.ts,
+        valid:c.data?c.data.valid:'',
+        station:c.data?c.data.station:id,
+        img:c.img,
+        params:c.params
+      };
+    }
+    localStorage.setItem(SND_CACHE_KEY,JSON.stringify(lite));
+  }catch(e){
+    /* localStorage may be full (img data URLs are large). Try trimming older
+       entries and retry once. */
+    try{
+      var lite={};
+      var ids=Object.keys(sndPopupCache);
+      /* Keep only the 30 most recent entries */
+      var kept=ids.slice(-30);
+      kept.forEach(function(id){
+        var c=sndPopupCache[id];
+        lite[id]={ts:c.ts,valid:c.data?c.data.valid:'',station:c.data?c.data.station:id,img:c.img,params:c.params};
+      });
+      localStorage.setItem(SND_CACHE_KEY,JSON.stringify(lite));
+    }catch(e2){/* give up silently */}
+  }
+}
+
+/* Save stale state to localStorage. Called after every state change. */
+function sndSaveStale(){
+  try{
+    localStorage.setItem(SND_STALE_KEY,JSON.stringify(sndStaleStations));
+  }catch(e){/* ignore */}
+}
+
+/* Load both caches from localStorage. Called once on layer init. */
+function sndLoadPersistedState(){
+  try{
+    var raw=localStorage.getItem(SND_CACHE_KEY);
+    if(raw){
+      var lite=JSON.parse(raw);
+      for(var id in lite){
+        var e=lite[id];
+        if(!e||!e.img||!e.ts)continue;
+        /* Reconstruct the data object minimally — we keep img + params,
+           plus enough metadata to open the full Soundings tab. The full
+           levels array is re-fetched on demand. */
+        sndPopupCache[id]={
+          data:{station:e.station||id,valid:e.valid||'',levels:[]},
+          params:e.params,
+          img:e.img,
+          ts:e.ts
+        };
+      }
+    }
+  }catch(e){/* ignore malformed */}
+  try{
+    var sraw=localStorage.getItem(SND_STALE_KEY);
+    if(sraw){
+      sndStaleStations=JSON.parse(sraw)||{};
+    }
+  }catch(e){/* ignore malformed */}
+}
 
 function toggleSndLayer(){
   var cb=document.getElementById('amSndEnable');
@@ -7197,11 +7271,16 @@ function sndSetStale(stationId,stale){
     if(marker&&station){
       marker.setIcon(sndMakePinIcon(station));
     }
+    /* Persist the new stale state to localStorage */
+    sndSaveStale();
   }
 }
 
 function sndAddPinLayer(){
   if(sndPinLayer||!alertMapInstance)return;
+  /* Load persisted cache + stale state from localStorage so pins render
+     in their correct (orange/gray) state immediately on page load. */
+  sndLoadPersistedState();
   sndPinLayer=L.layerGroup();
   sndPinMarkers={};
   SND_STATIONS.forEach(function(s){
@@ -7216,6 +7295,45 @@ function sndAddPinLayer(){
     sndPinLayer.addLayer(m);
   });
   sndPinLayer.addTo(alertMapInstance);
+  /* If any cached entries are from an older cycle than the current one,
+     re-fetch them in the background to refresh the data + clear stale state. */
+  sndRefreshOutdatedCachedPins();
+}
+
+/* For each cached pin whose ts is older than the current cycle, silently
+   re-fetch and update. This way cached pins refresh automatically when a
+   new 00Z/12Z cycle becomes available, without losing the instant-load
+   behavior of the existing cache. */
+function sndRefreshOutdatedCachedPins(){
+  var currentTs=sndLatestCycleISO();
+  var toRefresh=[];
+  for(var id in sndPopupCache){
+    if(sndPopupCache[id].ts!==currentTs){
+      toRefresh.push(id);
+    }
+  }
+  /* Also include currently-stale pins so they auto-retry on each layer
+     enable, not just every 15 min. */
+  Object.keys(sndStaleStations).forEach(function(id){
+    if(toRefresh.indexOf(id)<0)toRefresh.push(id);
+  });
+  toRefresh.forEach(function(id){
+    var station=SND_STATIONS.find(function(s){return s.id===id});
+    if(!station)return;
+    var url='https://mesonet.agron.iastate.edu/json/raob.py?station='+id+'&network=_RAOB&ts='+encodeURIComponent(currentTs);
+    fetch(url).then(function(r){return r.json()}).then(function(data){
+      var profiles=data.profiles||[];
+      if(profiles.length>0){
+        var profile=profiles[0];
+        var parsed=sndParseProfile(profile);
+        var img=sndRenderToDataURL(parsed,station);
+        var params=sndComputeParams(parsed);
+        sndPopupCache[id]={data:parsed,params:params,img:img,ts:currentTs};
+        sndSaveCache();
+        sndSetStale(id,false);
+      }
+    }).catch(function(){/* leave cache as-is; will retry next cycle */});
+  });
 }
 
 function sndRemovePinLayer(){
@@ -7243,6 +7361,7 @@ function sndRefreshStalePins(){
         var img=sndRenderToDataURL(parsed,SND_STATIONS.find(function(s){return s.id===id}));
         var params=sndComputeParams(parsed);
         sndPopupCache[id]={data:parsed,params:params,img:img,ts:ts};
+        sndSaveCache();
         sndSetStale(id,false);
       }
     }).catch(function(){/* leave stale; will retry next cycle */});
@@ -7265,14 +7384,26 @@ function sndOpenPinPopup(station,latlng){
   .setContent(sndPopupLoadingHTML(station))
   .openOn(alertMapInstance);
 
-  /* Check cache first */
+  /* Check cache first. If the cached entry is for the current cycle,
+     show it instantly. If it's for an older cycle, show it instantly
+     anyway (better than a spinner) but trigger a background refresh. */
   var cached=sndPopupCache[station.id];
+  var currentTs=sndLatestCycleISO();
   if(cached){
     sndRenderPinPopupContent(popup,station,cached);
+    /* If the cache is stale (different cycle), refresh silently in the
+       background and update the popup content when the new data arrives. */
+    if(cached.ts!==currentTs){
+      sndBackgroundRefreshPin(station,popup,currentTs);
+    }
     return;
   }
-  /* Fetch latest 00Z or 12Z */
-  var ts=sndLatestCycleISO();
+  /* No cache at all — fetch fresh */
+  sndFetchPinPopup(popup,station,currentTs);
+}
+
+/* Fetch a fresh sounding for a pin popup. Used for first-time clicks. */
+function sndFetchPinPopup(popup,station,ts){
   var url='https://mesonet.agron.iastate.edu/json/raob.py?station='+station.id+'&network=_RAOB&ts='+encodeURIComponent(ts);
   fetch(url).then(function(r){
     if(!r.ok)throw new Error('HTTP '+r.status);
@@ -7292,6 +7423,7 @@ function sndOpenPinPopup(station,latlng){
     var params=sndComputeParams(parsed);
     var cached={data:parsed,params:params,img:img,ts:ts};
     sndPopupCache[station.id]=cached;
+    sndSaveCache();
     /* Data is fresh — clear stale state if it was previously stale */
     sndSetStale(station.id,false);
     sndRenderPinPopupContent(popup,station,cached);
@@ -7300,6 +7432,37 @@ function sndOpenPinPopup(station,latlng){
        temporarily unreachable. Leave pin color as-is. */
     sndRenderPinPopupError(popup,station,'Failed to fetch: '+(err.message||err)+'. This is likely a temporary network issue — try again in a moment.');
   });
+}
+
+/* Silently refresh a pin's data in the background. Updates the cache and
+   popup content (if still open) when the new data arrives. Does NOT show
+   a loading spinner — the cached image stays visible until the new one
+   is ready, then swaps in. */
+function sndBackgroundRefreshPin(station,popup,ts){
+  var url='https://mesonet.agron.iastate.edu/json/raob.py?station='+station.id+'&network=_RAOB&ts='+encodeURIComponent(ts);
+  fetch(url).then(function(r){
+    if(!r.ok)throw new Error('HTTP '+r.status);
+    return r.json();
+  }).then(function(data){
+    var profiles=data.profiles||[];
+    if(profiles.length===0){
+      /* New cycle has no data yet — mark stale, leave popup as-is */
+      sndSetStale(station.id,true);
+      return;
+    }
+    var profile=profiles[0];
+    var parsed=sndParseProfile(profile);
+    var img=sndRenderToDataURL(parsed,station);
+    var params=sndComputeParams(parsed);
+    var cached={data:parsed,params:params,img:img,ts:ts};
+    sndPopupCache[station.id]=cached;
+    sndSaveCache();
+    sndSetStale(station.id,false);
+    /* If the popup is still open, swap in the new content */
+    if(popup && popup.isOpen && popup.isOpen()){
+      sndRenderPinPopupContent(popup,station,cached);
+    }
+  }).catch(function(){/* silent — leave cached version visible */});
 }
 
 /* Return ISO timestamp for the most recent COMPLETED 00Z or 12Z cycle */
