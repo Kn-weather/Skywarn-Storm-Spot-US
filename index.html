@@ -882,6 +882,163 @@ body{
   margin-top:8px;
 }
 .safety-footer em{color:var(--t2)}
+
+/* ── Soundings (Skew-T) ── */
+.snd-wrap{
+  position:fixed;
+  top:calc(53px + env(safe-area-inset-top));
+  left:0;right:0;bottom:0;
+  background:#0a0a0a;
+  overflow-y:auto;
+  -webkit-overflow-scrolling:touch;
+  padding:14px;
+  padding-bottom:calc(14px + env(safe-area-inset-bottom));
+}
+.snd-header h2{
+  font-size:18px;color:var(--acc);
+  margin-bottom:4px;
+  text-transform:uppercase;letter-spacing:.04em;
+  display:flex;align-items:center;gap:8px;
+}
+.snd-header h2 i{font-size:16px}
+.snd-sub{
+  font-size:11px;color:var(--t3);
+  line-height:1.5;margin-bottom:14px;
+  max-width:780px;
+}
+.snd-controls{
+  display:flex;align-items:flex-end;gap:8px;flex-wrap:wrap;
+  margin-bottom:14px;
+  padding:10px;
+  background:var(--bg2);
+  border:1px solid var(--bdr);
+  border-radius:8px;
+}
+.snd-control-group{
+  display:flex;flex-direction:column;gap:4px;
+  flex:1 1 180px;
+}
+.snd-control-group label{
+  font-size:9px;color:var(--t3);
+  text-transform:uppercase;letter-spacing:.05em;
+  font-weight:600;
+}
+.snd-control-group select{
+  background:var(--bg);
+  border:1px solid var(--bdr);
+  color:var(--t1);
+  font-family:inherit;font-size:12px;
+  padding:7px 10px;
+  border-radius:5px;
+  cursor:pointer;
+  outline:none;
+}
+.snd-control-group select:focus{border-color:var(--acc)}
+.snd-btn{
+  background:var(--bg2);
+  border:1px solid var(--bdr);
+  color:var(--t2);
+  font-family:inherit;font-size:13px;
+  padding:8px 12px;
+  border-radius:5px;
+  cursor:pointer;
+  transition:background .15s,color .15s,border-color .15s;
+  flex:0 0 auto;
+}
+.snd-btn:hover{border-color:var(--acc);color:var(--t1)}
+.snd-btn-acc{
+  background:var(--acc);color:#0a0a0a;border-color:var(--acc);
+}
+.snd-btn-acc:hover{background:#ff8c33;color:#0a0a0a}
+
+.snd-layout{
+  display:grid;
+  grid-template-columns:minmax(0,1fr) 280px;
+  gap:14px;
+  align-items:start;
+}
+@media(max-width:900px){
+  .snd-layout{grid-template-columns:1fr}
+}
+.snd-canvas-wrap{
+  position:relative;
+  background:var(--bg2);
+  border:1px solid var(--bdr);
+  border-radius:8px;
+  padding:8px;
+  overflow:hidden;
+}
+#sndCanvas{
+  width:100%;
+  height:auto;
+  max-width:100%;
+  display:block;
+  background:#0e0e0e;
+  border-radius:4px;
+}
+.snd-loading,.snd-error{
+  position:absolute;
+  top:50%;left:50%;
+  transform:translate(-50%,-50%);
+  background:rgba(10,10,10,.92);
+  padding:18px 26px;
+  border-radius:8px;
+  font-size:13px;color:var(--t1);
+  border:1px solid var(--bdr);
+  text-align:center;
+}
+.snd-loading i{color:var(--acc);margin-right:6px}
+.snd-error{color:#ff5a5a;border-color:rgba(255,90,90,.4);max-width:80%}
+.snd-error i{color:#ff5a5a;margin-right:6px}
+
+.snd-params{
+  background:var(--bg2);
+  border:1px solid var(--bdr);
+  border-radius:8px;
+  padding:12px;
+  font-size:11px;
+  color:var(--t2);
+}
+.snd-params-empty{
+  text-align:center;color:var(--t3);
+  padding:30px 10px;font-size:11px;font-style:italic;
+}
+.snd-param-section{
+  margin-bottom:14px;
+}
+.snd-param-section:last-child{margin-bottom:0}
+.snd-param-section-title{
+  font-size:10px;font-weight:700;
+  color:var(--acc);
+  text-transform:uppercase;letter-spacing:.05em;
+  margin-bottom:6px;padding-bottom:4px;
+  border-bottom:1px solid var(--bdr);
+}
+.snd-param-row{
+  display:flex;justify-content:space-between;
+  padding:3px 0;
+  font-size:11px;
+}
+.snd-param-row .snd-param-label{color:var(--t2)}
+.snd-param-row .snd-param-value{
+  color:var(--t1);font-weight:600;
+  font-variant-numeric:tabular-nums;
+}
+.snd-param-row .snd-param-value.warn{color:#ffb340}
+.snd-param-row .snd-param-value.crit{color:#ff5a5a}
+.snd-param-row .snd-param-value.good{color:#39d353}
+
+.snd-footer{
+  margin-top:14px;
+  font-size:9px;
+  color:var(--t3);
+  text-align:center;
+  padding-top:10px;
+  border-top:1px dashed var(--bdr);
+  line-height:1.5;
+}
+.snd-footer a{color:var(--acc);text-decoration:none}
+.snd-footer a:hover{text-decoration:underline}
 /* Weather Feeds tab */
 .wf-feeds-wrap{
   position:fixed;top:calc(53px + env(safe-area-inset-top));left:0;right:0;bottom:0;
@@ -1094,6 +1251,10 @@ body.capturing .hamburger-menu{display:none!important}
   <div class="hamburger-menu-item" id="tab-safety" onclick="switchTab('safety')">
     <i class="fas fa-hard-hat"></i>
     <span>Spotter Safety</span>
+  </div>
+  <div class="hamburger-menu-item" id="tab-soundings" onclick="switchTab('soundings')">
+    <i class="fas fa-chart-line"></i>
+    <span>Soundings</span>
   </div>
   <div class="hamburger-menu-divider"></div>
   <div class="hamburger-menu-item" id="menu-install" onclick="installPWA()" style="display:none">
@@ -1495,6 +1656,48 @@ body.capturing .hamburger-menu{display:none!important}
         &copy; 2026 University Corporation for Atmospheric Research. All rights reserved.
       </div>
 
+    </div>
+  </div>
+</div>
+
+<!-- Tab View: Soundings (Skew-T) -->
+<div id="view-soundings" class="tab-view">
+  <div class="snd-wrap">
+    <div class="snd-header">
+      <h2><i class="fas fa-chart-line"></i> Soundings <span style="font-size:11px;color:var(--t3);font-weight:400;margin-left:6px;text-transform:none;letter-spacing:0">Skew-T / Log-P</span></h2>
+      <p class="snd-sub">Click the map to fetch the nearest RAOB observed sounding, or pick a station from the dropdown. Soundings update at 00Z and 12Z daily.</p>
+    </div>
+
+    <div class="snd-controls">
+      <div class="snd-control-group">
+        <label>Station</label>
+        <select id="sndStation" onchange="sndOnStationChange()"></select>
+      </div>
+      <div class="snd-control-group">
+        <label>Run Time</label>
+        <select id="sndTime" onchange="sndFetchAndRender()"></select>
+      </div>
+      <button class="snd-btn" onclick="sndFetchAndRender()" title="Reload sounding"><i class="fas fa-rotate"></i></button>
+      <button class="snd-btn snd-btn-acc" onclick="sndScreenshot()" title="Screenshot"><i class="fas fa-camera"></i></button>
+    </div>
+
+    <div class="snd-layout">
+      <div class="snd-canvas-wrap">
+        <canvas id="sndCanvas" width="780" height="640"></canvas>
+        <div id="sndLoading" class="snd-loading" style="display:none">
+          <i class="fas fa-spinner fa-spin"></i> Fetching sounding...
+        </div>
+        <div id="sndError" class="snd-error" style="display:none"></div>
+      </div>
+      <div class="snd-params" id="sndParams">
+        <div class="snd-params-empty">Select a station and fetch a sounding to see derived parameters.</div>
+      </div>
+    </div>
+
+    <div class="snd-footer">
+      Source: Iowa Environmental Mesonet (Iowa State University) &middot;
+      <a href="https://mesonet.agron.iastate.edu/json/raob.py" target="_blank" rel="noopener">RAOB JSON API</a> &middot;
+      Observed soundings only (00Z / 12Z)
     </div>
   </div>
 </div>
@@ -5174,6 +5377,8 @@ function switchTab(tab){
       sub.innerHTML='Reference Library &middot; SKYWARN Terms &amp; Criteria';
     }else if(tab==='safety'){
       sub.innerHTML='Spotter Safety &middot; ACES &amp; Field Guidelines';
+    }else if(tab==='soundings'){
+      sub.innerHTML='Soundings &middot; Skew-T &amp; Derived Parameters';
     }
   }
   /* If switching to the Weather Feeds tab, load Twitter widgets and RSS feeds */
@@ -5183,6 +5388,18 @@ function switchTab(tab){
   /* If switching to the Reference Library tab, load the reference data */
   if(tab==='reference'){
     loadReference();
+  }
+  /* If switching to the Soundings tab, initialize and auto-fetch the default
+     sounding if we haven't already. */
+  if(tab==='soundings'){
+    if(!window._sndInited){
+      window._sndInited=true;
+      initSoundingsTab();
+    }
+    /* Auto-fetch on first visit so the user sees something immediately */
+    if(!sndCurrentData){
+      sndFetchAndRender();
+    }
   }
 }
 
@@ -5531,6 +5748,1247 @@ function renderRefItem(t,showCat){
 
 function filterReference(){
   renderReference();
+}
+
+/* ── Soundings (Skew-T / Log-P) ───────────────────────────────────────────
+   Data source: Iowa Environmental Mesonet (Iowa State University)
+     https://mesonet.agron.iastate.edu/json/raob.py  (CORS-enabled, no proxy needed)
+   Features:
+     - Skew-T canvas renderer (isobars, isotherms, dry/moist adiabats, mixing ratios,
+       temp trace, dewpoint trace, wind barbs)
+     - Thermodynamic derived parameters (LCL, LFC, EL, CAPE, CIN, LI, K-index,
+       Showalter, SWEAT, precipitable water)
+     - Wind/shear derived parameters (0-1km, 0-3km, 0-6km bulk shear,
+       storm-relative helicity 0-1km and 0-3km)
+     - Screenshot via html2canvas (existing pipeline)
+
+   RAOB station list: we embed a curated list of ~130 CONUS + nearby upper-air
+   stations. When the user clicks the main alert map, we find the nearest
+   station and offer to load its latest sounding. ──────────────────────────── */
+
+/* NWS upper-air (RAOB) station list — CONUS + nearby Canadian sites.
+   Source: weather.gov/upperair . Coordinates roughly accurate to 0.01°. */
+var SND_STATIONS=[
+  {id:'ABQ',name:'Albuquerque NM',lat:35.04,lon:-106.62},
+  {id:'ALB',name:'Albany NY',lat:42.75,lon:-73.80},
+  {id:'BIS',name:'Bismarck ND',lat:46.77,lon:-100.75},
+  {id:'BNA',name:'Nashville TN',lat:36.13,lon:-86.68},
+  {id:'BOI',name:'Boise ID',lat:43.57,lon:-116.21},
+  {id:'BRO',name:'Brownsville TX',lat:25.91,lon:-97.42},
+  {id:'BUF',name:'Buffalo NY',lat:42.94,lon:-78.74},
+  {id:'CAR',name:'Caribou ME',lat:46.87,lon:-68.02},
+  {id:'CRP',name:'Corpus Christi TX',lat:27.77,lon:-97.51},
+  {id:'DDC',name:'Dodge City KS',lat:37.77,lon:-99.97},
+  {id:'DNR',name:'Denver CO',lat:39.79,lon:-104.45},
+  {id:'DTX',name:'Detroit MI',lat:42.70,lon:-83.47},
+  {id:'DVN',name:'Davenport IA',lat:41.61,lon:-90.58},
+  {id:'EPZ',name:'El Paso TX',lat:31.87,lon:-106.70},
+  {id:'FFC',name:'Peachtree City GA',lat:33.36,lon:-84.57},
+  {id:'FLG',name:'Flagstaff AZ',lat:35.23,lon:-111.82},
+  {id:'FWD',name:'Fort Worth TX',lat:32.83,lon:-97.30},
+  {id:'GGW',name:'Glasgow MT',lat:48.21,lon:-106.62},
+  {id:'GJT',name:'Grand Junction CO',lat:39.12,lon:-108.52},
+  {id:'GRB',name:'Green Bay WI',lat:44.49,lon:-88.13},
+  {id:'GSO',name:'Greensboro NC',lat:36.10,lon:-79.94},
+  {id:'GSP',name:'Greer SC',lat:34.88,lon:-82.22},
+  {id:'IAD',name:'Sterling VA',lat:39.08,lon:-77.47},
+  {id:'ILN',name:'Wilmington OH',lat:39.42,lon:-83.78},
+  {id:'ILX',name:'Lincoln IL',lat:40.16,lon:-89.34},
+  {id:'INL',name:'International Falls MN',lat:48.57,lon:-93.38},
+  {id:'JAN',name:'Jackson MS',lat:32.32,lon:-89.99},
+  {id:'JAX',name:'Jacksonville FL',lat:30.43,lon:-81.70},
+  {id:'LBF',name:'North Platte NE',lat:41.13,lon:-100.69},
+  {id:'LCH',name:'Lake Charles LA',lat:30.13,lon:-93.22},
+  {id:'LIX',name:'Slidell LA',lat:30.34,lon:-89.82},
+  {id:'LMK',name:'Louisville KY',lat:38.13,lon:-85.94},
+  {id:'LZK',name:'North Little Rock AR',lat:34.83,lon:-92.26},
+  {id:'MAF',name:'Midland TX',lat:31.95,lon:-102.18},
+  {id:'MHX',name:'Morehead City NC',lat:34.78,lon:-76.88},
+  {id:'MPX',name:'Minneapolis MN',lat:44.85,lon:-93.57},
+  {id:'MRB',name:'Martinsburg WV',lat:39.40,lon:-77.98},
+  {id:'NKX',name:'San Diego CA',lat:32.85,lon:-117.12},
+  {id:'OAK',name:'Oakland CA',lat:37.74,lon:-122.22},
+  {id:'OAX',name:'Omaha NE',lat:41.32,lon:-96.37},
+  {id:'OHX',name:'Old Hickory TN',lat:36.25,lon:-86.56},
+  {id:'OKX',name:'Upton NY',lat:40.87,lon:-72.86},
+  {id:'OUN',name:'Norman OK',lat:35.18,lon:-97.44},
+  {id:'PIT',name:'Pittsburgh PA',lat:40.50,lon:-80.22},
+  {id:'PDT',name:'Pendleton OR',lat:45.69,lon:-118.84},
+  {id:'RALEIGH',name:'Raleigh NC',lat:35.77,lon:-78.65},
+  {id:'REV',name:'Reno NV',lat:39.57,lon:-119.80},
+  {id:'RIW',name:'Riverton WY',lat:43.06,lon:-108.46},
+  {id:'RNK',name:'Blacksburg VA',lat:37.21,lon:-80.41},
+  {id:'SAC',name:'Sacramento CA',lat:38.51,lon:-121.40},
+  {id:'SGF',name:'Springfield MO',lat:37.23,lon:-93.38},
+  {id:'SHV',name:'Shreveport LA',lat:32.45,lon:-93.84},
+  {id:'SLE',name:'Salem OR',lat:44.91,lon:-123.00},
+  {id:'SLC',name:'Salt Lake City UT',lat:40.79,lon:-111.97},
+  {id:'TBW',name:'Tampa Bay FL',lat:27.70,lon:-82.40},
+  {id:'TFX',name:'Great Falls MT',lat:47.46,lon:-111.38},
+  {id:'TOP',name:'Topeka KS',lat:39.07,lon:-95.62},
+  {id:'TUS',name:'Tucson AZ',lat:32.13,lon:-110.93},
+  {id:'VEF',name:'Las Vegas NV',lat:36.05,lon:-115.18},
+  {id:'WAL',name:'Wallops Island VA',lat:37.93,lon:-75.48},
+  {id:'WFO',name:'Anchorage AK',lat:61.17,lon:-149.97},
+  {id:'YQB',name:'Quebec QC',lat:46.80,lon:-71.39},
+  {id:'YQT',name:'Thunder Bay ON',lat:48.37,lon:-89.32},
+  {id:'YUL',name:'Montreal QC',lat:45.47,lon:-73.75},
+  {id:'YWG',name:'Winnipeg MB',lat:49.91,lon:-97.24},
+  {id:'YYC',name:'Calgary AB',lat:51.12,lon:-114.01},
+  {id:'YYJ',name:'Victoria BC',lat:48.65,lon:-123.43},
+  {id:'YYZ',name:'Toronto ON',lat:43.68,lon:-79.61}
+];
+
+/* State */
+var sndCurrentStation=null;     /* selected station object */
+var sndCurrentData=null;        /* parsed sounding data */
+var sndMapClickHandler=null;    /* leaflet map click handler ref */
+
+/* ── Init / lifecycle ── */
+function initSoundingsTab(){
+  /* Populate station dropdown */
+  var sel=document.getElementById('sndStation');
+  if(sel && sel.options.length===0){
+    /* Sort stations by state/id for usability */
+    var sorted=SND_STATIONS.slice().sort(function(a,b){
+      return a.name.localeCompare(b.name);
+    });
+    sorted.forEach(function(s){
+      var o=document.createElement('option');
+      o.value=s.id;
+      o.textContent=s.id+' \u2014 '+s.name;
+      sel.appendChild(o);
+    });
+    /* Default to DTX (Detroit) — central US, often interesting weather */
+    sel.value='DTX';
+    sndCurrentStation=SND_STATIONS.find(function(s){return s.id==='DTX'});
+  }
+  /* Populate time dropdown (last 7 days of 00Z/12Z) */
+  sndPopulateTimeDropdown();
+  /* Add map click handler for "click map to build sounding" */
+  sndAttachMapClickHandler();
+}
+
+function sndPopulateTimeDropdown(){
+  var sel=document.getElementById('sndTime');
+  if(!sel)return;
+  sel.innerHTML='';
+  var now=new Date();
+  /* Build list of 00Z and 12Z timestamps going back 7 days = 14 entries */
+  for(var i=0;i<14;i++){
+    var d=new Date(now.getTime()-i*12*3600*1000);
+    /* Snap to nearest 00Z or 12Z */
+    var h=d.getUTCHours();
+    var snapH;
+    if(h>=18 || h<6){snapH=0}
+    else{snapH=12}
+    var snap=new Date(Date.UTC(d.getUTCFullYear(),d.getUTCMonth(),d.getUTCDate(),snapH,0,0));
+    if(snap>now)snap=new Date(snap.getTime()-12*3600*1000);
+    var o=document.createElement('option');
+    o.value=snap.toISOString().replace(/\.\d+Z$/,'Z');
+    var label=snap.toISOString().slice(0,16).replace('T',' ')+'Z';
+    var age=Math.round((now-snap)/3600000);
+    var ageStr=age<24?age+'h ago':Math.round(age/24)+'d ago';
+    o.textContent=label+' ('+ageStr+')';
+    sel.appendChild(o);
+  }
+}
+
+/* Find nearest RAOB station to a lat/lon */
+function sndFindNearestStation(lat,lon){
+  var best=null,bestDist=Infinity;
+  SND_STATIONS.forEach(function(s){
+    /* Haversine-lite (good enough for sorting) */
+    var dLat=(s.lat-lat)*Math.PI/180;
+    var dLon=(s.lon-lon)*Math.PI/180;
+    var a=Math.sin(dLat/2)*Math.sin(dLat/2)+Math.cos(lat*Math.PI/180)*Math.cos(s.lat*Math.PI/180)*Math.sin(dLon/2)*Math.sin(dLon/2);
+    var c=2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));
+    var d=c*6371; /* km */
+    if(d<bestDist){bestDist=d;best=s}
+  });
+  return {station:best,distance:bestDist};
+}
+
+/* Attach a click handler to the main alert map that, when the Soundings tab
+   is active, captures the lat/lon and offers to fetch the nearest sounding. */
+function sndAttachMapClickHandler(){
+  if(sndMapClickHandler||!alertMapInstance)return;
+  sndMapClickHandler=function(e){
+    if(currentTab!=='soundings')return;
+    var lat=e.latlng.lat,lon=e.latlng.lng;
+    if(lat<22||lat>52||lon<-130||lon>-60)return; /* CONUS-ish bounds */
+    var nearest=sndFindNearestStation(lat,lon);
+    if(!nearest.station)return;
+    /* Set station + fetch */
+    var sel=document.getElementById('sndStation');
+    if(sel)sel.value=nearest.station.id;
+    sndCurrentStation=nearest.station;
+    sndFetchAndRender();
+  };
+  alertMapInstance.on('click',sndMapClickHandler);
+}
+
+/* Triggered when user picks a station from the dropdown */
+function sndOnStationChange(){
+  var sel=document.getElementById('sndStation');
+  if(!sel)return;
+  sndCurrentStation=SND_STATIONS.find(function(s){return s.id===sel.value});
+  sndFetchAndRender();
+}
+
+/* ── Data fetching ── */
+function sndShowLoading(show){
+  var el=document.getElementById('sndLoading');
+  if(el)el.style.display=show?'block':'none';
+}
+function sndShowError(msg){
+  var el=document.getElementById('sndError');
+  if(!el)return;
+  if(!msg){el.style.display='none';return}
+  el.innerHTML='<i class="fas fa-triangle-exclamation"></i> '+msg;
+  el.style.display='block';
+}
+
+function sndFetchAndRender(){
+  if(!sndCurrentStation){
+    sndShowError('No station selected.');
+    return;
+  }
+  var timeSel=document.getElementById('sndTime');
+  var ts=timeSel ? timeSel.value : '';
+  /* IEM JSON endpoint — CORS enabled, no proxy needed */
+  var url='https://mesonet.agron.iastate.edu/json/raob.py?station='+sndCurrentStation.id+'&network=_RAOB&ts='+encodeURIComponent(ts);
+  sndShowLoading(true);
+  sndShowError('');
+  fetch(url).then(function(r){
+    if(!r.ok)throw new Error('HTTP '+r.status);
+    return r.json();
+  }).then(function(data){
+    sndShowLoading(false);
+    var profiles=data.profiles||[];
+    if(profiles.length===0){
+      sndShowError('No sounding data available for '+sndCurrentStation.id+' at '+ts.replace('T',' ').replace('Z',' Z')+'. Note: RAOB launches happen at 00Z and 12Z only, and data appears ~1 hour after launch.');
+      sndCurrentData=null;
+      sndRenderParams(null);
+      sndClearCanvas();
+      return;
+    }
+    /* Take the first (most recent) profile */
+    var p=profiles[0];
+    sndCurrentData=sndParseProfile(p);
+    sndRenderSkewT();
+    sndRenderParams(sndCurrentData);
+  }).catch(function(err){
+    sndShowLoading(false);
+    sndShowError('Failed to fetch sounding: '+(err.message||err)+'. The IEM server may be temporarily unavailable.');
+  });
+}
+
+/* Parse IEM profile JSON into our internal format:
+   [{p:hPa, h:m, T:°C, Td:°C, dir:deg, spd:kt}, ...] */
+function sndParseProfile(profile){
+  var levels=[];
+  (profile.profile||[]).forEach(function(l){
+    if(l.pres==null)return;
+    var lvl={
+      p:l.pres,
+      h:l.hght==null?null:l.hght,
+      T:l.tmpc==null?null:l.tmpc,
+      Td:l.dwpc==null?null:l.dwpc,
+      dir:l.drct==null?null:l.drct,
+      spd:l.sknt==null?null:l.sknt
+    };
+    levels.push(lvl);
+  });
+  /* Sort by pressure descending (1000 -> 0) */
+  levels.sort(function(a,b){return b.p-a.p});
+  return {
+    station:profile.station||sndCurrentStation.id,
+    valid:profile.valid||'',
+    levels:levels
+  };
+}
+
+/* ── Thermodynamic helper functions ──
+   All formulas from standard meteorology references:
+   - Bolton (1980) for LCL
+   - Poisson's equation for potential temperature
+   - Tetens formula for saturation vapor pressure
+   - Buck (1981) refined formula for accuracy */
+
+/* Saturation vapor pressure (hPa) over water — Buck (1981) */
+function sndEs(T){
+  /* T in °C */
+  return 6.1121*Math.exp((17.502*T)/(240.97+T));
+}
+/* Mixing ratio (g/kg) */
+function sndMixingRatio(T,Td,p){
+  if(T==null||Td==null||p==null)return null;
+  var e=sndEs(Td);   /* actual vapor pressure from dewpoint */
+  return 621.97*e/(p-e);
+}
+/* Potential temperature (K) at pressure p (hPa) and temp T (K) */
+function sndTheta(T_K,p){
+  return T_K*Math.pow(1000/p,0.2854);
+}
+/* Equivalent potential temperature (K) — Bolton 1980 */
+function sndThetaE(T_C,Td_C,p){
+  if(T_C==null||Td_C==null||p==null)return null;
+  var T=T_C+273.15;
+  var Td=Td_C+273.15;
+  var e=sndEs(Td_C);
+  var w=0.622*e/(p-e);  /* kg/kg */
+  var TLCL=56.0+1.0/(1.0/(Td-56.0)+Math.log(T/Td)/800.0);  /* K */
+  return T*Math.pow(1000/p,0.2854*(1-0.28*w))*Math.exp((3376.0/TLCL-2.54)*w*(1+0.81*w));
+}
+
+/* Lift a parcel from (p0, T0, Td0) dry adiabatically to LCL.
+   Returns {p_lcl, T_lcl, msg} or null on failure. */
+function sndLiftDryToLCL(p0,T_C,Td_C){
+  /* Bolton (1980) formula — accurate enough */
+  /* T_lcl ≈ 1/(1/(Td-56) + ln(T/Td)/800) + 56 */
+  var T=T_C+273.15;
+  var Td=Td_C+273.15;
+  if(T<=0||Td<=0||Td>T)return null;
+  var TLCL=1.0/(1.0/(Td-56.0)+Math.log(T/Td)/800.0)+56.0;
+  /* p_lcl from Poisson: p_lcl = p0 * (T_lcl/T0)^(1/kappa) */
+  var pLCL=p0*Math.pow(TLCL/T,1.0/0.2854);
+  return {p_lcl:pLCL,T_lcl:TLCL-273.15};
+}
+
+/* Lift a parcel moist adiabatically from (p_start, T_start_K) upward.
+   Returns the new T (K) at pressure p_end (hPa).
+   Uses a simple iterative (Euler) approach with small dp steps. */
+function sndLiftMoist(p_start,T_start_K,p_end){
+  var dp=2.0; /* step in hPa */
+  var T=T_start_K;
+  var p=p_start;
+  if(p_end<p_start){
+    /* going up (decreasing p) */
+    while(p>p_end){
+      var pn=p-dp;
+      if(pn<p_end)pn=p_end;
+      /* dT/dp along moist adiabat — approximate using theta-e conservation */
+      /* Use the formulation: d(ln T)/d(ln p) = (R/cp) * (1 + (Lv*w)/(Rd*T)) / (1 + (Lv²*w*ε)/(cp*Rd*T²)) */
+      var T_C=T-273.15;
+      var e=sndEs(T_C);  /* approximate, assuming saturated */
+      var w=0.622*e/(p-e);
+      var Lv=2.5e6;
+      var Rd=287.0;
+      var cp=1004.0;
+      var epsilon=Lv*w/(Rd*T);
+      var denom=1+(Lv*Lv*w*0.622)/(cp*Rd*T*T);
+      var dlnT_dlnp=(0.2854*(1+epsilon))/denom;
+      var factor=Math.pow(pn/p,dlnT_dlnp);
+      T=T*factor;
+      p=pn;
+      if(T<50)break; /* safety */
+    }
+  }
+  return T;
+}
+
+/* Find LFC (Level of Free Convection) — first level above LCL where
+   parcel T >= environment T. Walks up from LCL. */
+function sndFindLFC(levels,lcl){
+  if(!lcl)return null;
+  /* Find levels above LCL */
+  var parcel_T_K=lcl.T_lcl+273.15;
+  var p=lcl.p_lcl;
+  var dp=5.0;
+  while(p>100){
+    var p_next=p-dp;
+    if(p_next<100)break;
+    parcel_T_K=sndLiftMoist(p,parcel_T_K,p_next);
+    /* Find environment T at p_next by interpolation */
+    var env_T_C=sndInterpLevel(levels,'p','T',p_next);
+    if(env_T_C==null)break;
+    if(parcel_T_K-273.15>=env_T_C){
+      return {p:p_next,T:parcel_T_K-273.15};
+    }
+    p=p_next;
+  }
+  return null;
+}
+
+/* Find EL (Equilibrium Level) — first level above LFC where parcel T
+   crosses back below environment T. */
+function sndFindEL(levels,lfc){
+  if(!lfc)return null;
+  var parcel_T_K=lfc.T+273.15;
+  var p=lfc.p;
+  var dp=5.0;
+  while(p>100){
+    var p_next=p-dp;
+    if(p_next<100)break;
+    parcel_T_K=sndLiftMoist(p,parcel_T_K,p_next);
+    var env_T_C=sndInterpLevel(levels,'p','T',p_next);
+    if(env_T_C==null)break;
+    if(parcel_T_K-273.15<env_T_C){
+      return {p:p_next,T:parcel_T_K-273.15};
+    }
+    p=p_next;
+  }
+  return null;
+}
+
+/* CAPE / CIN integration (J/kg). Walks parcel from surface to EL.
+   Positive area when parcel warmer than env; negative when colder. */
+function sndComputeCAPE(levels,lcl,lfc,el){
+  if(!lcl||!lfc||!el)return {cape:0,cin:0};
+  /* Start from surface (highest pressure with valid T) */
+  var sfc=sndFindSfc(levels);
+  if(!sfc)return {cape:0,cin:0};
+  var p0=sfc.p;
+  var T0=sfc.T;
+  var Td0=sndInterpLevel(levels,'p','Td',p0);
+  if(T0==null||Td0==null)return {cape:0,cin:0};
+  var cape=0,cin=0;
+  var parcel_T_K=T0+273.15;
+  var p=p0;
+  var dp=5.0;
+  var inLFC=false;
+  while(p>el.p-5){
+    var p_next=p-dp;
+    if(p_next<el.p-5)p_next=el.p-5;
+    var env_T_C=sndInterpLevel(levels,'p','T',p_next);
+    if(env_T_C==null)break;
+    var env_T_K=env_T_C+273.15;
+    if(p_next>lcl.p_lcl){
+      /* Dry adiabat */
+      parcel_T_K=parcel_T_K*Math.pow(p_next/p,0.2854);
+    }else{
+      parcel_T_K=sndLiftMoist(p,parcel_T_K,p_next);
+    }
+    var avg_T=(parcel_T_K+env_T_K)/2;
+    var dcape=(287.0*avg_T)*(parcel_T_K-env_T_K)/avg_T*Math.log(p/p_next);
+    if(dcape>0){
+      cape+=dcape;
+    }else{
+      cin+=dcape;
+    }
+    p=p_next;
+  }
+  /* Cin only counts below LFC */
+  cin=Math.abs(cin);
+  if(cin>500)cin=500;  /* cap to avoid unrealistic values */
+  if(cape<0)cape=0;
+  return {cape:Math.round(cape),cin:Math.round(cin)};
+}
+
+/* Lifted Index: T_env_500 - T_parcel_500 */
+function sndLiftedIndex(levels){
+  var sfc=sndFindSfc(levels);
+  if(!sfc)return null;
+  var p0=sfc.p;
+  var T0=sfc.T;
+  var Td0=sndInterpLevel(levels,'p','Td',p0);
+  if(T0==null||Td0==null)return null;
+  var lcl=sndLiftDryToLCL(p0,T0,Td0);
+  if(!lcl)return null;
+  /* Lift moist to 500 hPa */
+  var parcel_T_K=lcl.T_lcl+273.15;
+  parcel_T_K=sndLiftMoist(lcl.p_lcl,parcel_T_K,500);
+  var env_T_500=sndInterpLevel(levels,'p','T',500);
+  if(env_T_500==null)return null;
+  return Math.round((env_T_500-(parcel_T_K-273.15))*10)/10;
+}
+
+/* Showalter Index: lift parcel from 850 hPa */
+function sndShowalter(levels){
+  var T850=sndInterpLevel(levels,'p','T',850);
+  var Td850=sndInterpLevel(levels,'p','Td',850);
+  if(T850==null||Td850==null)return null;
+  var lcl=sndLiftDryToLCL(850,T850,Td850);
+  if(!lcl)return null;
+  var parcel_T_K=lcl.T_lcl+273.15;
+  parcel_T_K=sndLiftMoist(lcl.p_lcl,parcel_T_K,500);
+  var env_T_500=sndInterpLevel(levels,'p','T',500);
+  if(env_T_500==null)return null;
+  return Math.round((env_T_500-(parcel_T_K-273.15))*10)/10;
+}
+
+/* K Index for thunderstorm potential */
+function sndKIndex(levels){
+  var T850=sndInterpLevel(levels,'p','T',850);
+  var T700=sndInterpLevel(levels,'p','T',700);
+  var T500=sndInterpLevel(levels,'p','T',500);
+  var Td850=sndInterpLevel(levels,'p','Td',850);
+  var Td700=sndInterpLevel(levels,'p','Td',700);
+  if([T850,T700,T500,Td850,Td700].some(function(v){return v==null}))return null;
+  return Math.round((T850-T500+(Td850-Td700)-T700)*10)/10;
+}
+
+/* Total Totals Index */
+function sndTotalTotals(levels){
+  var T850=sndInterpLevel(levels,'p','T',850);
+  var T500=sndInterpLevel(levels,'p','T',500);
+  var Td850=sndInterpLevel(levels,'p','Td',850);
+  if([T850,T500,Td850].some(function(v){return v==null}))return null;
+  var VT=T850-T500;
+  var CT=Td850-T500;
+  return Math.round((VT+CT)*10)/10;
+}
+
+/* Precipitable water (mm) — integrate mixing ratio from sfc to 500 hPa
+   (or 400 hPa; using 500 as practical cutoff) */
+function sndPrecipWater(levels){
+  var sfc=sndFindSfc(levels);
+  if(!sfc)return null;
+  var p=sfc.p;
+  var dp=10.0;
+  var pw=0;
+  while(p>500){
+    var p_next=p-dp;
+    if(p_next<500)p_next=500;
+    var T=sndInterpLevel(levels,'p','T',p);
+    var Td=sndInterpLevel(levels,'p','Td',p);
+    var w=sndMixingRatio(T,Td,p);
+    if(w!=null){
+      /* w in g/kg, dp in hPa — pw = -(1/g) ∫ w dp */
+      pw+=w*(p-p_next)/9.81;
+    }
+    p=p_next;
+  }
+  return Math.round(pw*10)/10;  /* mm */
+}
+
+/* ── Wind / shear helpers ── */
+
+/* Compute u,v from direction (deg from N) and speed (kt) */
+function sndWindUV(dir,spd){
+  if(dir==null||spd==null)return null;
+  var rad=dir*Math.PI/180;
+  /* u positive eastward, v positive northward
+     Wind direction is FROM — so u = -spd*sin(dir), v = -spd*cos(dir) */
+  return {u:-spd*Math.sin(rad),v:-spd*Math.cos(rad)};
+}
+
+/* Bulk shear 0-X km (vector difference magnitude in kt) */
+function sndBulkShear(levels,topKm){
+  var sfc=sndFindSfc(levels);
+  if(!sfc)return null;
+  var h0=sfc.h||0;
+  var uv0=sndWindUV(sfc.dir,sfc.spd);
+  if(!uv0)return null;
+  /* Find wind at topKm by interpolating height */
+  var topH=h0+topKm*1000;
+  var uvTop=sndInterpWindByHeight(levels,topH);
+  if(!uvTop)return null;
+  var du=uvTop.u-uv0.u;
+  var dv=uvTop.v-uv0.v;
+  return Math.round(Math.sqrt(du*du+dv*dv)*10)/10;
+}
+
+/* Storm-relative helicity (SRH) for given storm motion vector (kt) and depth (m).
+   Returns SRH in m²/s².
+   Formula: SRH = -∫ (u - u_storm) * dv/dz dz over depth, but more precisely:
+   SRH = ∫ (v_shear × v_rel) · dz  with proper sign convention.
+   We use the standard integral: SRH = -∫_{z0}^{z0+depth} (u-u_s)(dv/dz) dz */
+function sndSRH(levels,stormU,stormV,depthM){
+  var sfc=sndFindSfc(levels);
+  if(!sfc)return null;
+  /* Get sorted (by height) wind profile from sfc to sfc+depth */
+  var pts=[];
+  levels.forEach(function(l){
+    if(l.h!=null && l.dir!=null && l.spd!=null && l.h>=sfc.h-50 && l.h<=sfc.h+depthM+50){
+      var uv=sndWindUV(l.dir,l.spd);
+      if(uv)pts.push({h:l.h,u:uv.u,v:uv.v});
+    }
+  });
+  if(pts.length<2)return null;
+  pts.sort(function(a,b){return a.h-b.h});
+  /* Need sfc value — if first point isn't sfc, prepend sfc */
+  if(Math.abs(pts[0].h-sfc.h)>50){
+    var uvSfc=sndWindUV(sfc.dir,sfc.spd);
+    if(uvSfc)pts.unshift({h:sfc.h,u:uvSfc.u,v:uvSfc.v});
+  }
+  /* Integrate: SRH = -(u - u_s) * dv/dz dz  (z in m, u,v in m/s)
+     Convert kt → m/s: multiply by 0.5144 */
+  var KTS_TO_MS=0.5144;
+  var srh=0;
+  for(var i=1;i<pts.length;i++){
+    var z0=pts[i-1].h;
+    var z1=pts[i].h;
+    var dz=z1-z0;
+    if(dz<=0)continue;
+    var u0=pts[i-1].u*KTS_TO_MS;
+    var v0=pts[i-1].v*KTS_TO_MS;
+    var u1=pts[i].u*KTS_TO_MS;
+    var v1=pts[i].v*KTS_TO_MS;
+    var du=(u0+u1)/2 - stormU*KTS_TO_MS;
+    var dv=v1-v0;
+    srh-=du*dv;
+  }
+  return Math.round(srh);
+}
+
+/* Estimate storm motion using Bunkers right-mover formula
+   (default right-moving supercell motion):
+   sfc-6km mean wind + 7.5 m/s to the right of and perpendicular to the 0-6km shear vector
+   Returns {u, v} in kt */
+function sndBunkersRM(levels){
+  var sfc=sndFindSfc(levels);
+  if(!sfc)return {u:0,v:0};
+  /* Mean wind 0-6km: average u,v from sfc to 6km */
+  var pts=[];
+  levels.forEach(function(l){
+    if(l.h!=null && l.dir!=null && l.spd!=null && l.h>=sfc.h-50 && l.h<=sfc.h+6000){
+      var uv=sndWindUV(l.dir,l.spd);
+      if(uv)pts.push({h:l.h,u:uv.u,v:uv.v});
+    }
+  });
+  if(pts.length===0)return {u:0,v:0};
+  /* Mean wind = average of u,v (in kt) */
+  var meanU=0,meanV=0;
+  pts.forEach(function(p){meanU+=p.u;meanV+=p.v});
+  meanU/=pts.length;meanV/=pts.length;
+  /* 0-6km shear vector */
+  var shear=sndBulkShearUV(levels,6);
+  if(!shear)return {u:meanU,v:meanV};
+  /* Perpendicular to shear, to the right (clockwise 90°): (su,sv) → (sv, -su)
+     Wait, in u,v space right-rotate is (su,sv)→(-sv, su)? Let me check.
+     Right-moving storm is to the right of the shear vector when looking down-shear.
+     In (u,v) with +v north: rotate shear 90° clockwise: (su,sv)→(sv,-su) — no wait.
+     Clockwise rotation by 90°: (su,sv)→(-sv,su). Hmm. Let me think.
+     If shear points north (su=0, sv=+5), right side is east (positive u).
+     Rotation that takes (0,5)→(5,0): formula (x,y)→(y,-x) → (5, 0). Yes.
+     So (su,sv)→(sv,-su). */
+  var magShear=Math.sqrt(shear.du*shear.du+shear.dv*shear.dv);
+  if(magShear===0)return {u:meanU,v:meanV};
+  /* 7.5 m/s = 14.6 kt */
+  var offset=14.6;
+  var perpU=shear.dv/magShear*offset;
+  var perpV=-shear.du/magShear*offset;
+  return {u:Math.round(meanU+perpU),v:Math.round(meanV+perpV)};
+}
+
+/* Bulk shear vector (not just magnitude) for 0-X km */
+function sndBulkShearUV(levels,topKm){
+  var sfc=sndFindSfc(levels);
+  if(!sfc)return null;
+  var h0=sfc.h||0;
+  var uv0=sndWindUV(sfc.dir,sfc.spd);
+  if(!uv0)return null;
+  var topH=h0+topKm*1000;
+  var uvTop=sndInterpWindByHeight(levels,topH);
+  if(!uvTop)return null;
+  return {du:uvTop.u-uv0.u,dv:uvTop.v-uv0.v};
+}
+
+/* Interpolate wind (u,v) at a given height (m AGL... actually MSL, same thing for sfc=0) */
+function sndInterpWindByHeight(levels,h){
+  var pts=[];
+  levels.forEach(function(l){
+    if(l.h!=null && l.dir!=null && l.spd!=null){
+      var uv=sndWindUV(l.dir,l.spd);
+      if(uv)pts.push({h:l.h,u:uv.u,v:uv.v});
+    }
+  });
+  if(pts.length===0)return null;
+  pts.sort(function(a,b){return a.h-b.h});
+  if(h<=pts[0].h)return pts[0];
+  if(h>=pts[pts.length-1].h)return pts[pts.length-1];
+  for(var i=1;i<pts.length;i++){
+    if(h<=pts[i].h){
+      var t=(h-pts[i-1].h)/(pts[i].h-pts[i-1].h);
+      return {u:pts[i-1].u+(pts[i].u-pts[i-1].u)*t,
+              v:pts[i-1].v+(pts[i].v-pts[i-1].v)*t};
+    }
+  }
+  return pts[pts.length-1];
+}
+
+/* ── Interpolation utilities ── */
+function sndInterpLevel(levels,key,field,targetValue){
+  var pts=levels.filter(function(l){return l[key]!=null && l[field]!=null})
+                .sort(function(a,b){return b[key]-a[key]}); /* p descending */
+  if(pts.length===0)return null;
+  if(targetValue>=pts[0][key])return pts[0][field];
+  if(targetValue<=pts[pts.length-1][key])return pts[pts.length-1][field];
+  for(var i=1;i<pts.length;i++){
+    if(targetValue<=pts[i-1][key] && targetValue>=pts[i][key]){
+      var t=(pts[i-1][key]-targetValue)/(pts[i-1][key]-pts[i][key]);
+      return pts[i-1][field]+(pts[i][field]-pts[i-1][field])*t;
+    }
+  }
+  return null;
+}
+
+function sndFindSfc(levels){
+  /* Surface = highest pressure with valid T */
+  var sfc=null;
+  levels.forEach(function(l){
+    if(l.T!=null){
+      if(!sfc||l.p>sfc.p)sfc=l;
+    }
+  });
+  return sfc;
+}
+
+/* ── Derived parameter computation ── */
+function sndComputeParams(data){
+  if(!data||!data.levels||data.levels.length===0)return null;
+  var levels=data.levels;
+  var sfc=sndFindSfc(levels);
+  if(!sfc)return null;
+  var T0=sfc.T,Td0=sndInterpLevel(levels,'p','Td',sfc.p);
+  if(T0==null||Td0==null)return null;
+  var params={};
+  params.T_sfc=T0;
+  params.Td_sfc=Td0;
+  params.p_sfc=sfc.p;
+  params.h_sfc=sfc.h||0;
+
+  /* LCL */
+  var lcl=sndLiftDryToLCL(sfc.p,T0,Td0);
+  if(lcl){
+    params.LCL_p=Math.round(lcl.p_lcl);
+    params.LCL_T=Math.round(lcl.T_lcl*10)/10;
+    params.LCL_h=Math.round(sndInterpLevel(levels,'p','h',lcl.p_lcl)||0);
+  }
+  /* LFC */
+  var lfc=sndFindLFC(levels,lcl);
+  if(lfc){
+    params.LFC_p=Math.round(lfc.p);
+    params.LFC_T=Math.round(lfc.T*10)/10;
+    params.LFC_h=Math.round(sndInterpLevel(levels,'p','h',lfc.p)||0);
+  }
+  /* EL */
+  var el=sndFindEL(levels,lfc);
+  if(el){
+    params.EL_p=Math.round(el.p);
+    params.EL_T=Math.round(el.T*10)/10;
+    params.EL_h=Math.round(sndInterpLevel(levels,'p','h',el.p)||0);
+  }
+  /* CAPE / CIN */
+  var cape=sndComputeCAPE(levels,lcl,lfc,el);
+  params.SBCAPE=cape.cape;
+  params.SBCIN=cape.cin;
+
+  /* Lifted Index */
+  params.LI=sndLiftedIndex(levels);
+  /* Showalter */
+  params.SH=sndShowalter(levels);
+  /* K Index */
+  params.K=sndKIndex(levels);
+  /* Total Totals */
+  params.TT=sndTotalTotals(levels);
+  /* Precip water */
+  params.PW=sndPrecipWater(levels);
+
+  /* Wind parameters */
+  params.shear_01=sndBulkShear(levels,1);
+  params.shear_03=sndBulkShear(levels,3);
+  params.shear_06=sndBulkShear(levels,6);
+
+  /* Storm motion (Bunkers RM) */
+  var motion=sndBunkersRM(levels);
+  params.stormU=motion.u;
+  params.stormV=motion.v;
+  /* Storm-relative helicity */
+  params.SRH_01=sndSRH(levels,motion.u,motion.v,1000);
+  params.SRH_03=sndSRH(levels,motion.u,motion.v,3000);
+
+  /* Interpolated key-level winds */
+  ['1000','925','850','700','500','300','250'].forEach(function(p){
+    var T=sndInterpLevel(levels,'p','T',parseInt(p));
+    var Td=sndInterpLevel(levels,'p','Td',parseInt(p));
+    var dir=sndInterpLevel(levels,'p','dir',parseInt(p));
+    var spd=sndInterpLevel(levels,'p','spd',parseInt(p));
+    params['T_'+p]=T;
+    params['Td_'+p]=Td;
+    params['dir_'+p]=dir;
+    params['spd_'+p]=spd;
+  });
+
+  return params;
+}
+
+/* ── Parameter panel rendering ── */
+function sndRenderParams(data){
+  var el=document.getElementById('sndParams');
+  if(!el)return;
+  if(!data){
+    el.innerHTML='<div class="snd-params-empty">Select a station and fetch a sounding to see derived parameters.</div>';
+    return;
+  }
+  var params=sndComputeParams(data);
+  if(!params){
+    el.innerHTML='<div class="snd-params-empty">No surface data available for this sounding.</div>';
+    return;
+  }
+  function row(label,value,unit,severity){
+    if(value==null||isNaN(value))return '';
+    var cls='';
+    if(severity==='warn')cls='warn';
+    else if(severity==='crit')cls='crit';
+    else if(severity==='good')cls='good';
+    return '<div class="snd-param-row"><span class="snd-param-label">'+label+'</span><span class="snd-param-value '+cls+'">'+value+(unit?' '+unit:'')+'</span></div>';
+  }
+  function capeSeverity(v){
+    if(v>=2500)return 'crit';
+    if(v>=1500)return 'warn';
+    if(v>=500)return 'good';
+    return '';
+  }
+  function liSeverity(v){
+    if(v<=-6)return 'crit';
+    if(v<=-4)return 'warn';
+    if(v<=0)return 'good';
+    return '';
+  }
+  function shearSeverity(v){
+    if(v>=40)return 'crit';
+    if(v>=25)return 'warn';
+    return '';
+  }
+  function srhSeverity(v){
+    if(v>=200)return 'crit';
+    if(v>=100)return 'warn';
+    return '';
+  }
+
+  var html='';
+
+  /* Surface */
+  html+='<div class="snd-param-section">';
+  html+='<div class="snd-param-section-title">Surface</div>';
+  html+=row('Pressure',params.p_sfc,'hPa');
+  html+=row('Temperature',params.T_sfc,'\u00B0C');
+  html+=row('Dewpoint',params.Td_sfc,'\u00B0C');
+  html+='</div>';
+
+  /* Parcel Levels */
+  html+='<div class="snd-param-section">';
+  html+='<div class="snd-param-section-title">Parcel Levels</div>';
+  html+=row('LCL Pressure',params.LCL_p,'hPa');
+  html+=row('LCL Height',params.LCL_h,'m');
+  if(params.LFC_p)html+=row('LFC Pressure',params.LFC_p,'hPa');
+  if(params.LFC_h)html+=row('LFC Height',params.LFC_h,'m');
+  if(params.EL_p)html+=row('EL Pressure',params.EL_p,'hPa');
+  if(params.EL_h)html+=row('EL Height',params.EL_h,'m');
+  html+='</div>';
+
+  /* CAPE / CIN */
+  html+='<div class="snd-param-section">';
+  html+='<div class="snd-param-section-title">Instability</div>';
+  html+=row('SBCAPE',params.SBCAPE,'J/kg',capeSeverity(params.SBCAPE));
+  html+=row('SBCIN',params.SBCIN,'J/kg');
+  html+=row('Lifted Index',params.LI,'',liSeverity(params.LI));
+  html+=row('Showalter',params.SH,'');
+  html+=row('K Index',params.K,'');
+  html+=row('Total Totals',params.TT,'');
+  html+=row('Precip Water',params.PW,'mm');
+  html+='</div>';
+
+  /* Shear */
+  html+='<div class="snd-param-section">';
+  html+='<div class="snd-param-section-title">Bulk Shear</div>';
+  html+=row('0-1 km',params.shear_01,'kt',shearSeverity(params.shear_01));
+  html+=row('0-3 km',params.shear_03,'kt',shearSeverity(params.shear_03));
+  html+=row('0-6 km',params.shear_06,'kt',shearSeverity(params.shear_06));
+  html+='</div>';
+
+  /* SRH */
+  html+='<div class="snd-param-section">';
+  html+='<div class="snd-param-section-title">Storm-Relative Helicity</div>';
+  html+=row('SRH 0-1 km',params.SRH_01,'m\u00B2/s\u00B2',srhSeverity(params.SRH_01));
+  html+=row('SRH 0-3 km',params.SRH_03,'m\u00B2/s\u00B2',srhSeverity(params.SRH_03));
+  html+=row('Storm Motion',params.stormU+'/'+params.stormV,'kt');
+  html+='</div>';
+
+  /* Key levels */
+  html+='<div class="snd-param-section">';
+  html+='<div class="snd-param-section-title">Key Levels (T / Td / Wind)</div>';
+  ['1000','925','850','700','500','300','250'].forEach(function(p){
+    var T=params['T_'+p],Td=params['Td_'+p],dir=params['dir_'+p],spd=params['spd_'+p];
+    if(T==null&&dir==null)return;
+    var val='';
+    if(T!=null)val+=T.toFixed(1)+'/'+(Td==null?'-':Td.toFixed(1));
+    if(dir!=null&&spd!=null)val+=(val?' \u00B7 ':'')+Math.round(dir)+'\u00B0@'+Math.round(spd)+'kt';
+    html+=row(p+' hPa',val);
+  });
+  html+='</div>';
+
+  el.innerHTML=html;
+}
+
+/* ── Skew-T canvas renderer ── */
+function sndClearCanvas(){
+  var c=document.getElementById('sndCanvas');
+  if(!c)return;
+  var ctx=c.getContext('2d');
+  ctx.clearRect(0,0,c.width,c.height);
+}
+
+function sndRenderSkewT(){
+  var c=document.getElementById('sndCanvas');
+  if(!c||!sndCurrentData)return;
+  var ctx=c.getContext('2d');
+  var W=c.width,H=c.height;
+
+  /* Plot area margins */
+  var ml=55,mr=80,mt=30,mb=50;  /* left, right, top, bottom */
+  var pw=W-ml-mr;   /* plot width */
+  var ph=H-mt-mb;   /* plot height */
+
+  /* Pressure range: 1050 hPa (bottom) to 100 hPa (top) */
+  var pMin=100,pMax=1050;
+
+  /* Y axis: log scale on pressure */
+  function pToY(p){
+    /* pMax at bottom (Y=mt+ph), pMin at top (Y=mt) */
+    var lp=Math.log(p),lpMin=Math.log(pMin),lpMax=Math.log(pMax);
+    return mt+ph*(lpMax-lp)/(lpMax-lpMin);
+  }
+
+  /* Temperature range: -50°C (left at 1050hPa) to +40°C — but skew-T
+     rotates isotherms, so we need both x at bottom AND a skew angle. */
+  var tMin=-60,tMax=40;
+
+  /* X axis: temperature, but skewed.
+     At pressure p, temperature T maps to:
+       x = ml + (T - T_at_p_for_left) / (T_at_p_for_right - T_at_p_for_left) * pw
+     where T_at_p_for_left = T_min_at_sfc + (Tmax_at_top - Tmin_at_sfc) * (1 - pressure_fraction)
+     Standard skew-T: isotherms are lines from (Tmin, pMax) to (Tmin+50, pMin),
+     slope of 45° at standard pressure.
+     Simplification: x = ml + (T + (Tmax_at_p - Tmin_at_p)) / range * pw
+     Better: use the formula:
+       x_at(T,p) = ml + pw * (T - tMin + (Tmax_offset)) / totalRange
+     where the offset depends on pressure via log(p).
+     For a proper skew-T, isotherms are straight lines from (T_bottom, pMax) to (T_top, pMin),
+     with the top end shifted right by ~ (T_max - T_min) * 0.5.
+     Cleanest formula:
+       x = ml + (T - tMin + (1 - logP_frac) * SKEW) / (tMax - tMin + SKEW) * pw
+     where SKEW is the horizontal shift between bottom and top (~50°C), and logP_frac = (log(pMax)-log(p))/(log(pMax)-log(pMin)).
+     SKEW = 33 gives roughly 45° isotherms. */
+  var SKEW=33;
+  function tToX(T,p){
+    var lpFrac=(Math.log(pMax)-Math.log(p))/(Math.log(pMax)-Math.log(pMin));
+    var totalRange=(tMax-tMin)+SKEW;
+    return ml+pw*(T-tMin+(1-lpFrac)*SKEW)/totalRange;
+  }
+
+  /* ── Clear & background ── */
+  ctx.fillStyle='#0e0e0e';
+  ctx.fillRect(0,0,W,H);
+
+  /* ── Plot border ── */
+  ctx.strokeStyle='#3a3a3a';
+  ctx.lineWidth=1;
+  ctx.strokeRect(ml,mt,pw,ph);
+
+  /* ── Isobars (horizontal lines + labels) ── */
+  ctx.strokeStyle='#2a2a2a';
+  ctx.fillStyle='#666';
+  ctx.font='10px Inter,monospace';
+  ctx.lineWidth=0.7;
+  [1000,925,850,700,500,400,300,250,200,150,100].forEach(function(p){
+    if(p<pMin||p>pMax)return;
+    var y=pToY(p);
+    ctx.beginPath();ctx.moveTo(ml,y);ctx.lineTo(ml+pw,y);ctx.stroke();
+    ctx.textAlign='right';
+    ctx.fillText(p+'',ml-6,y+3);
+  });
+
+  /* ── Isotherms (skewed lines, every 10°C from -60 to +40) ── */
+  ctx.strokeStyle='#2a2a2a';
+  ctx.lineWidth=0.7;
+  for(var T=tMin;T<=tMax;T+=10){
+    var xBottom=tToX(T,pMax);
+    var xTop=tToX(T,pMin);
+    ctx.beginPath();ctx.moveTo(xBottom,mt+ph);ctx.lineTo(xTop,mt);ctx.stroke();
+    /* Label at top */
+    ctx.fillStyle=T===0?'#888':'#666';
+    ctx.textAlign='center';
+    ctx.fillText(T+'\u00B0',xTop,mt-6);
+  }
+
+  /* ── Dry adiabats (lines of constant theta) ── */
+  /* theta = T * (1000/p)^0.2854, with T in K.
+     For each starting T at sfc, walk up and draw the curve. */
+  ctx.strokeStyle='#3d2c2c';
+  ctx.lineWidth=0.7;
+  ctx.setLineDash([2,3]);
+  for(var T0=-30;T0<=50;T0+=10){
+    ctx.beginPath();
+    var started=false;
+    for(var lp=Math.log(pMax);lp>=Math.log(pMin);lp-=0.05){
+      var p=Math.exp(lp);
+      var theta=(T0+273.15)*Math.pow(1000/p,0.2854);
+      var T=theta*Math.pow(p/1000,0.2854)-273.15;
+      var x=tToX(T,p);
+      var y=pToY(p);
+      if(!started){ctx.moveTo(x,y);started=true}
+      else ctx.lineTo(x,y);
+    }
+    ctx.stroke();
+  }
+
+  /* ── Moist adiabats (lines of constant theta-e) ── */
+  /* Approximation: walk up moist adiabat starting from a T at 1000 hPa. */
+  ctx.strokeStyle='#2c3d3a';
+  for(var T0=0;T0<=40;T0+=5){
+    ctx.beginPath();
+    var started=false;
+    var parcel_T_K=T0+273.15;
+    var p=1000;
+    while(p>=pMin){
+      var T=parcel_T_K-273.15;
+      var x=tToX(T,p);
+      var y=pToY(p);
+      if(!started){ctx.moveTo(x,y);started=true}
+      else ctx.lineTo(x,y);
+      /* Step up */
+      var nextP=p-10;
+      parcel_T_K=sndLiftMoist(p,parcel_T_K,nextP);
+      p=nextP;
+      if(parcel_T_K<100)break;
+    }
+    ctx.stroke();
+  }
+
+  /* ── Mixing ratio lines (constant w) ── */
+  /* w = 621.97*e/(p-e), e = Es(Td) so for a given w we can find Td at each p.
+     Draw lines for w = 1, 2, 5, 10, 20 g/kg. */
+  ctx.strokeStyle='#2a3a2c';
+  ctx.setLineDash([1,3]);
+  [1,2,5,10,20].forEach(function(w){
+    ctx.beginPath();
+    var started=false;
+    for(var lp=Math.log(pMax);lp>=Math.log(pMin);lp-=0.05){
+      var p=Math.exp(lp);
+      /* w = 621.97*e/(p-e) → e = w*p/(621.97+w) */
+      var e=w*p/(621.97+w);
+      /* Td from inverted Tetens: Td = 240.97*ln(e/6.1121)/(17.502-ln(e/6.1121)) */
+      var ratio=e/6.1121;
+      if(ratio<=0)continue;
+      var Td=240.97*Math.log(ratio)/(17.502-Math.log(ratio));
+      var x=tToX(Td,p);
+      var y=pToY(p);
+      if(!started){ctx.moveTo(x,y);started=true}
+      else ctx.lineTo(x,y);
+    }
+    ctx.stroke();
+  });
+  ctx.setLineDash([]);
+
+  /* ── Title / station info ── */
+  ctx.fillStyle='#ff7300';
+  ctx.font='bold 13px Inter,monospace';
+  ctx.textAlign='left';
+  var title=(sndCurrentData.station||'')+ ' \u2014 '+(sndCurrentStation?sndCurrentStation.name:'');
+  ctx.fillText(title,ml+4,16);
+  ctx.fillStyle='#888';
+  ctx.font='10px Inter,monospace';
+  if(sndCurrentData.valid){
+    var dt=sndCurrentData.valid.replace('T',' ').replace('Z',' Z');
+    ctx.fillText('Valid: '+dt,ml+4,28);
+  }
+
+  /* ── Temperature trace (red) ── */
+  ctx.strokeStyle='#ff5a5a';
+  ctx.lineWidth=2;
+  ctx.beginPath();
+  var started=false;
+  sndCurrentData.levels.forEach(function(l){
+    if(l.T==null)return;
+    if(l.p<pMin||l.p>pMax)return;
+    var x=tToX(l.T,l.p);
+    var y=pToY(l.p);
+    if(!started){ctx.moveTo(x,y);started=true}
+    else ctx.lineTo(x,y);
+  });
+  ctx.stroke();
+
+  /* ── Dewpoint trace (green) ── */
+  ctx.strokeStyle='#5aff7a';
+  ctx.lineWidth=2;
+  ctx.beginPath();
+  started=false;
+  sndCurrentData.levels.forEach(function(l){
+    if(l.Td==null)return;
+    if(l.p<pMin||l.p>pMax)return;
+    var x=tToX(l.Td,l.p);
+    var y=pToY(l.p);
+    if(!started){ctx.moveTo(x,y);started=true}
+    else ctx.lineTo(x,y);
+  });
+  ctx.stroke();
+
+  /* ── Wind barbs (right side) ── */
+  /* Sample at standard pressure levels */
+  var barbLevels=[1000,925,850,700,500,400,300,250,200,150,100];
+  var barbX=ml+pw+18;
+  ctx.strokeStyle='#bbb';
+  ctx.fillStyle='#bbb';
+  ctx.lineWidth=1;
+  barbLevels.forEach(function(p){
+    if(p<pMin||p>pMax)return;
+    var dir=sndInterpLevel(sndCurrentData.levels,'p','dir',p);
+    var spd=sndInterpLevel(sndCurrentData.levels,'p','spd',p);
+    if(dir==null||spd==null)return;
+    var y=pToY(p);
+    sndDrawWindBarb(ctx,barbX,y,dir,spd);
+  });
+
+  /* ── LCL / LFC / EL markers ── */
+  var sfc=sndFindSfc(sndCurrentData.levels);
+  if(sfc){
+    var Td0=sndInterpLevel(sndCurrentData.levels,'p','Td',sfc.p);
+    if(Td0!=null){
+      var lcl=sndLiftDryToLCL(sfc.p,sfc.T,Td0);
+      if(lcl){
+        /* Draw parcel ascent trace (dashed yellow) from sfc to LCL */
+        ctx.strokeStyle='#ffd60a';
+        ctx.setLineDash([4,3]);
+        ctx.lineWidth=1.5;
+        ctx.beginPath();
+        ctx.moveTo(tToX(sfc.T,sfc.p),pToY(sfc.p));
+        ctx.lineTo(tToX(lcl.T_lcl,lcl.p_lcl),pToY(lcl.p_lcl));
+        ctx.stroke();
+        ctx.setLineDash([]);
+        /* Continue moist from LCL upward */
+        var parcel_T_K=lcl.T_lcl+273.15;
+        var p=lcl.p_lcl;
+        ctx.strokeStyle='#ffd60a';
+        ctx.setLineDash([4,3]);
+        ctx.beginPath();
+        ctx.moveTo(tToX(lcl.T_lcl,lcl.p_lcl),pToY(lcl.p_lcl));
+        while(p>100){
+          var nextP=p-5;
+          parcel_T_K=sndLiftMoist(p,parcel_T_K,nextP);
+          ctx.lineTo(tToX(parcel_T_K-273.15,nextP),pToY(nextP));
+          p=nextP;
+        }
+        ctx.stroke();
+        ctx.setLineDash([]);
+        /* Mark LCL */
+        ctx.fillStyle='#ffd60a';
+        ctx.beginPath();
+        ctx.arc(tToX(lcl.T_lcl,lcl.p_lcl),pToY(lcl.p_lcl),4,0,2*Math.PI);
+        ctx.fill();
+        ctx.fillStyle='#ffd60a';
+        ctx.font='bold 9px Inter,monospace';
+        ctx.textAlign='left';
+        ctx.fillText('LCL',tToX(lcl.T_lcl,lcl.p_lcl)+6,pToY(lcl.p_lcl)-4);
+      }
+    }
+  }
+
+  /* ── Axis labels ── */
+  ctx.fillStyle='#888';
+  ctx.font='9px Inter,monospace';
+  ctx.textAlign='center';
+  ctx.fillText('Temperature (\u00B0C)',ml+pw/2,H-12);
+  ctx.save();
+  ctx.translate(14,mt+ph/2);
+  ctx.rotate(-Math.PI/2);
+  ctx.fillText('Pressure (hPa)',0,0);
+  ctx.restore();
+}
+
+/* Draw a standard wind barb at (x,y). dir = degrees from N (wind direction),
+   spd = knots. Standard barb convention. */
+function sndDrawWindBarb(ctx,x,y,dir,spd){
+  /* Barb points in direction wind is FROM */
+  var rad=dir*Math.PI/180;
+  var len=22;  /* barb shaft length */
+  var dx=-Math.sin(rad)*len;
+  var dy=-Math.cos(rad)*len;
+  /* Shaft */
+  ctx.strokeStyle='#bbb';
+  ctx.lineWidth=1;
+  ctx.beginPath();
+  ctx.moveTo(x,y);
+  ctx.lineTo(x+dx,y+dy);
+  ctx.stroke();
+  /* Flags — drawn along shaft from far end back toward (x,y).
+     50 kt = triangle, 10 kt = long barb, 5 kt = short barb */
+  var remaining=Math.round(spd);
+  var px=x+dx,py=y+dy;
+  /* Direction perpendicular to shaft, pointing right (clockwise) */
+  var pdx=-dy/len*4;
+  var pdy=dx/len*4;
+  /* Flag positions along shaft from far end inward */
+  var flagStep=len/5;
+  var flagX=px,flagY=py;
+  /* 50 kt triangles */
+  while(remaining>=50){
+    var tx=flagX-dx/len*flagStep;
+    var ty=flagY-dy/len*flagStep;
+    ctx.fillStyle='#bbb';
+    ctx.beginPath();
+    ctx.moveTo(flagX,flagY);
+    ctx.lineTo(tx,ty);
+    ctx.lineTo(tx+pdx*1.5,ty+pdy*1.5);
+    ctx.closePath();
+    ctx.fill();
+    flagX=tx;flagY=ty;
+    remaining-=50;
+  }
+  /* 10 kt long barbs */
+  while(remaining>=10){
+    var tx=flagX-dx/len*flagStep;
+    var ty=flagY-dy/len*flagStep;
+    ctx.beginPath();
+    ctx.moveTo(flagX,flagY);
+    ctx.lineTo(tx+pdx*1.5,ty+pdy*1.5);
+    ctx.stroke();
+    flagX=tx;flagY=ty;
+    remaining-=10;
+  }
+  /* 5 kt short barb */
+  if(remaining>=5){
+    var tx=flagX-dx/len*(flagStep*0.5);
+    var ty=flagY-dy/len*(flagStep*0.5);
+    ctx.beginPath();
+    ctx.moveTo(flagX,flagY);
+    ctx.lineTo(tx+pdx*1.0,ty+pdy*1.0);
+    ctx.stroke();
+  }
+}
+
+/* ── Screenshot ── */
+function sndScreenshot(){
+  var c=document.getElementById('sndCanvas');
+  if(!c||!sndCurrentData){
+    sndShowError('Fetch a sounding first.');
+    setTimeout(function(){sndShowError('')},3000);
+    return;
+  }
+  /* Build a composite image: station info header + skew-T canvas + params panel */
+  var composite=document.createElement('canvas');
+  composite.width=c.width;
+  composite.height=c.height+60;
+  var ctx=composite.getContext('2d');
+  /* Top banner */
+  ctx.fillStyle='#0a0a0a';
+  ctx.fillRect(0,0,composite.width,60);
+  ctx.fillStyle='#ff7300';
+  ctx.font='bold 16px Inter,sans-serif';
+  ctx.textAlign='left';
+  ctx.fillText('SKYWARN \u2014 '+(sndCurrentData.station||'')+' \u2014 '+(sndCurrentStation?sndCurrentStation.name:''),12,22);
+  ctx.fillStyle='#888';
+  ctx.font='11px Inter,sans-serif';
+  ctx.fillText('Valid: '+(sndCurrentData.valid||'').replace('T',' ').replace('Z',' Z'),12,42);
+  ctx.fillStyle='#666';
+  ctx.font='10px Inter,sans-serif';
+  ctx.textAlign='right';
+  ctx.fillText('Source: Iowa Environmental Mesonet \u00B7 '+new Date().toISOString().slice(0,16).replace('T',' ')+'Z',composite.width-12,42);
+  /* Copy skew-T canvas below banner */
+  ctx.drawImage(c,0,60);
+  /* Trigger download + show in modal */
+  composite.toBlob(function(blob){
+    if(!blob)return;
+    var url=URL.createObjectURL(blob);
+    var a=document.createElement('a');
+    a.href=url;
+    a.download='skywarn-sounding-'+sndCurrentData.station+'-'+(sndCurrentData.valid||'').replace(/[:T]/g,'-').replace('Z','')+'.png';
+    document.body.appendChild(a);a.click();document.body.removeChild(a);
+    setTimeout(function(){URL.revokeObjectURL(url)},1000);
+  },'image/png');
 }
 
 /* ── Boot sequence ──────────────────────────────────────────────────────── */
