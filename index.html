@@ -672,6 +672,43 @@ body{
 }
 .ref-diagram-slot i{display:block;font-size:18px;margin-bottom:4px;color:rgba(255,115,0,.5)}
 .ref-diagram-slot img{max-width:100%;height:auto;border-radius:4px;display:block;margin:0 auto}
+/* Reference video player */
+.ref-video-wrap{
+  position:relative;
+  margin-top:10px;
+  border-radius:6px;
+  overflow:hidden;
+  background:#000;
+  border:1px solid var(--bdr);
+}
+.ref-video-wrap video{
+  width:100%;
+  max-height:480px;
+  display:block;
+  background:#000;
+}
+.ref-video-wrap video::-webkit-media-controls-panel{
+  background:linear-gradient(to bottom,transparent,rgba(0,0,0,.7));
+}
+.ref-video-badge{
+  position:absolute;
+  top:8px;
+  left:8px;
+  background:rgba(255,115,0,.95);
+  color:#0a0a0a;
+  font-size:9px;
+  font-weight:700;
+  padding:3px 8px;
+  border-radius:4px;
+  text-transform:uppercase;
+  letter-spacing:.05em;
+  display:inline-flex;
+  align-items:center;
+  gap:4px;
+  pointer-events:none;
+  box-shadow:0 2px 6px rgba(0,0,0,.5);
+}
+.ref-video-badge i{font-size:8px}
 .ref-cat-header{
   font-size:13px;
   font-weight:700;
@@ -5250,7 +5287,7 @@ if('serviceWorker' in navigator){
 
 var REFERENCE_CATEGORIES=[
   'Cloud Types','Radar Terms','Severe Weather','Hydrology',
-  'Winter Weather','SKYWARN Criteria','Diagrams'
+  'Winter Weather','SKYWARN Criteria','Diagrams','Videos'
 ];
 
 /* Optional diagram image map. Drop image filenames here once uploaded.
@@ -5337,6 +5374,7 @@ var REFERENCE_TERMS=[
   {term:'Storm Spotter Checklist',definition:'NWS Fort Worth field checklist covering: Shelf Cloud identification (slopes down/away from rain, found near front/middle of storm), Wall Cloud identification (slopes toward rain, forms under smooth flat updraft base), Supercell low-level clues (rain-free base, inflow bands, shelf cloud), mid/upper-level clues (crisp cauliflower updraft texture), tornado threat indicators (rounded updraft tower, striations, circular updraft base, increasing spin, clear slot formation, rain burst behind wall cloud), and Wind Speed Estimation chart (32–112+ mph).',category:'Diagrams',source:'NWS Fort Worth — weather.gov/fortworth'},
   {term:'NOAA Severe Weather Reporting Checklist',definition:'Quick-reference card from NWS Fort Worth covering key convective weather terms for field spotters. Includes: Anticyclonic, Anvil, Beaver\'s Tail, Clear Slot, Cyclonic, Downburst, Downdraft, Flanking Line, Flash Flood, Flash Flood Warning, Funnel Cloud, Gust Front, Gustnado, HP Supercell, Inflow Bands, LP Supercell, Mammatus Clouds, and more.',category:'Diagrams',source:'NWS Fort Worth — weather.gov/fortworth'},
   {term:'Storm Spotter\'s Dictionary',definition:'Quick-reference card from NWS Fort Worth covering key convective weather terms for field spotters. Includes: Anticyclonic, Anvil, Beaver\'s Tail, Clear Slot, Cyclonic, Downburst, Downdraft, Flanking Line, Flash Flood, Flash Flood Warning, Funnel Cloud, Gust Front, Gustnado, HP Supercell, Inflow Bands, LP Supercell, Mammatus Clouds, and more.',category:'Diagrams',source:'NWS Fort Worth — weather.gov/fortworth'},
+  {term:'Beaufort Wind Scale',definition:'Video reference for the Beaufort wind scale — an empirical measure that relates wind speed to observed conditions at sea or on land. The scale runs from 0 (calm) to 12+ (hurricane force), with each step describing visible effects such as smoke drift, leaf movement, branch sway, whole trees in motion, structural damage, and widespread destruction. Spotters can use it to estimate wind speed when no anemometer is available.',category:'Videos',source:'Skywarn Storm Spotters — Storm Spotter\'s Field Reference',video:'media/beaufort_scale.mp4',poster:''},
 ];
 
 var refLoaded=false;
@@ -5473,6 +5511,16 @@ function renderRefItem(t,showCat){
       html+='<div style="font-size:9px;margin-top:2px;opacity:.7">Upload \u2014 slot reserved in code</div>';
       html+='</div>';
     }
+  }
+  /* If this term has a video, render an HTML5 video player */
+  if(t.video){
+    html+='<div class="ref-video-wrap">';
+    html+='<video controls preload="metadata" playsinline poster="'+(t.poster||'')+'" style="width:100%;display:block;border-radius:6px;background:#000">';
+    html+='<source src="'+t.video+'" type="video/mp4">';
+    html+='Your browser does not support the video tag.';
+    html+='</video>';
+    html+='<div class="ref-video-badge"><i class="fas fa-play"></i> Video</div>';
+    html+='</div>';
   }
   if(t.source){
     html+='<div class="ref-item-src">Source: '+t.source+'</div>';
