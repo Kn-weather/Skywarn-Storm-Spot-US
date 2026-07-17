@@ -883,6 +883,133 @@ body{
 }
 .safety-footer em{color:var(--t2)}
 
+/* ── Sounding station pins on the polygon map ── */
+.snd-pin-icon{
+  display:flex;align-items:center;justify-content:center;
+  width:22px;height:22px;
+  background:rgba(255,115,0,.95);
+  border:2px solid #0a0a0a;
+  border-radius:50%;
+  color:#0a0a0a;
+  font-size:10px;font-weight:800;
+  font-family:'Inter',sans-serif;
+  box-shadow:0 0 6px rgba(255,115,0,.7),0 2px 4px rgba(0,0,0,.5);
+  cursor:pointer;
+  transition:transform .15s,box-shadow .15s;
+}
+.snd-pin-icon:hover{
+  transform:scale(1.2);
+  box-shadow:0 0 12px rgba(255,115,0,1),0 4px 8px rgba(0,0,0,.6);
+}
+.snd-pin-popup .leaflet-popup-content-wrapper{
+  background:#0a0a0a;
+  border:1px solid var(--acc);
+  border-radius:8px;
+  box-shadow:0 4px 20px rgba(0,0,0,.7),0 0 0 1px rgba(255,115,0,.2);
+  color:var(--t1);
+  padding:0;
+  max-width:340px;
+}
+.snd-pin-popup .leaflet-popup-content{
+  margin:0;
+  padding:0;
+  width:auto !important;
+}
+.snd-pin-popup .leaflet-popup-tip{
+  background:var(--acc);
+}
+.snd-pin-popup .leaflet-popup-close-button{
+  color:var(--t2);
+  font-size:18px;
+  padding:6px 8px;
+}
+.snd-pin-popup .leaflet-popup-close-button:hover{
+  color:var(--acc);
+  background:transparent;
+}
+.snd-popup-wrap{
+  width:320px;
+  max-width:100%;
+  font-family:'Inter',sans-serif;
+}
+.snd-popup-header{
+  padding:10px 14px 8px;
+  border-bottom:1px solid var(--bdr);
+  background:linear-gradient(180deg,rgba(255,115,0,.1),transparent);
+}
+.snd-popup-title{
+  font-size:13px;font-weight:700;
+  color:var(--acc);
+  text-transform:uppercase;letter-spacing:.04em;
+  display:flex;align-items:center;gap:6px;
+}
+.snd-popup-sub{
+  font-size:10px;color:var(--t3);
+  margin-top:2px;
+}
+.snd-popup-body{
+  padding:10px 14px;
+}
+.snd-popup-loading{
+  text-align:center;padding:30px 10px;
+  color:var(--t3);font-size:11px;
+}
+.snd-popup-loading i{color:var(--acc);margin-right:5px}
+.snd-popup-error{
+  text-align:center;padding:20px 10px;
+  color:#ff5a5a;font-size:10px;line-height:1.5;
+}
+.snd-popup-canvas-wrap{
+  background:#0e0e0e;
+  border:1px solid var(--bdr);
+  border-radius:4px;
+  padding:4px;
+  margin-bottom:8px;
+}
+.snd-popup-canvas-wrap img{
+  width:100%;height:auto;display:block;border-radius:3px;
+}
+.snd-popup-params{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:3px 10px;
+  font-size:10px;
+  padding:6px 8px;
+  background:var(--bg2);
+  border:1px solid var(--bdr);
+  border-radius:4px;
+  margin-bottom:8px;
+}
+.snd-popup-param{
+  display:flex;justify-content:space-between;
+  color:var(--t2);
+}
+.snd-popup-param b{color:var(--t1);font-weight:600}
+.snd-popup-actions{
+  display:flex;gap:6px;
+}
+.snd-popup-btn{
+  flex:1;
+  background:var(--bg2);
+  border:1px solid var(--bdr);
+  color:var(--t1);
+  font-family:inherit;font-size:10px;font-weight:600;
+  padding:6px 8px;
+  border-radius:4px;
+  cursor:pointer;
+  text-transform:uppercase;letter-spacing:.04em;
+  transition:background .15s,border-color .15s;
+}
+.snd-popup-btn:hover{
+  background:var(--acc);color:#0a0a0a;border-color:var(--acc);
+}
+.snd-popup-btn-primary{
+  background:var(--acc);color:#0a0a0a;border-color:var(--acc);
+}
+.snd-popup-btn-primary:hover{
+  background:#ff8c33;color:#0a0a0a;
+}
+
 /* ── Soundings (Skew-T) ── */
 .snd-wrap{
   position:fixed;
@@ -1393,6 +1520,14 @@ body.capturing .hamburger-menu{display:none!important}
           </div>
           <input type="range" class="radar-anim-timeline" id="amRadarTimeline" min="0" max="0" value="0" oninput="radarSeekTo(this.value)" style="width:100%">
           <div class="radar-anim-time-display" id="amRadarTimeDisplay">—</div>
+        </div>
+      </div>
+
+      <div class="divider">
+        <div class="section-label">Sounding Stations</div>
+        <label style="margin:1px 0"><input type="checkbox" id="amSndEnable" onchange="toggleSndLayer()"> Show RAOB Stations</label>
+        <div style="font-size:9px;color:var(--t3);line-height:1.4;margin-top:3px">
+          68 NWS upper-air sites. Click a pin to view the latest skew-T.
         </div>
       </div>
 
@@ -6989,6 +7124,470 @@ function sndScreenshot(){
     document.body.appendChild(a);a.click();document.body.removeChild(a);
     setTimeout(function(){URL.revokeObjectURL(url)},1000);
   },'image/png');
+}
+
+/* ── Sounding station pin layer on the polygon map ──
+   When enabled, renders a pin for each RAOB station. Clicking a pin
+   fetches the latest sounding and renders it inline in the popup. */
+
+var sndPinLayer=null;        /* Leaflet layerGroup holding all station pins */
+var sndPopupCache={};        /* stationId -> {data, params, ts} cache */
+
+function toggleSndLayer(){
+  var cb=document.getElementById('amSndEnable');
+  if(!cb)return;
+  if(cb.checked){
+    sndAddPinLayer();
+  }else{
+    sndRemovePinLayer();
+  }
+}
+
+function sndAddPinLayer(){
+  if(sndPinLayer||!alertMapInstance)return;
+  sndPinLayer=L.layerGroup();
+  SND_STATIONS.forEach(function(s){
+    /* Use a divIcon so we can style the pin and show the station ID inside */
+    var icon=L.divIcon({
+      className:'snd-pin',
+      html:'<div class="snd-pin-icon" title="'+s.id+' \u2014 '+s.name+'">'+s.id.slice(0,3)+'</div>',
+      iconSize:[22,22],
+      iconAnchor:[11,11],
+      popupAnchor:[0,-12]
+    });
+    var m=L.marker([s.lat,s.lon],{icon:icon,title:s.id+' \u2014 '+s.name});
+    /* Use layer.on('click') instead of bindPopup(function) so we can render
+       async content into the popup after fetching. */
+    m.on('click',function(e){
+      sndOpenPinPopup(s,e.latlng);
+    });
+    sndPinLayer.addLayer(m);
+  });
+  sndPinLayer.addTo(alertMapInstance);
+}
+
+function sndRemovePinLayer(){
+  if(sndPinLayer&&alertMapInstance){
+    alertMapInstance.removeLayer(sndPinLayer);
+    sndPinLayer=null;
+  }
+}
+
+/* When a pin is clicked, open the popup immediately with a loading state,
+   then fetch the sounding and replace the popup content with the rendered
+   skew-T image + key params. */
+function sndOpenPinPopup(station,latlng){
+  if(!alertMapInstance)return;
+  /* Build the popup with a loading state */
+  var popup=L.popup({
+    className:'snd-pin-popup',
+    maxWidth:340,
+    minWidth:300,
+    autoPan:true
+  })
+  .setLatLng(latlng)
+  .setContent(sndPopupLoadingHTML(station))
+  .openOn(alertMapInstance);
+
+  /* Check cache first */
+  var cached=sndPopupCache[station.id];
+  if(cached){
+    sndRenderPinPopupContent(popup,station,cached);
+    return;
+  }
+  /* Fetch latest 00Z or 12Z */
+  var ts=sndLatestCycleISO();
+  var url='https://mesonet.agron.iastate.edu/json/raob.py?station='+station.id+'&network=_RAOB&ts='+encodeURIComponent(ts);
+  fetch(url).then(function(r){
+    if(!r.ok)throw new Error('HTTP '+r.status);
+    return r.json();
+  }).then(function(data){
+    var profiles=data.profiles||[];
+    if(profiles.length===0){
+      sndRenderPinPopupError(popup,station,'No sounding data available for the latest 00Z/12Z cycle at '+station.id+'. Note: data appears ~1 hour after launch.');
+      return;
+    }
+    var profile=profiles[0];
+    var parsed=sndParseProfile(profile);
+    /* Render skew-T to an offscreen canvas, then to a data URL */
+    var img=sndRenderToDataURL(parsed,station);
+    var params=sndComputeParams(parsed);
+    var cached={data:parsed,params:params,img:img,ts:ts};
+    sndPopupCache[station.id]=cached;
+    sndRenderPinPopupContent(popup,station,cached);
+  }).catch(function(err){
+    sndRenderPinPopupError(popup,station,'Failed to fetch: '+(err.message||err));
+  });
+}
+
+/* Return ISO timestamp for the most recent COMPLETED 00Z or 12Z cycle */
+function sndLatestCycleISO(){
+  var now=new Date();
+  var h=now.getUTCHours();
+  /* Data appears ~1.5h after launch, so use 1.5h cutoff */
+  var snapH;
+  if(h<1.5){snapH=12; var d=new Date(now.getTime()-24*3600*1000); return sndSnapCycleISO(d,snapH)}
+  if(h<13.5){snapH=0;  return sndSnapCycleISO(now,snapH)}
+  snapH=12;
+  return sndSnapCycleISO(now,snapH);
+}
+function sndSnapCycleISO(d,snapH){
+  var snap=new Date(Date.UTC(d.getUTCFullYear(),d.getUTCMonth(),d.getUTCDate(),snapH,0,0));
+  return snap.toISOString().replace(/\.\d+Z$/,'Z');
+}
+
+function sndPopupLoadingHTML(station){
+  return '<div class="snd-popup-wrap">'+
+    '<div class="snd-popup-header">'+
+      '<div class="snd-popup-title"><i class="fas fa-chart-line"></i> '+station.id+' \u2014 '+station.name+'</div>'+
+      '<div class="snd-popup-sub">Fetching latest sounding...</div>'+
+    '</div>'+
+    '<div class="snd-popup-body">'+
+      '<div class="snd-popup-loading"><i class="fas fa-spinner fa-spin"></i> Loading skew-T for '+station.id+'...</div>'+
+    '</div>'+
+  '</div>';
+}
+
+function sndRenderPinPopupError(popup,station,msg){
+  popup.setContent('<div class="snd-popup-wrap">'+
+    '<div class="snd-popup-header">'+
+      '<div class="snd-popup-title"><i class="fas fa-chart-line"></i> '+station.id+' \u2014 '+station.name+'</div>'+
+      '<div class="snd-popup-sub">Latest cycle: '+sndLatestCycleISO().replace('T',' ').replace('Z',' Z')+'</div>'+
+    '</div>'+
+    '<div class="snd-popup-body">'+
+      '<div class="snd-popup-error"><i class="fas fa-triangle-exclamation"></i><br>'+msg+'</div>'+
+    '</div>'+
+  '</div>');
+}
+
+function sndRenderPinPopupContent(popup,station,cached){
+  var p=cached.params||{};
+  /* Build compact params grid */
+  function fmt(v,u){return v==null?'—':(Math.round(v*10)/10)+(u?' '+u:'')}
+  function capeColor(v){
+    if(v>=2500)return '#ff5a5a';
+    if(v>=1500)return '#ffb340';
+    if(v>=500)return '#39d353';
+    return '#fff';
+  }
+  function liColor(v){
+    if(v==null)return '#fff';
+    if(v<=-6)return '#ff5a5a';
+    if(v<=-4)return '#ffb340';
+    if(v<=0)return '#39d353';
+    return '#fff';
+  }
+  var paramRows=[
+    ['Sfc T',fmt(p.T_sfc,'\u00B0C')],
+    ['Sfc Td',fmt(p.Td_sfc,'\u00B0C')],
+    ['CAPE','<b style="color:'+capeColor(p.SBCAPE)+'">'+(p.SBCAPE!=null?p.SBCAPE:'—')+'</b> J/kg'],
+    ['CIN','<b>'+(p.SBCIN!=null?p.SBCIN:'—')+'</b> J/kg'],
+    ['LI','<b style="color:'+liColor(p.LI)+'">'+fmt(p.LI)+'</b>'],
+    ['Showalter',fmt(p.SH)],
+    ['K Index',fmt(p.K)],
+    ['Tot Tot',fmt(p.TT)],
+    ['LCL','<b>'+(p.LCL_p!=null?p.LCL_p:'—')+'</b> hPa'],
+    ['LFC','<b>'+(p.LFC_p!=null?p.LFC_p:'—')+'</b> hPa'],
+    ['EL','<b>'+(p.EL_p!=null?p.EL_p:'—')+'</b> hPa'],
+    ['PW','<b>'+(p.PW!=null?p.PW:'—')+'</b> mm'],
+    ['Shear 0-6km','<b>'+(p.shear_06!=null?p.shear_06:'—')+'</b> kt'],
+    ['SRH 0-1km','<b>'+(p.SRH_01!=null?p.SRH_01:'—')+'</b> m\u00B2/s\u00B2']
+  ];
+  var paramsHTML='<div class="snd-popup-params">';
+  paramRows.forEach(function(r){
+    paramsHTML+='<div class="snd-popup-param"><span>'+r[0]+'</span><span>'+r[1]+'</span></div>';
+  });
+  paramsHTML+='</div>';
+
+  var valid=(cached.data.valid||'').replace('T',' ').replace('Z',' Z');
+  var html='<div class="snd-popup-wrap">'+
+    '<div class="snd-popup-header">'+
+      '<div class="snd-popup-title"><i class="fas fa-chart-line"></i> '+station.id+' \u2014 '+station.name+'</div>'+
+      '<div class="snd-popup-sub">Valid: '+valid+'</div>'+
+    '</div>'+
+    '<div class="snd-popup-body">'+
+      '<div class="snd-popup-canvas-wrap">'+
+        '<img src="'+cached.img+'" alt="Skew-T for '+station.id+'">'+
+      '</div>'+
+      paramsHTML+
+      '<div class="snd-popup-actions">'+
+        '<button class="snd-popup-btn" onclick="sndPinDownload(\''+station.id+'\')"><i class="fas fa-download"></i> Download</button>'+
+        '<button class="snd-popup-btn snd-popup-btn-primary" onclick="sndPinOpenFull(\''+station.id+'\')"><i class="fas fa-up-right-from-square"></i> Open</button>'+
+      '</div>'+
+    '</div>'+
+  '</div>';
+  popup.setContent(html);
+}
+
+/* Render skew-T to an offscreen canvas and return a PNG data URL */
+function sndRenderToDataURL(data,station){
+  /* Use the existing sndRenderSkewT logic but on an offscreen canvas
+     (the on-page canvas is only available when the Soundings tab is open) */
+  var off=document.createElement('canvas');
+  off.width=780;off.height=640;
+  /* Temporarily swap sndCurrentData + the canvas, render, then restore */
+  var prevData=sndCurrentData;
+  var prevCanvas=document.getElementById('sndCanvas');
+  sndCurrentData=data;
+  /* Replace getElementById result by creating a stand-in — but easier:
+     rewrite sndRenderSkewT to take an optional canvas argument. We'll
+     just inline the render here using a temporary stand-in canvas. */
+  sndRenderSkewTTo(off,data,station);
+  sndCurrentData=prevData;
+  return off.toDataURL('image/png');
+}
+
+/* Refactored renderer that accepts an explicit canvas + station.
+   Used both by sndRenderSkewT (on-page canvas) and sndRenderToDataURL (offscreen). */
+function sndRenderSkewTTo(c,data,stationOverride){
+  if(!c||!data)return;
+  var ctx=c.getContext('2d');
+  var W=c.width,H=c.height;
+  var ml=55,mr=80,mt=30,mb=50;
+  var pw=W-ml-mr,ph=H-mt-mb;
+  var pMin=100,pMax=1050;
+  function pToY(p){
+    var lp=Math.log(p),lpMin=Math.log(pMin),lpMax=Math.log(pMax);
+    return mt+ph*(lpMax-lp)/(lpMax-lpMin);
+  }
+  var tMin=-60,tMax=40,SKEW=33;
+  function tToX(T,p){
+    var lpFrac=(Math.log(pMax)-Math.log(p))/(Math.log(pMax)-Math.log(pMin));
+    var totalRange=(tMax-tMin)+SKEW;
+    return ml+pw*(T-tMin+(1-lpFrac)*SKEW)/totalRange;
+  }
+  ctx.fillStyle='#0e0e0e';
+  ctx.fillRect(0,0,W,H);
+  ctx.strokeStyle='#3a3a3a';
+  ctx.lineWidth=1;
+  ctx.strokeRect(ml,mt,pw,ph);
+  /* Isobars */
+  ctx.strokeStyle='#2a2a2a';
+  ctx.fillStyle='#666';
+  ctx.font='10px Inter,monospace';
+  ctx.lineWidth=0.7;
+  [1000,925,850,700,500,400,300,250,200,150,100].forEach(function(p){
+    if(p<pMin||p>pMax)return;
+    var y=pToY(p);
+    ctx.beginPath();ctx.moveTo(ml,y);ctx.lineTo(ml+pw,y);ctx.stroke();
+    ctx.textAlign='right';
+    ctx.fillText(p+'',ml-6,y+3);
+  });
+  /* Isotherms */
+  ctx.strokeStyle='#2a2a2a';
+  ctx.lineWidth=0.7;
+  for(var T=tMin;T<=tMax;T+=10){
+    var xBottom=tToX(T,pMax),xTop=tToX(T,pMin);
+    ctx.beginPath();ctx.moveTo(xBottom,mt+ph);ctx.lineTo(xTop,mt);ctx.stroke();
+    ctx.fillStyle=T===0?'#888':'#666';
+    ctx.textAlign='center';
+    ctx.fillText(T+'\u00B0',xTop,mt-6);
+  }
+  /* Dry adiabats */
+  ctx.strokeStyle='#3d2c2c';
+  ctx.lineWidth=0.7;
+  ctx.setLineDash([2,3]);
+  for(var T0=-30;T0<=50;T0+=10){
+    ctx.beginPath();
+    var started=false;
+    for(var lp=Math.log(pMax);lp>=Math.log(pMin);lp-=0.05){
+      var p=Math.exp(lp);
+      var theta=(T0+273.15)*Math.pow(1000/p,0.2854);
+      var Tt=theta*Math.pow(p/1000,0.2854)-273.15;
+      var x=tToX(Tt,p),y=pToY(p);
+      if(!started){ctx.moveTo(x,y);started=true}
+      else ctx.lineTo(x,y);
+    }
+    ctx.stroke();
+  }
+  /* Moist adiabats */
+  ctx.strokeStyle='#2c3d3a';
+  for(var T0=0;T0<=40;T0+=5){
+    ctx.beginPath();
+    var started=false;
+    var parcel_T_K=T0+273.15;
+    var p=1000;
+    while(p>=pMin){
+      var Tt=parcel_T_K-273.15;
+      var x=tToX(Tt,p),y=pToY(p);
+      if(!started){ctx.moveTo(x,y);started=true}
+      else ctx.lineTo(x,y);
+      var nextP=p-10;
+      parcel_T_K=sndLiftMoist(p,parcel_T_K,nextP);
+      p=nextP;
+      if(parcel_T_K<100)break;
+    }
+    ctx.stroke();
+  }
+  /* Mixing ratio lines */
+  ctx.strokeStyle='#2a3a2c';
+  ctx.setLineDash([1,3]);
+  [1,2,5,10,20].forEach(function(w){
+    ctx.beginPath();
+    var started=false;
+    for(var lp=Math.log(pMax);lp>=Math.log(pMin);lp-=0.05){
+      var p=Math.exp(lp);
+      var e=w*p/(621.97+w);
+      var ratio=e/6.1121;
+      if(ratio<=0)continue;
+      var Td=240.97*Math.log(ratio)/(17.502-Math.log(ratio));
+      var x=tToX(Td,p),y=pToY(p);
+      if(!started){ctx.moveTo(x,y);started=true}
+      else ctx.lineTo(x,y);
+    }
+    ctx.stroke();
+  });
+  ctx.setLineDash([]);
+  /* Title */
+  ctx.fillStyle='#ff7300';
+  ctx.font='bold 13px Inter,monospace';
+  ctx.textAlign='left';
+  var stnName=stationOverride?stationOverride.name:'';
+  var stnId=data.station||'';
+  ctx.fillText(stnId+' \u2014 '+stnName,ml+4,16);
+  ctx.fillStyle='#888';
+  ctx.font='10px Inter,monospace';
+  if(data.valid){
+    var dt=data.valid.replace('T',' ').replace('Z',' Z');
+    ctx.fillText('Valid: '+dt,ml+4,28);
+  }
+  /* Temperature trace */
+  ctx.strokeStyle='#ff5a5a';
+  ctx.lineWidth=2;
+  ctx.beginPath();
+  var started=false;
+  data.levels.forEach(function(l){
+    if(l.T==null)return;
+    if(l.p<pMin||l.p>pMax)return;
+    var x=tToX(l.T,l.p),y=pToY(l.p);
+    if(!started){ctx.moveTo(x,y);started=true}
+    else ctx.lineTo(x,y);
+  });
+  ctx.stroke();
+  /* Dewpoint trace */
+  ctx.strokeStyle='#5aff7a';
+  ctx.lineWidth=2;
+  ctx.beginPath();
+  started=false;
+  data.levels.forEach(function(l){
+    if(l.Td==null)return;
+    if(l.p<pMin||l.p>pMax)return;
+    var x=tToX(l.Td,l.p),y=pToY(l.p);
+    if(!started){ctx.moveTo(x,y);started=true}
+    else ctx.lineTo(x,y);
+  });
+  ctx.stroke();
+  /* Wind barbs */
+  var barbLevels=[1000,925,850,700,500,400,300,250,200,150,100];
+  var barbX=ml+pw+18;
+  ctx.strokeStyle='#bbb';
+  ctx.fillStyle='#bbb';
+  ctx.lineWidth=1;
+  barbLevels.forEach(function(p){
+    if(p<pMin||p>pMax)return;
+    var dir=sndInterpLevel(data.levels,'p','dir',p);
+    var spd=sndInterpLevel(data.levels,'p','spd',p);
+    if(dir==null||spd==null)return;
+    var y=pToY(p);
+    sndDrawWindBarb(ctx,barbX,y,dir,spd);
+  });
+  /* Parcel ascent + LCL */
+  var sfc=sndFindSfc(data.levels);
+  if(sfc){
+    var Td0=sndInterpLevel(data.levels,'p','Td',sfc.p);
+    if(Td0!=null){
+      var lcl=sndLiftDryToLCL(sfc.p,sfc.T,Td0);
+      if(lcl){
+        ctx.strokeStyle='#ffd60a';
+        ctx.setLineDash([4,3]);
+        ctx.lineWidth=1.5;
+        ctx.beginPath();
+        ctx.moveTo(tToX(sfc.T,sfc.p),pToY(sfc.p));
+        ctx.lineTo(tToX(lcl.T_lcl,lcl.p_lcl),pToY(lcl.p_lcl));
+        ctx.stroke();
+        ctx.setLineDash([]);
+        var parcel_T_K=lcl.T_lcl+273.15;
+        var p=lcl.p_lcl;
+        ctx.strokeStyle='#ffd60a';
+        ctx.setLineDash([4,3]);
+        ctx.beginPath();
+        ctx.moveTo(tToX(lcl.T_lcl,lcl.p_lcl),pToY(lcl.p_lcl));
+        while(p>100){
+          var nextP=p-5;
+          parcel_T_K=sndLiftMoist(p,parcel_T_K,nextP);
+          ctx.lineTo(tToX(parcel_T_K-273.15,nextP),pToY(nextP));
+          p=nextP;
+        }
+        ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.fillStyle='#ffd60a';
+        ctx.beginPath();
+        ctx.arc(tToX(lcl.T_lcl,lcl.p_lcl),pToY(lcl.p_lcl),4,0,2*Math.PI);
+        ctx.fill();
+      }
+    }
+  }
+  /* Axis labels */
+  ctx.fillStyle='#888';
+  ctx.font='9px Inter,monospace';
+  ctx.textAlign='center';
+  ctx.fillText('Temperature (\u00B0C)',ml+pw/2,H-12);
+  ctx.save();
+  ctx.translate(14,mt+ph/2);
+  ctx.rotate(-Math.PI/2);
+  ctx.fillText('Pressure (hPa)',0,0);
+  ctx.restore();
+}
+
+/* Download the cached skew-T as a PNG when the user clicks Download in
+   the pin popup */
+function sndPinDownload(stationId){
+  var cached=sndPopupCache[stationId];
+  if(!cached||!cached.img){
+    sndPopupToast('No sounding loaded yet.');
+    return;
+  }
+  var a=document.createElement('a');
+  a.href=cached.img;
+  a.download='skywarn-sounding-'+stationId+'-'+(cached.data.valid||'').replace(/[:T]/g,'-').replace('Z','')+'.png';
+  document.body.appendChild(a);a.click();document.body.removeChild(a);
+}
+
+/* Open the Soundings tab and pre-load this station's sounding for full view */
+function sndPinOpenFull(stationId){
+  /* Switch tab */
+  switchTab('soundings');
+  /* Set the dropdown */
+  var sel=document.getElementById('sndStation');
+  if(sel)sel.value=stationId;
+  sndCurrentStation=SND_STATIONS.find(function(s){return s.id===stationId});
+  /* Use cached data if available so it loads instantly */
+  var cached=sndPopupCache[stationId];
+  if(cached){
+    sndCurrentData=cached.data;
+    sndRenderSkewT();
+    sndRenderParams(cached.data);
+    /* Also set the time dropdown to match */
+    var timeSel=document.getElementById('sndTime');
+    if(timeSel && cached.ts){
+      for(var i=0;i<timeSel.options.length;i++){
+        if(timeSel.options[i].value===cached.ts){
+          timeSel.selectedIndex=i;break;
+        }
+      }
+    }
+  }else{
+    sndFetchAndRender();
+  }
+}
+
+/* Small toast for errors (no UI element exists; use a temp div) */
+function sndPopupToast(msg){
+  var t=document.createElement('div');
+  t.style.cssText='position:fixed;bottom:80px;left:50%;transform:translateX(-50%);background:rgba(255,90,90,.95);color:#fff;padding:8px 14px;border-radius:6px;font-size:12px;font-family:Inter,sans-serif;z-index:10000;box-shadow:0 4px 12px rgba(0,0,0,.5)';
+  t.textContent=msg;
+  document.body.appendChild(t);
+  setTimeout(function(){document.body.removeChild(t)},2500);
 }
 
 /* ── Boot sequence ──────────────────────────────────────────────────────── */
