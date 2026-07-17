@@ -1179,6 +1179,63 @@ body{
 }
 .snd-footer a{color:var(--acc);text-decoration:none}
 .snd-footer a:hover{text-decoration:underline}
+
+/* TwisterData embedded forecast sounding iframe */
+.snd-twisterdata-wrap{
+  margin-top:18px;
+  background:var(--bg2);
+  border:1px solid var(--bdr);
+  border-radius:8px;
+  overflow:hidden;
+}
+.snd-twisterdata-header{
+  padding:12px 14px 10px;
+  border-bottom:1px solid var(--bdr);
+  background:linear-gradient(180deg,rgba(255,115,0,.06),transparent);
+  position:relative;
+}
+.snd-twisterdata-header h3{
+  font-size:13px;font-weight:700;
+  color:var(--acc);
+  text-transform:uppercase;letter-spacing:.04em;
+  margin:0 0 4px;
+  display:flex;align-items:center;gap:6px;
+}
+.snd-twisterdata-header h3 i{font-size:11px}
+.snd-twisterdata-header p{
+  font-size:11px;color:var(--t2);
+  line-height:1.5;margin:0 0 8px;
+  max-width:680px;
+}
+.snd-twisterdata-open{
+  display:inline-flex;align-items:center;gap:5px;
+  font-size:10px;font-weight:600;
+  color:var(--acc);
+  text-decoration:none;
+  text-transform:uppercase;letter-spacing:.04em;
+  padding:5px 10px;
+  border:1px solid var(--acc);
+  border-radius:4px;
+  transition:background .15s,color .15s;
+}
+.snd-twisterdata-open:hover{
+  background:var(--acc);color:#0a0a0a;
+}
+.snd-twisterdata-frame-wrap{
+  position:relative;
+  width:100%;
+  height:640px;
+  background:#0a0a0a;
+}
+.snd-twisterdata-frame-wrap iframe{
+  width:100%;
+  height:100%;
+  border:none;
+  display:block;
+}
+@media(max-width:600px){
+  .snd-twisterdata-frame-wrap{height:520px}
+}
 /* Weather Feeds tab */
 .wf-feeds-wrap{
   position:fixed;top:calc(53px + env(safe-area-inset-top));left:0;right:0;bottom:0;
@@ -1384,6 +1441,10 @@ body.capturing .hamburger-menu{display:none!important}
     <i class="fas fa-bolt"></i>
     <span>Lightning Map</span>
   </div>
+  <div class="hamburger-menu-item" id="tab-soundings" onclick="switchTab('soundings')">
+    <i class="fas fa-chart-line"></i>
+    <span>Soundings</span>
+  </div>
   <div class="hamburger-menu-item" id="tab-reference" onclick="switchTab('reference')">
     <i class="fas fa-book"></i>
     <span>Reference Library</span>
@@ -1391,10 +1452,6 @@ body.capturing .hamburger-menu{display:none!important}
   <div class="hamburger-menu-item" id="tab-safety" onclick="switchTab('safety')">
     <i class="fas fa-hard-hat"></i>
     <span>Spotter Safety</span>
-  </div>
-  <div class="hamburger-menu-item" id="tab-soundings" onclick="switchTab('soundings')">
-    <i class="fas fa-chart-line"></i>
-    <span>Soundings</span>
   </div>
   <div class="hamburger-menu-divider"></div>
   <div class="hamburger-menu-item" id="menu-install" onclick="installPWA()" style="display:none">
@@ -1846,6 +1903,19 @@ body.capturing .hamburger-menu{display:none!important}
       Source: Iowa Environmental Mesonet (Iowa State University) &middot;
       <a href="https://mesonet.agron.iastate.edu/json/raob.py" target="_blank" rel="noopener">RAOB JSON API</a> &middot;
       Observed soundings only (00Z / 12Z)
+    </div>
+
+    <!-- Twisterdata.com embedded forecast soundings (point-click interface
+         with RAP/NAM/GFS model data for arbitrary lat/lon) -->
+    <div class="snd-twisterdata-wrap">
+      <div class="snd-twisterdata-header">
+        <h3><i class="fas fa-external-link-alt"></i> Forecast Soundings <span style="font-size:11px;color:var(--t3);font-weight:400;text-transform:none;letter-spacing:0">via TwisterData</span></h3>
+        <p>Click anywhere on the map below to build a model forecast sounding (RAP / NAM / GFS) for any point. Use the controls at the top of the embedded page to switch model, forecast hour, and parameter.</p>
+        <a href="http://www.twisterdata.com/index.php" target="_blank" rel="noopener" class="snd-twisterdata-open"><i class="fas fa-up-right-from-square"></i> Open in new tab</a>
+      </div>
+      <div class="snd-twisterdata-frame-wrap">
+        <iframe src="http://www.twisterdata.com/index.php" title="TwisterData Forecast Soundings" allow="fullscreen; geolocation" loading="lazy" referrerpolicy="no-referrer-when-downgrade"></iframe>
+      </div>
     </div>
   </div>
 </div>

@@ -13,7 +13,7 @@
    - Map tiles (cartocdn.com, tilecache.rainviewer.com): network-only
      (too many to cache, and they update frequently) */
 
-var CACHE_NAME='skywarn-us-v10';
+var CACHE_NAME='skywarn-us-v11';
 var STATIC_ASSETS=[
   './manifest.json',
   './skywarn-logo.png',
@@ -78,6 +78,8 @@ self.addEventListener('fetch',function(event){
   if(url.hostname.indexOf('ton.twimg.com')>=0)return;
   if(url.hostname.indexOf('abs.twimg.com')>=0)return;
   if(url.hostname.indexOf('pbs.twimg.com')>=0)return;
+  /* TwisterData — third-party iframe, let it handle its own caching */
+  if(url.hostname.indexOf('twisterdata.com')>=0)return;
 
   /* MAIN HTML PAGE: network-first (always fetch latest version).
      This is critical - without this, the SW serves the old cached
