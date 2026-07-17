@@ -901,6 +901,19 @@ body{
   transform:scale(1.2);
   box-shadow:0 0 12px rgba(255,115,0,1),0 4px 8px rgba(0,0,0,.6);
 }
+.snd-pin-icon.snd-pin-stale{
+  background:rgba(120,120,120,.55);
+  color:#999;
+  border-color:#1a1a1a;
+  box-shadow:0 0 3px rgba(120,120,120,.3),0 2px 3px rgba(0,0,0,.4);
+  filter:saturate(0.2);
+}
+.snd-pin-icon.snd-pin-stale:hover{
+  transform:scale(1.15);
+  background:rgba(140,140,140,.7);
+  box-shadow:0 0 6px rgba(140,140,140,.5),0 3px 5px rgba(0,0,0,.5);
+  filter:saturate(0.3);
+}
 .snd-pin-popup .leaflet-popup-content-wrapper{
   background:#0a0a0a;
   border:1px solid var(--acc);
@@ -7132,35 +7145,74 @@ function sndScreenshot(){
 
 var sndPinLayer=null;        /* Leaflet layerGroup holding all station pins */
 var sndPopupCache={};        /* stationId -> {data, params, ts} cache */
+var sndPinMarkers={};        /* stationId -> Leaflet marker (for icon updates) */
+var sndStaleStations={};     /* stationId -> true if latest cycle returned no data */
+var sndStaleRefreshTimer=null; /* setInterval handle for background stale re-check */
 
 function toggleSndLayer(){
   var cb=document.getElementById('amSndEnable');
   if(!cb)return;
   if(cb.checked){
     sndAddPinLayer();
+    /* Start background stale-check (every 15 min, re-fetch stale pins
+       so they auto-recover when data becomes available) */
+    if(!sndStaleRefreshTimer){
+      sndStaleRefreshTimer=setInterval(sndRefreshStalePins,15*60*1000);
+    }
   }else{
     sndRemovePinLayer();
+    if(sndStaleRefreshTimer){
+      clearInterval(sndStaleRefreshTimer);
+      sndStaleRefreshTimer=null;
+    }
+  }
+}
+
+/* Build a divIcon for a station. Stale stations get a gray style. */
+function sndMakePinIcon(station){
+  var stale=!!sndStaleStations[station.id];
+  var cls='snd-pin-icon'+(stale?' snd-pin-stale':'');
+  var title=station.id+' \u2014 '+station.name+(stale?' (no recent data)':'');
+  return L.divIcon({
+    className:'snd-pin',
+    html:'<div class="'+cls+'" title="'+title+'">'+station.id.slice(0,3)+'</div>',
+    iconSize:[22,22],
+    iconAnchor:[11,11],
+    popupAnchor:[0,-12]
+  });
+}
+
+/* Mark a station as stale or fresh and update its pin icon in place */
+function sndSetStale(stationId,stale){
+  var wasStale=!!sndStaleStations[stationId];
+  if(stale){
+    sndStaleStations[stationId]=true;
+  }else{
+    delete sndStaleStations[stationId];
+  }
+  /* Only update DOM if state actually changed */
+  if(wasStale!==stale){
+    var marker=sndPinMarkers[stationId];
+    var station=SND_STATIONS.find(function(s){return s.id===stationId});
+    if(marker&&station){
+      marker.setIcon(sndMakePinIcon(station));
+    }
   }
 }
 
 function sndAddPinLayer(){
   if(sndPinLayer||!alertMapInstance)return;
   sndPinLayer=L.layerGroup();
+  sndPinMarkers={};
   SND_STATIONS.forEach(function(s){
-    /* Use a divIcon so we can style the pin and show the station ID inside */
-    var icon=L.divIcon({
-      className:'snd-pin',
-      html:'<div class="snd-pin-icon" title="'+s.id+' \u2014 '+s.name+'">'+s.id.slice(0,3)+'</div>',
-      iconSize:[22,22],
-      iconAnchor:[11,11],
-      popupAnchor:[0,-12]
+    var m=L.marker([s.lat,s.lon],{
+      icon:sndMakePinIcon(s),
+      title:s.id+' \u2014 '+s.name
     });
-    var m=L.marker([s.lat,s.lon],{icon:icon,title:s.id+' \u2014 '+s.name});
-    /* Use layer.on('click') instead of bindPopup(function) so we can render
-       async content into the popup after fetching. */
     m.on('click',function(e){
       sndOpenPinPopup(s,e.latlng);
     });
+    sndPinMarkers[s.id]=m;
     sndPinLayer.addLayer(m);
   });
   sndPinLayer.addTo(alertMapInstance);
@@ -7170,7 +7222,31 @@ function sndRemovePinLayer(){
   if(sndPinLayer&&alertMapInstance){
     alertMapInstance.removeLayer(sndPinLayer);
     sndPinLayer=null;
+    sndPinMarkers={};
   }
+}
+
+/* Background refresh: re-fetch any stale pins to see if data has arrived.
+   Does NOT touch the popup — only updates the pin color silently. */
+function sndRefreshStalePins(){
+  var staleIds=Object.keys(sndStaleStations);
+  if(staleIds.length===0)return;
+  var ts=sndLatestCycleISO();
+  staleIds.forEach(function(id){
+    var url='https://mesonet.agron.iastate.edu/json/raob.py?station='+id+'&network=_RAOB&ts='+encodeURIComponent(ts);
+    fetch(url).then(function(r){return r.json()}).then(function(data){
+      var profiles=data.profiles||[];
+      if(profiles.length>0){
+        /* Data is now available — clear stale state, refresh cache, update pin */
+        var profile=profiles[0];
+        var parsed=sndParseProfile(profile);
+        var img=sndRenderToDataURL(parsed,SND_STATIONS.find(function(s){return s.id===id}));
+        var params=sndComputeParams(parsed);
+        sndPopupCache[id]={data:parsed,params:params,img:img,ts:ts};
+        sndSetStale(id,false);
+      }
+    }).catch(function(){/* leave stale; will retry next cycle */});
+  });
 }
 
 /* When a pin is clicked, open the popup immediately with a loading state,
@@ -7204,7 +7280,9 @@ function sndOpenPinPopup(station,latlng){
   }).then(function(data){
     var profiles=data.profiles||[];
     if(profiles.length===0){
-      sndRenderPinPopupError(popup,station,'No sounding data available for the latest 00Z/12Z cycle at '+station.id+'. Note: data appears ~1 hour after launch.');
+      /* Mark this station as stale so its pin grays out */
+      sndSetStale(station.id,true);
+      sndRenderPinPopupError(popup,station,'No sounding data available for the latest 00Z/12Z cycle at '+station.id+'. Note: data appears ~1 hour after launch. The pin has been grayed out and will auto-refresh when data arrives.');
       return;
     }
     var profile=profiles[0];
@@ -7214,9 +7292,13 @@ function sndOpenPinPopup(station,latlng){
     var params=sndComputeParams(parsed);
     var cached={data:parsed,params:params,img:img,ts:ts};
     sndPopupCache[station.id]=cached;
+    /* Data is fresh — clear stale state if it was previously stale */
+    sndSetStale(station.id,false);
     sndRenderPinPopupContent(popup,station,cached);
   }).catch(function(err){
-    sndRenderPinPopupError(popup,station,'Failed to fetch: '+(err.message||err));
+    /* Network errors don't mark as stale — the station might just be
+       temporarily unreachable. Leave pin color as-is. */
+    sndRenderPinPopupError(popup,station,'Failed to fetch: '+(err.message||err)+'. This is likely a temporary network issue — try again in a moment.');
   });
 }
 
