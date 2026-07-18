@@ -1387,6 +1387,93 @@ body{
   font-size:6px;color:var(--t3);text-align:center;
   margin-top:0;
 }
+
+/* ── mPING Reports iframe overlay ──
+   Covers the entire alert map area when enabled, showing the official
+   mPING display page in an iframe. Has its own header bar with title,
+   open-in-new-tab, and close buttons. */
+.mping-overlay{
+  position:absolute;
+  top:0;left:0;right:0;bottom:0;
+  background:#0a0a0a;
+  z-index:1500;
+  display:flex;
+  flex-direction:column;
+  border-radius:inherit;
+}
+.mping-overlay-header{
+  flex:0 0 auto;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  padding:8px 12px;
+  background:linear-gradient(180deg,rgba(255,115,0,.15),rgba(255,115,0,.05));
+  border-bottom:1px solid var(--acc);
+  box-shadow:0 2px 8px rgba(0,0,0,.4);
+  z-index:2;
+  /* Respect safe-area at top (overlay sits inside map which already has top margin) */
+  padding-top:max(8px,env(safe-area-inset-top));
+}
+.mping-overlay-title{
+  display:flex;
+  align-items:baseline;
+  gap:8px;
+  color:var(--acc);
+  font-size:13px;
+  font-weight:700;
+  text-transform:uppercase;
+  letter-spacing:.04em;
+}
+.mping-overlay-title i{font-size:12px}
+.mping-overlay-sub{
+  color:var(--t3);
+  font-size:10px;
+  font-weight:400;
+  text-transform:none;
+  letter-spacing:0;
+}
+.mping-overlay-actions{
+  display:flex;
+  gap:4px;
+}
+.mping-overlay-btn{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  width:28px;height:28px;
+  background:var(--bg2);
+  border:1px solid var(--bdr);
+  color:var(--t2);
+  border-radius:5px;
+  cursor:pointer;
+  text-decoration:none;
+  font-size:12px;
+  transition:background .15s,color .15s,border-color .15s;
+}
+.mping-overlay-btn:hover{
+  border-color:var(--acc);
+  color:var(--t1);
+  background:rgba(255,115,0,.1);
+}
+.mping-overlay-close:hover{
+  background:#ff5a5a;
+  border-color:#ff5a5a;
+  color:#fff;
+}
+.mping-overlay-frame-wrap{
+  flex:1;
+  position:relative;
+  background:#0a0a0a;
+  overflow:hidden;
+  min-height:0; /* critical for flex children to shrink properly */
+}
+.mping-overlay-frame-wrap iframe{
+  width:100%;
+  height:100%;
+  border:none;
+  display:block;
+  background:#fff;
+}
 /* Capturing state - hide UI chrome that shouldn't appear in screenshots.
    NOTE: .leaflet-popup-pane is intentionally NOT hidden so that any open
    alert popup window is included in the screenshot. */
@@ -1601,6 +1688,15 @@ body.capturing .hamburger-menu{display:none!important}
         </div>
       </div>
 
+      <div class="divider">
+        <div class="section-label">mPING Reports</div>
+        <label style="margin:1px 0"><input type="checkbox" id="amMpingEnable" onchange="toggleMpingLayer()"> Show mPING Reports</label>
+        <div style="font-size:9px;color:var(--t3);line-height:1.4;margin-top:3px">
+          Crowd-sourced weather reports from NWS mPING. Opens the official
+          mPING display map with last 4 hours of reports, animation, and filters.
+        </div>
+      </div>
+
     </div>
   </div>
 
@@ -1617,6 +1713,28 @@ body.capturing .hamburger-menu{display:none!important}
   </div>
 
   <div class="loading-overlay" id="loadingOverlay"><div class="spinner"></div></div>
+
+  <!-- mPING iframe overlay (covers the alert map when enabled) -->
+  <div id="mpingOverlay" class="mping-overlay" style="display:none">
+    <div class="mping-overlay-header">
+      <div class="mping-overlay-title">
+        <i class="fas fa-comment-dots"></i>
+        mPING Reports
+        <span class="mping-overlay-sub">Crowd-sourced weather reports &middot; last 4 hours</span>
+      </div>
+      <div class="mping-overlay-actions">
+        <a href="https://mping.ou.edu/display/" target="_blank" rel="noopener" class="mping-overlay-btn" title="Open in new tab">
+          <i class="fas fa-up-right-from-square"></i>
+        </a>
+        <button class="mping-overlay-btn mping-overlay-close" onclick="mpingClose()" title="Close overlay">
+          <i class="fas fa-xmark"></i>
+        </button>
+      </div>
+    </div>
+    <div class="mping-overlay-frame-wrap">
+      <iframe id="mpingIframe" src="" title="mPING Report Display" allow="fullscreen; geolocation" referrerpolicy="no-referrer-when-downgrade"></iframe>
+    </div>
+  </div>
 </div>
 </div><!-- /view-polygonmap -->
 
@@ -7903,6 +8021,51 @@ function sndPopupToast(msg){
   t.textContent=msg;
   document.body.appendChild(t);
   setTimeout(function(){document.body.removeChild(t)},2500);
+}
+
+/* ── mPING Reports iframe overlay ─────────────────────────────────────────
+   The mPING API (mping.ou.edu/mping/api/v2/reports.geojson) requires a
+   registered API token, which is gated behind a license application
+   (https://mping.ou.edu/static/mping/access.html). However, the public
+   display page at https://mping.ou.edu/display/ works without auth
+   using session cookies, and shows the last 4 hours of reports with
+   animation, filters, and a full Leaflet map.
+   
+   Rather than requiring users to apply for an API key, we overlay the
+   official mPING display page in an iframe on top of the alert map when
+   the user enables this layer. The overlay has its own header with a
+   close button to return to the alert map. ─────────────────────────── */
+
+function toggleMpingLayer(){
+  var cb=document.getElementById('amMpingEnable');
+  if(!cb)return;
+  if(cb.checked){
+    mpingOpen();
+  }else{
+    mpingClose();
+  }
+}
+
+function mpingOpen(){
+  var overlay=document.getElementById('mpingOverlay');
+  var iframe=document.getElementById('mpingIframe');
+  if(!overlay||!iframe)return;
+  /* Set iframe src only when first opened so it doesn't load until needed */
+  if(!iframe.src || iframe.src==='about:blank' || iframe.src===''){
+    iframe.src='https://mping.ou.edu/display/';
+  }
+  overlay.style.display='flex';
+  /* Make sure the alert map's own controls (Layers panel, legend) are
+     hidden behind the overlay — the overlay has z-index 1500 which
+     sits above them. */
+}
+
+function mpingClose(){
+  var overlay=document.getElementById('mpingOverlay');
+  if(overlay)overlay.style.display='none';
+  /* Uncheck the toggle so the UI stays in sync */
+  var cb=document.getElementById('amMpingEnable');
+  if(cb)cb.checked=false;
 }
 
 /* ── Boot sequence ──────────────────────────────────────────────────────── */
