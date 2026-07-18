@@ -2006,6 +2006,15 @@ var drawnAlerts=[];           /* all alerts currently drawn (or hidden) */
 var alertPopupState=null;     /* {latlng, overlappingAlerts, currentIndex} */
 var wwasCache=null;           /* cached alert features from last fetch */
 var alertLayerCache={};       /* keyed by alert ID → {layer, alert, event, cat, color} for delta updates */
+/* Track alert IDs we've already seen for sound-triggering purposes.
+   This is INDEPENDENT of alertLayerCache — clearing the layer cache (e.g.,
+   when a user toggles a filter checkbox) should NOT cause the alert sound
+   to replay for alerts that are merely being re-added to the map. Only
+   genuinely new NWS-issued alerts (IDs we've never seen before in this
+   session) should trigger the sound. This set persists for the lifetime
+   of the page (across filter toggles, manual refreshes, etc.) and is
+   only cleared on a full page reload. */
+var seenAlertIdsForSound={};
 
 /* Critical alerts that ALWAYS render on load regardless of category toggle
    state. This guarantees the user sees Tornado Warnings, Severe Thunderstorm
@@ -3825,9 +3834,17 @@ function updateLastRefreshTime(){
   }
 }
 
-/* Check for new Tornado Warnings/Watches after a delta update and play
-   sound if any are new. Called at the end of fAlertMap. */
+/* Check for new Tornado Warnings/Watches after a fetch and play sound if
+   any are genuinely new (never seen before in this session).
+   Called at the end of fAlertMap.
+
+   IMPORTANT: this uses `seenAlertIdsForSound` (a session-lifetime set)
+   rather than `alertLayerCache` (which gets cleared on filter toggles).
+   This prevents the alert sound from replaying when a user merely toggles
+   a filter checkbox off and on — the sound should only fire for alerts
+   that are newly issued by NWS, not alerts being re-added to the map. */
 function checkForNewCriticalAlerts(prevAlertIds){
+  /* prevAlertIds is ignored — we use seenAlertIdsForSound instead. */
   var torWarnSound=document.getElementById('settingTorWarningSound');
   var torWatchSound=document.getElementById('settingTorWatchSound');
   var torWarnEnabled=!torWarnSound||torWarnSound.checked;
@@ -3835,7 +3852,11 @@ function checkForNewCriticalAlerts(prevAlertIds){
   var newTorWarnings=0,newTorWatches=0;
   drawnAlerts.forEach(function(a){
     var id=a.id||'';
-    if(prevAlertIds&&prevAlertIds[id])return;
+    if(!id)return;
+    /* If this ID was already seen in a PRIOR call, it's not new — skip. */
+    if(seenAlertIdsForSound[id])return;
+    /* Mark as seen now (so future calls don't count it as new again). */
+    seenAlertIdsForSound[id]=true;
     var e=a.event.toLowerCase();
     if(e==='tornado warning'&&torWarnEnabled){
       newTorWarnings++;
@@ -5355,7 +5376,11 @@ async function captureScreenshot(){
        Larger footer: 72px logo, bold 22px site name, 14px timestamp.
        The bar spans the full width with a semi-transparent black background
        and an orange top border line. Logo is on the left, text to the right
-       of it, all horizontally centered as a group. */
+       of it, all horizontally centered as a group.
+
+       Responsive: if the content width would exceed the canvas width
+       (minus padding), shrink the logo + font sizes proportionally so the
+       text never gets clipped at the right edge. */
     var logoSize=72;
     var padX=16,padY=12;
     var siteName='Skywarn Storm Spotters & Chasers United States';
@@ -5363,14 +5388,35 @@ async function captureScreenshot(){
       weekday:'short',year:'numeric',month:'short',day:'numeric',
       hour:'2-digit',minute:'2-digit',hour12:true
     });
-    /* Measure text widths at the larger font sizes */
-    fctx.font='bold 22px Inter,sans-serif';
+    /* Measure text widths at the baseline font sizes */
+    var titleFontPx=22;
+    var stampFontPx=14;
+    fctx.font='bold '+titleFontPx+'px Inter,sans-serif';
     var nameW=fctx.measureText(siteName).width;
-    fctx.font='14px Inter,sans-serif';
+    fctx.font=stampFontPx+'px Inter,sans-serif';
     var stampW=fctx.measureText(stampStr).width;
     var textW=Math.max(nameW,stampW);
-    /* Total content width = logo + gap + text block */
-    var contentW=logoSize+16+textW;
+    var gap=16;
+    var contentW=logoSize+gap+textW;
+    /* Available width = canvas width minus padding on both sides */
+    var availW=finalCanvas.width-padX*2;
+    /* If content is too wide, compute a scale factor to shrink it to fit.
+       Don't shrink below 0.5 — if it still doesn't fit at half size, just
+       let it be (extremely small canvas case). */
+    var fitScale=1;
+    if(contentW>availW){
+      fitScale=Math.max(0.5,availW/contentW);
+      logoSize=Math.floor(logoSize*fitScale);
+      titleFontPx=Math.max(11,Math.floor(titleFontPx*fitScale));
+      stampFontPx=Math.max(9,Math.floor(stampFontPx*fitScale));
+      /* Re-measure with new font sizes */
+      fctx.font='bold '+titleFontPx+'px Inter,sans-serif';
+      nameW=fctx.measureText(siteName).width;
+      fctx.font=stampFontPx+'px Inter,sans-serif';
+      stampW=fctx.measureText(stampStr).width;
+      textW=Math.max(nameW,stampW);
+      contentW=logoSize+gap+textW;
+    }
     var barH=logoSize+padY*2;
     var barY=finalCanvas.height-barH;
     /* Draw full-width semi-transparent black bar at the bottom */
@@ -5401,16 +5447,20 @@ async function captureScreenshot(){
       fctx.arc(logoX+logoSize/2,logoY+logoSize/2,logoSize/2,0,2*Math.PI);
       fctx.fill();
     }
-    /* Draw the site name to the right of the logo (bold, orange, 22px) */
-    var textX=logoX+logoSize+16;
+    /* Draw the site name to the right of the logo (bold, orange) */
+    var textX=logoX+logoSize+gap;
     fctx.fillStyle='#ff7300';
-    fctx.font='bold 22px Inter,sans-serif';
+    fctx.font='bold '+titleFontPx+'px Inter,sans-serif';
     fctx.textBaseline='middle';
-    fctx.fillText(siteName,textX,barY+padY+logoSize/2-13);
-    /* Draw the timestamp below the site name (gray, 14px) */
+    /* Vertically center two lines of text within the logo height.
+       Line 1 (title) sits 13px above center, line 2 (timestamp) 15px below. */
+    var titleY=barY+padY+logoSize/2-13*fitScale;
+    var stampY=barY+padY+logoSize/2+15*fitScale;
+    fctx.fillText(siteName,textX,titleY);
+    /* Draw the timestamp below the site name (gray) */
     fctx.fillStyle='#a0a0a0';
-    fctx.font='14px Inter,sans-serif';
-    fctx.fillText(stampStr,textX,barY+padY+logoSize/2+15);
+    fctx.font=stampFontPx+'px Inter,sans-serif';
+    fctx.fillText(stampStr,textX,stampY);
 
     /* Convert to PNG data URL */
     var dataUrl=finalCanvas.toDataURL('image/png');
