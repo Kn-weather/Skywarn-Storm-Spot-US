@@ -1488,14 +1488,14 @@ body.capturing .hamburger-menu{display:none!important}
     </div>
     <div class="alert-map-controls-body">
       <div class="section-label">Alert Categories</div>
-      <label style="margin:1px 0"><input type="checkbox" id="amLayerWarnings" checked onchange="alertLayerCache={};fAlertMap()"> Warnings</label>
-      <label style="margin:1px 0"><input type="checkbox" id="amLayerWatches" checked onchange="alertLayerCache={};fAlertMap()"> Watches</label>
-      <label style="margin:1px 0"><input type="checkbox" id="amLayerAdvisories" onchange="alertLayerCache={};fAlertMap()"> Advisories &amp; Statements</label>
-      <label style="margin:1px 0"><input type="checkbox" id="amLayerLabels" checked onchange="alertLayerCache={};fAlertMap()"> Zone Labels</label>
+      <label style="margin:1px 0"><input type="checkbox" id="amLayerWarnings" checked onchange="onAlertFilterChange()"> Warnings</label>
+      <label style="margin:1px 0"><input type="checkbox" id="amLayerWatches" checked onchange="onAlertFilterChange()"> Watches</label>
+      <label style="margin:1px 0"><input type="checkbox" id="amLayerAdvisories" onchange="onAlertFilterChange()"> Advisories &amp; Statements</label>
+      <label style="margin:1px 0"><input type="checkbox" id="amLayerLabels" checked onchange="onAlertFilterChange()"> Zone Labels</label>
 
       <div class="divider">
         <div class="section-label">State Filter</div>
-        <select id="amStateFilter" onchange="alertLayerCache={};fAlertMap()">
+        <select id="amStateFilter" onchange="onAlertFilterChange()">
           <option value="">All United States</option>
           <option value="AL">Alabama</option>
           <option value="AK">Alaska</option>
@@ -2526,30 +2526,33 @@ async function screenshotAlert(idx){
   }
 
   /* Helper: wait for map tiles to load after a zoom/pan change.
-     Uses a longer settle delay (1.2s) to ensure all tiles including the
-     labels overlay are fully rendered before capture. */
+     Tuned for speed: 400ms settle after load event (enough for label
+     tiles to fade in), 1800ms hard fallback. Previous values were 1200ms
+     settle + 3500ms fallback which caused 5-8s screenshots. */
   function waitForMapLoad(){
     return new Promise(function(resolve){
       var done=false;
-      function finish(){if(!done){done=true;setTimeout(resolve,1200)}}
+      function finish(){if(!done){done=true;setTimeout(resolve,400)}}
       if(!alertMapInstance._loaded){resolve();return}
       alertMapInstance.once('load',finish);
-      setTimeout(finish,3500);  /* hard fallback - wait longer for label tiles */
+      setTimeout(finish,1800);  /* hard fallback */
     });
   }
 
-  /* Helper: capture the current map view at 2x resolution for sharpness.
-     The map is later scaled down to fit the panel, so capturing at 2x
-     prevents blurriness. */
+  /* Helper: capture the current map view. Uses scale matching the device
+     pixel ratio (capped at 1.5 to avoid runaway memory on 3x phones)
+     instead of always 2x — gives sharp results without doubling work. */
   async function captureMap(){
     var mapEl=document.getElementById('alertMap');
+    var dpr=window.devicePixelRatio||1;
+    var capScale=Math.min(dpr,1.5);
     return await html2canvas(mapEl,{
       useCORS:true,
       allowTaint:true,
       backgroundColor:'#e0e0e0',
-      scale:2,  /* 2x resolution - prevents blur when scaled down */
+      scale:capScale,
       logging:false,
-      imageTimeout:15000,  /* wait up to 15s for tiles (including labels) */
+      imageTimeout:5000,  /* 5s per tile (was 15s) */
       width:mapEl.offsetWidth,
       height:mapEl.offsetHeight,
       windowWidth:mapEl.offsetWidth,
@@ -3449,6 +3452,49 @@ function hideLoading(){
 }
 
 /* ── Main alert map fetch & render ──────────────────────────────────────── */
+
+/* Robustly remove ALL alert polygons from the map. Iterates both the
+   per-category arrays (alertMapLayers.warnings/watches/advisories) AND
+   the alertLayerCache (keyed by alert ID) to catch any orphaned layers
+   that might have ended up tracked in only one place. Also clears the
+   cache object itself so the next fAlertMap call does a full redraw. */
+function clearAllAlertLayers(){
+  if(!alertMapInstance)return;
+  var removed=0;
+  /* Remove from per-category arrays */
+  ['warnings','watches','advisories'].forEach(function(cat){
+    (alertMapLayers[cat]||[]).forEach(function(l){
+      try{alertMapInstance.removeLayer(l)}catch(e){}
+      removed++;
+    });
+    alertMapLayers[cat]=[];
+  });
+  /* Defensive: also remove any layers tracked only in the cache */
+  Object.keys(alertLayerCache).forEach(function(id){
+    var cached=alertLayerCache[id];
+    if(cached&&cached.layer){
+      try{alertMapInstance.removeLayer(cached.layer)}catch(e){}
+      removed++;
+    }
+    delete alertLayerCache[id];
+  });
+  /* Also clear drawnAlerts so popups don't reference stale data */
+  drawnAlerts=[];
+  if(removed>0){
+    console.log('[Alerts] Cleared '+removed+' alert layer(s) from map');
+  }
+}
+
+/* Handler for alert filter checkbox / state dropdown changes.
+   Clears all alert layers IMMEDIATELY (synchronously) so the user sees
+   the polygons disappear without waiting for the network fetch, then
+   kicks off a fresh fetch+render which will add back only the alerts
+   that pass the new filter. */
+function onAlertFilterChange(){
+  clearAllAlertLayers();
+  fAlertMap();
+}
+
 async function fAlertMap(){
   if(!alertMapInstance)initAlertMap();
   if(!alertMapInstance)return;
@@ -3457,11 +3503,11 @@ async function fAlertMap(){
   var isDeltaUpdate=Object.keys(alertLayerCache).length>0;
 
   if(!isDeltaUpdate){
-    /* First load or forced refresh - clear everything and start fresh */
-    alertMapLayers.warnings.forEach(function(l){alertMapInstance.removeLayer(l)});
-    alertMapLayers.watches.forEach(function(l){alertMapInstance.removeLayer(l)});
-    alertMapLayers.advisories.forEach(function(l){alertMapInstance.removeLayer(l)});
-    alertMapLayers.warnings=[];alertMapLayers.watches=[];alertMapLayers.advisories=[];
+    /* First load or forced refresh - clear everything and start fresh.
+       Use sndClearAllAlertLayers() to robustly remove ALL alert polygons
+       from the map, including any that might be tracked only in the cache
+       (defensive against orphaned layers from prior delta updates). */
+    clearAllAlertLayers();
     if(countEl)countEl.innerHTML='<i class="fas fa-satellite-dish"></i> Loading alerts...';
     showLoading();
   }else{
@@ -5255,21 +5301,21 @@ async function captureScreenshot(){
          2. Wait for the map's 'load' event, which fires when all visible
             tiles have finished loading. This ensures html2canvas captures
             a fully-tiled map instead of half-loaded tiles.
-         3. Add an 800ms settle delay after the load event so any final
+         3. Add a 400ms settle delay after the load event so any final
             tile animations complete.
-         4. Hard fallback at 1500ms in case the load event never fires
+         4. Hard fallback at 1200ms in case the load event never fires
             (e.g., if tiles are already cached and no new load happens). */
       await new Promise(function(resolve){
         var done=false;
         function finish(){
           if(done)return;
           done=true;
-          setTimeout(resolve,800);
+          setTimeout(resolve,400);
         }
         if(!alertMapInstance._loaded){resolve();return}
         alertMapInstance.once('load',finish);
         alertMapInstance.invalidateSize();
-        setTimeout(finish,1500);
+        setTimeout(finish,1200);
       });
 
       var mapEl=document.getElementById('alertMap');
@@ -5277,9 +5323,9 @@ async function captureScreenshot(){
         useCORS:true,
         allowTaint:true,
         backgroundColor:'#e0e0e0',
-        scale:window.devicePixelRatio||1,
+        scale:Math.min(window.devicePixelRatio||1,1.5),  /* capped at 1.5x for speed */
         logging:false,
-        imageTimeout:10000,
+        imageTimeout:5000,
         width:mapEl.offsetWidth,
         height:mapEl.offsetHeight,
         windowWidth:mapEl.offsetWidth,
