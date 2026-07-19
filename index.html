@@ -2361,7 +2361,10 @@ body.capturing .hamburger-menu{display:none!important}
             <div id="jrnlRadarPreview" style="display:none;margin-top:8px">
               <img id="jrnlRadarImg" style="width:100%;border-radius:4px;border:1px solid var(--bdr)" alt="Radar screenshot">
             </div>
-            <button class="jrnl-btn jrnl-btn-acc" id="jrnlSaveBtn" onclick="jrnlSaveEntry()" style="width:100%;margin-top:8px"><i class="fas fa-floppy-disk"></i> Save Entry</button>
+            <div style="display:flex;gap:6px;margin-top:8px">
+              <button class="jrnl-btn" onclick="jrnlAutofillWeatherButton()" style="flex:1" title="Auto-fill weather from current location using NWS API"><i class="fas fa-cloud-sun-rain"></i> Auto-fill Weather</button>
+              <button class="jrnl-btn jrnl-btn-acc" id="jrnlSaveBtn" onclick="jrnlSaveEntry()" style="flex:1"><i class="fas fa-floppy-disk"></i> Save Entry</button>
+            </div>
           </div>
         </div>
       </div>
@@ -3061,6 +3064,21 @@ async function screenshotAlert(idx){
       });
     }catch(e){console.warn('[AlertShot] Could not calculate bounds:',e)}
   }
+  /* Store alert metadata so the "+ Journal" button can auto-fill weather
+     from the alert's location and pre-fill the sky conditions / notes. */
+  if(alertBounds&&alertBounds.isValid()){
+    currentScreenshotAlertCoords={
+      lat:alertBounds.getCenter().lat,
+      lon:alertBounds.getCenter().lng
+    };
+  }else{
+    currentScreenshotAlertCoords=null;
+  }
+  currentScreenshotAlertMeta={
+    event:a.event,
+    areaDesc:a.areaDesc||'',
+    headline:a.headline||''
+  };
 
   /* Helper: wait for map tiles to load after a zoom/pan change.
      Tuned for speed: 400ms settle after load event (enough for label
@@ -5594,6 +5612,13 @@ function createLightningMarker(lat,lon){
    taint. Fetched once on first screenshot, then reused. */
 var LOGO_DATA_URL=null;
 var currentScreenshotType='Weather Map';  /* updated when screenshot is taken */
+/* When screenshotting an alert, store the alert's representative lat/lon
+   (center of polygon bounds) so the "+ Journal" button can auto-fill
+   weather data from that location. Null for non-alert screenshots. */
+var currentScreenshotAlertCoords=null;
+/* Also store the alert event name + area description for pre-filling
+   the journal entry's sky_conditions / notes fields. */
+var currentScreenshotAlertMeta=null;
 async function preloadLogoDataUrl(){
   if(LOGO_DATA_URL)return LOGO_DATA_URL;
   try{
@@ -5784,6 +5809,10 @@ async function captureScreenshot(){
     return;
   }
   currentScreenshotType='Live Weather Map';
+  /* Live map screenshot — no specific alert, so clear the alert coords/meta
+     so the "+ Journal" button doesn't try to use stale alert data. */
+  currentScreenshotAlertCoords=null;
+  currentScreenshotAlertMeta=null;
   var btn=document.getElementById('screenshotBtn');
   if(btn){btn.classList.add('flash');setTimeout(function(){btn.classList.remove('flash')},400)}
 
@@ -9582,22 +9611,6 @@ function jrnlEditEntry(entryId){
   jrnlToast('Editing entry — make changes and click Update','info');
 }
 
-async function jrnlDeleteEntry(entryId){
-  if(!jrnlSupabase)return;
-  if(!confirm('Delete this entry? This cannot be undone.'))return;
-  try{
-    var result=await jrnlSupabase
-      .from('journal_entries')
-      .delete()
-      .eq('id',entryId);
-    if(result.error)throw result.error;
-    jrnlToast('Entry deleted','success');
-    await jrnlLoadEntries();
-  }catch(e){
-    jrnlToast('Delete failed: '+(e.message||e),'error');
-  }
-}
-
 async function jrnlDeleteEvent(eventId){
   if(!jrnlSupabase)return;
   if(!confirm('Delete this event AND all its entries? This cannot be undone.'))return;
@@ -9607,18 +9620,51 @@ async function jrnlDeleteEvent(eventId){
       .delete()
       .eq('id',eventId);
     if(result.error)throw result.error;
+    /* Immediately remove from local array + re-render so the UI updates
+       instantly, even before the reload completes. */
+    jrnlEvents=jrnlEvents.filter(function(ev){return ev.id!==eventId});
+    jrnlRenderEventsList();
+    /* If the deleted event was selected, clear the selection + entry form */
     if(jrnlCurrentEventId===eventId){
       jrnlCurrentEventId=null;
-      document.getElementById('jrnlNewEntryCard').style.display='none';
+      var entryCard=document.getElementById('jrnlNewEntryCard');
+      if(entryCard)entryCard.style.display='none';
       jrnlEntries=[];
       jrnlRenderEntriesList();
       jrnlRenderGraph();
       jrnlUpdateMiniMap();
     }
     jrnlToast('Event deleted','success');
+    /* Reload from server to make sure we're in sync */
     await jrnlLoadEvents();
   }catch(e){
-    jrnlToast('Delete failed: '+(e.message||e),'error');
+    console.error('[Journal] Delete event failed:',e);
+    jrnlToast('Delete failed: '+(e.message||e)+'. Make sure you are signed in and own this event.','error');
+  }
+}
+
+async function jrnlDeleteEntry(entryId){
+  if(!jrnlSupabase)return;
+  if(!confirm('Delete this entry? This cannot be undone.'))return;
+  try{
+    var result=await jrnlSupabase
+      .from('journal_entries')
+      .delete()
+      .eq('id',entryId);
+    if(result.error)throw result.error;
+    /* Immediately remove from local array + re-render */
+    jrnlEntries=jrnlEntries.filter(function(e){return e.id!==entryId});
+    jrnlRenderEntriesList();
+    jrnlRenderGraph();
+    jrnlUpdateMiniMap();
+    var countEl=document.getElementById('jrnlEntryCount');
+    if(countEl)countEl.textContent=jrnlEntries.length;
+    jrnlToast('Entry deleted','success');
+    /* Reload from server to make sure we're in sync */
+    await jrnlLoadEntries();
+  }catch(e){
+    console.error('[Journal] Delete entry failed:',e);
+    jrnlToast('Delete failed: '+(e.message||e)+'. Make sure you are signed in and own this entry.','error');
   }
 }
 
@@ -9644,6 +9690,10 @@ async function saveScreenshotToJournal(){
     jrnlToast('No screenshot to save','warn');
     return;
   }
+  /* Capture alert coords + meta before closing the modal (in case the
+     user wants to keep them for a subsequent screenshot) */
+  var alertCoords=currentScreenshotAlertCoords;
+  var alertMeta=currentScreenshotAlertMeta;
   /* Close the modal */
   closeShotModal();
   /* Switch to journal tab + ensure it's initialized */
@@ -9653,21 +9703,6 @@ async function saveScreenshotToJournal(){
   }
   /* Wait a moment for the tab to render */
   await new Promise(function(r){setTimeout(r,300)});
-  /* If no event is selected, prompt user to create/select one */
-  if(!jrnlCurrentEventId){
-    jrnlToast('Select or create an event first, then click "+ Journal" again','info');
-    jrnlShowNewEventForm();
-    /* Stash the screenshot data URL so we can use it after event creation */
-    jrnlRadarDataUrl=previewImg.src;
-    /* Show preview in the form */
-    var prev=document.getElementById('jrnlRadarPreview');
-    var img=document.getElementById('jrnlRadarImg');
-    if(prev&&img){
-      img.src=previewImg.src;
-      prev.style.display='block';
-    }
-    return;
-  }
   /* Stash the screenshot in the form preview so it'll be saved with the next entry */
   jrnlRadarDataUrl=previewImg.src;
   var prev=document.getElementById('jrnlRadarPreview');
@@ -9676,10 +9711,62 @@ async function saveScreenshotToJournal(){
     img.src=previewImg.src;
     prev.style.display='block';
   }
-  jrnlToast('Screenshot attached! Fill in any optional notes and click Save Entry to add it to the journal.','success');
+  /* If this screenshot was of an alert polygon, pre-fill the location
+     + weather + sky conditions from the alert's coordinates. */
+  if(alertCoords){
+    /* Set the lat/lon fields */
+    document.getElementById('jrnlLatInput').value=alertCoords.lat.toFixed(4);
+    document.getElementById('jrnlLonInput').value=alertCoords.lon.toFixed(4);
+    jrnlOnManualLatLon();
+    /* Pre-fill sky conditions with the alert event name */
+    if(alertMeta&&alertMeta.event){
+      document.getElementById('jrnlSky').value=alertMeta.event;
+    }
+    /* Pre-fill notes with the alert headline (if any) */
+    if(alertMeta&&alertMeta.headline){
+      document.getElementById('jrnlNotes').value='Alert: '+alertMeta.headline+'\n\nArea: '+((alertMeta.areaDesc||'').replace(/;/g,';\n'));
+    }
+    /* Pre-fill location label */
+    if(alertMeta&&alertMeta.areaDesc){
+      /* Use first few words of area description as location label */
+      var shortArea=alertMeta.areaDesc.split(';')[0].trim().slice(0,60);
+      document.getElementById('jrnlLocationLabel').value=shortArea+' (from alert)';
+    }
+    /* Auto-fill weather from the alert's coordinates using NWS API */
+    jrnlToast('Screenshot attached! Auto-filling weather from alert location...','success');
+    await jrnlAutofillWeather(alertCoords.lat,alertCoords.lon);
+  }else{
+    jrnlToast('Screenshot attached! Click "Auto-fill Weather" to fetch conditions from your location, or enter manually.','success');
+  }
+  /* If no event is selected, prompt user to create/select one */
+  if(!jrnlCurrentEventId){
+    jrnlToast('Select or create an event first, then click "Save Entry"','info');
+    jrnlShowNewEventForm();
+  }
   /* Scroll to the entry form */
   var formCard=document.getElementById('jrnlNewEntryCard');
   if(formCard)formCard.scrollIntoView({behavior:'smooth',block:'start'});
+}
+
+/* "Auto-fill Weather" button handler. Uses the current location (from
+   lat/lon fields, GPS, or any previously-captured alert coords) to fetch
+   the latest NWS observation and fill in the form. */
+async function jrnlAutofillWeatherButton(){
+  /* Priority: 1) lat/lon fields, 2) jrnlCurrentLocation (from GPS) */
+  var lat=parseFloat(document.getElementById('jrnlLatInput').value);
+  var lon=parseFloat(document.getElementById('jrnlLonInput').value);
+  if(isNaN(lat)||isNaN(lon)){
+    /* No manual lat/lon — try GPS */
+    if(jrnlCurrentLocation){
+      lat=jrnlCurrentLocation.lat;
+      lon=jrnlCurrentLocation.lon;
+    }else{
+      /* No location at all — prompt user to set one */
+      jrnlToast('Set a location first (Use My Location, Lookup, Map, or enter lat/lon manually)','warn');
+      return;
+    }
+  }
+  await jrnlAutofillWeather(lat,lon);
 }
 
 /* ── Graph rendering ── */
