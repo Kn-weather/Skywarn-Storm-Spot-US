@@ -7879,8 +7879,9 @@ function sndRenderSkewT(){
      T(p) = θ * (p/1000)^0.2854 - 273.15. */
   ctx.strokeStyle='#4a3030';
   ctx.lineWidth=0.7;
-  /* Solid (no dash) per NWS spec */
-  for(var T0=-50;T0<=50;T0+=10){
+  /* Solid (no dash) per NWS spec. Range -30 to +50 — colder dry adiabats
+     aren't physically meaningful and clutter the left edge. */
+  for(var T0=-30;T0<=50;T0+=10){
     ctx.beginPath();
     var started=false;
     var theta=(T0+273.15);
@@ -7895,10 +7896,11 @@ function sndRenderSkewT(){
     ctx.stroke();
   }
 
-  /* ── Moist adiabats (lines of constant theta-e) ── */
-  /* Approximation: walk up moist adiabat starting from a T at 1000 hPa. */
+  /* ── Moist adiabats (lines of constant theta-e) ──
+     Approximation: walk up moist adiabat starting from a T at 1000 hPa.
+     Every 10°C (was 5°C) to reduce clutter. */
   ctx.strokeStyle='#2c3d3a';
-  for(var T0=0;T0<=40;T0+=5){
+  for(var T0=0;T0<=40;T0+=10){
     ctx.beginPath();
     var started=false;
     var parcel_T_K=T0+273.15;
@@ -9057,11 +9059,14 @@ function sndRenderSkewTTo(c,data,stationOverride){
      This produces the characteristic SE-to-NW curve that arcs northward
      (toward warmer temperatures) at lower pressures.
      Drawn as SOLID lines per NWS standard (was dashed — fixed).
-     Extended to cover -50 to +50°C starting temps for the wider range. */
+     Range: -30 to +50°C starting temps. Dry adiabats colder than -30°C
+     at the surface aren't physically meaningful for spotter work and
+     would extend far off the left edge at high altitudes, creating
+     visual clutter. */
   ctx.strokeStyle='#4a3030';
   ctx.lineWidth=0.7;
   /* Solid lines (no dash) per NWS spec */
-  for(var T0=-50;T0<=50;T0+=10){
+  for(var T0=-30;T0<=50;T0+=10){
     ctx.beginPath();
     var started=false;
     var theta=(T0+273.15);  /* θ at 1000 hPa reference */
@@ -9076,9 +9081,13 @@ function sndRenderSkewTTo(c,data,stationOverride){
     ctx.stroke();
   }
 
-  /* Moist adiabats (clipped) */
+  /* Moist adiabats (clipped) — lines of constant equivalent potential
+     temperature (θe). Per NWS: "These lines slope from the south toward
+     the northwest. The MALR increases with height."
+     Drawn every 10°C (was 5°C — reduced to cut down on visual clutter
+     at the left edge where moist adiabats converge at high altitudes). */
   ctx.strokeStyle='#2c3d3a';
-  for(var T0=0;T0<=40;T0+=5){
+  for(var T0=0;T0<=40;T0+=10){
     ctx.beginPath();
     var started=false;
     var parcel_T_K=T0+273.15;
