@@ -1093,12 +1093,18 @@ body{
 
 .snd-layout{
   display:grid;
-  grid-template-columns:minmax(0,1fr) 280px;
+  grid-template-columns:minmax(0,1fr) 320px;
   gap:14px;
   align-items:start;
 }
 @media(max-width:900px){
   .snd-layout{grid-template-columns:1fr}
+}
+.snd-right-col{
+  display:flex;
+  flex-direction:column;
+  gap:14px;
+  min-width:0;
 }
 .snd-canvas-wrap{
   position:relative;
@@ -1167,6 +1173,42 @@ body{
 .snd-param-row .snd-param-value.warn{color:#ffb340}
 .snd-param-row .snd-param-value.crit{color:#ff5a5a}
 .snd-param-row .snd-param-value.good{color:#39d353}
+
+/* Hodograph */
+.snd-hodo-wrap{
+  background:var(--bg2);
+  border:1px solid var(--bdr);
+  border-radius:8px;
+  padding:10px;
+}
+.snd-hodo-header{
+  font-size:11px;font-weight:700;
+  color:var(--acc);
+  text-transform:uppercase;letter-spacing:.04em;
+  margin-bottom:8px;
+  display:flex;align-items:baseline;gap:8px;
+}
+.snd-hodo-header i{font-size:10px}
+.snd-hodo-sub{
+  font-size:9px;color:var(--t3);
+  font-weight:400;text-transform:none;letter-spacing:0;
+}
+#sndHodoCanvas{
+  width:100%;
+  height:auto;
+  max-width:100%;
+  display:block;
+  background:#0e0e0e;
+  border-radius:4px;
+  border:1px solid var(--bdr);
+}
+.snd-hodo-info{
+  font-size:10px;
+  color:var(--t3);
+  text-align:center;
+  padding:8px 4px 2px;
+  font-style:italic;
+}
 
 .snd-footer{
   margin-top:14px;
@@ -1914,8 +1956,18 @@ body.capturing .hamburger-menu{display:none!important}
         </div>
         <div id="sndError" class="snd-error" style="display:none"></div>
       </div>
-      <div class="snd-params" id="sndParams">
-        <div class="snd-params-empty">Select a station and fetch a sounding to see derived parameters.</div>
+      <div class="snd-right-col">
+        <div class="snd-params" id="sndParams">
+          <div class="snd-params-empty">Select a station and fetch a sounding to see derived parameters.</div>
+        </div>
+        <div class="snd-hodo-wrap">
+          <div class="snd-hodo-header">
+            <i class="fas fa-wind"></i> Hodograph
+            <span class="snd-hodo-sub">0–6 km wind shear</span>
+          </div>
+          <canvas id="sndHodoCanvas" width="320" height="320"></canvas>
+          <div id="sndHodoInfo" class="snd-hodo-info">Fetch a sounding to display hodograph.</div>
+        </div>
       </div>
     </div>
 
@@ -6388,6 +6440,7 @@ function sndFetchAndRender(){
       sndShowError('No sounding data available for '+sndCurrentStation.id+' at '+ts.replace('T',' ').replace('Z',' Z')+'. Note: RAOB launches happen at 00Z and 12Z only, and data appears ~1 hour after launch.');
       sndCurrentData=null;
       sndRenderParams(null);
+      sndRenderHodograph(null);
       sndClearCanvas();
       return;
     }
@@ -6396,6 +6449,7 @@ function sndFetchAndRender(){
     sndCurrentData=sndParseProfile(p);
     sndRenderSkewT();
     sndRenderParams(sndCurrentData);
+    sndRenderHodograph(sndCurrentData);
   }).catch(function(err){
     sndShowLoading(false);
     sndShowError('Failed to fetch sounding: '+(err.message||err)+'. The IEM server may be temporarily unavailable.');
@@ -7030,6 +7084,204 @@ function sndRenderParams(data){
   html+='</div>';
 
   el.innerHTML=html;
+}
+
+/* ── Hodograph renderer ──────────────────────────────────────────────────
+   A hodograph plots wind u (east-west) vs v (north-south) components at
+   different altitudes, connected by a line. The shape of the curve
+   reveals shear characteristics:
+   - Straight line: unidirectional shear
+   - Curved (clockwise): veering winds (warm advection, tornado-favorable)
+   - Curved (counter-clockwise): backing winds (cold advection)
+   - Length of first 1 km segment: low-level shear (tornado potential)
+   - Length of 0-6 km vector: deep-layer shear (supercell potential)
+   We color-code segments by altitude: 0-1km red, 1-3km orange, 3-6km yellow, 6+km green.
+   Also draw the Bunkers right-mover storm motion vector. */
+function sndRenderHodograph(data){
+  var c=document.getElementById('sndHodoCanvas');
+  var info=document.getElementById('sndHodoInfo');
+  if(!c)return;
+  var ctx=c.getContext('2d');
+  var W=c.width,H=c.height;
+  /* Clear */
+  ctx.fillStyle='#0e0e0e';
+  ctx.fillRect(0,0,W,H);
+  if(!data||!data.levels||data.levels.length===0){
+    if(info)info.textContent='Fetch a sounding to display hodograph.';
+    return;
+  }
+  var sfc=sndFindSfc(data.levels);
+  if(!sfc||sfc.h==null){
+    if(info)info.textContent='No surface height data for hodograph.';
+    return;
+  }
+  /* Collect wind points from surface up to ~12 km AGL.
+     Each point: {h (m AGL), u (kt east+), v (kt north+)} */
+  var pts=[];
+  data.levels.forEach(function(l){
+    if(l.h==null||l.dir==null||l.spd==null)return;
+    var hAGL=l.h-sfc.h;
+    if(hAGL<-100)return;       /* below surface — skip */
+    if(hAGL>12000)return;      /* above 12 km — skip (keeps plot focused) */
+    var uv=sndWindUV(l.dir,l.spd);
+    if(uv)pts.push({h:hAGL,u:uv.u,v:uv.v});
+  });
+  if(pts.length<2){
+    if(info)info.textContent='Not enough wind data for hodograph.';
+    return;
+  }
+  pts.sort(function(a,b){return a.h-b.h});
+
+  /* Find max wind magnitude to scale the plot.
+     Add 25% padding so the curve doesn't touch the edge. */
+  var maxMag=0;
+  pts.forEach(function(p){
+    var m=Math.sqrt(p.u*p.u+p.v*p.v);
+    if(m>maxMag)maxMag=m;
+  });
+  /* Storm motion may extend beyond data — include it in scaling. */
+  var motion=sndBunkersRM(data.levels);
+  var motionMag=Math.sqrt(motion.u*motion.u+motion.v*motion.v);
+  if(motionMag>maxMag)maxMag=motionMag;
+  var scaleMax=maxMag*1.25||60;  /* kt — fall back to 60 if all zero */
+  if(scaleMax<30)scaleMax=30;    /* minimum scale for readability */
+
+  /* Plot geometry: center origin, square plot, padding for labels */
+  var pad=30;
+  var size=Math.min(W,H)-pad*2;
+  var cx=W/2,cy=H/2;
+  var r=size/2;
+  /* Convert (u, v) in kt to canvas (x, y). u is east (+x right), v is
+     north (+y UP in physics, but +y DOWN in canvas — so we flip y). */
+  function ktToXY(u,v){
+    return {
+      x:cx+(u/scaleMax)*r,
+      y:cy-(v/scaleMax)*r
+    };
+  }
+
+  /* Clip to circle so the hodograph stays within the plot bounds */
+  ctx.save();
+  ctx.beginPath();
+  ctx.arc(cx,cy,r+2,0,2*Math.PI);
+  ctx.clip();
+
+  /* Draw range rings at 10, 20, 30, ... kt */
+  ctx.strokeStyle='#2a2a2a';
+  ctx.lineWidth=0.7;
+  for(var ring=10;ring<=scaleMax;ring+=10){
+    var rr=(ring/scaleMax)*r;
+    ctx.beginPath();
+    ctx.arc(cx,cy,rr,0,2*Math.PI);
+    ctx.stroke();
+    /* Label at top-right of ring */
+    ctx.fillStyle='#555';
+    ctx.font='8px Inter,monospace';
+    ctx.textAlign='center';
+    ctx.textBaseline='middle';
+    /* Place label at ~45° up-right from center */
+    var lx=cx+rr*Math.cos(-Math.PI/4);
+    var ly=cy+rr*Math.sin(-Math.PI/4);
+    ctx.fillText(ring+'',lx,ly);
+  }
+
+  /* Draw cardinal axes (N/S/E/W) */
+  ctx.strokeStyle='#3a3a3a';
+  ctx.lineWidth=0.7;
+  ctx.beginPath();
+  ctx.moveTo(cx-r,cy);ctx.lineTo(cx+r,cy);   /* E-W */
+  ctx.moveTo(cx,cy-r);ctx.lineTo(cx,cy+r);   /* N-S */
+  ctx.stroke();
+
+  /* Cardinal direction labels (outside the clip soon, but draw now since
+     they're inside the plot area) */
+  ctx.fillStyle='#888';
+  ctx.font='bold 10px Inter,monospace';
+  ctx.textAlign='center';
+  ctx.textBaseline='middle';
+  /* N is +v (up), so top */
+  ctx.fillText('N',cx,cy-r+10);
+  ctx.fillText('S',cx,cy+r-10);
+  ctx.fillText('E',cx+r-10,cy);
+  ctx.fillText('W',cx-r+10,cy);
+
+  /* Draw the hodograph curve, color-coded by altitude:
+     0-1 km: red (critical low-level shear)
+     1-3 km: orange
+     3-6 km: yellow
+     6-12 km: green */
+  function colorForAltitude(h){
+    if(h<1000)return '#ff5a5a';   /* red */
+    if(h<3000)return '#ffb340';   /* orange */
+    if(h<6000)return '#ffd60a';   /* yellow */
+    return '#39d353';             /* green */
+  }
+  /* Draw colored segments between consecutive points */
+  ctx.lineWidth=2.5;
+  for(var i=1;i<pts.length;i++){
+    var p0=ktToXY(pts[i-1].u,pts[i-1].v);
+    var p1=ktToXY(pts[i].u,pts[i].v);
+    /* Use the average altitude of the segment for color */
+    var avgH=(pts[i-1].h+pts[i].h)/2;
+    ctx.strokeStyle=colorForAltitude(avgH);
+    ctx.beginPath();
+    ctx.moveTo(p0.x,p0.y);
+    ctx.lineTo(p1.x,p1.y);
+    ctx.stroke();
+  }
+  /* Draw points at each level (small dots) */
+  pts.forEach(function(p){
+    var xy=ktToXY(p.u,p.v);
+    ctx.fillStyle=colorForAltitude(p.h);
+    ctx.beginPath();
+    ctx.arc(xy.x,xy.y,2,0,2*Math.PI);
+    ctx.fill();
+  });
+
+  /* Draw Bunkers right-mover storm motion vector (cyan) */
+  var mXY=ktToXY(motion.u,motion.v);
+  ctx.strokeStyle='#00d4ff';
+  ctx.fillStyle='#00d4ff';
+  ctx.lineWidth=1.5;
+  ctx.setLineDash([4,3]);
+  ctx.beginPath();
+  ctx.moveTo(cx,cy);
+  ctx.lineTo(mXY.x,mXY.y);
+  ctx.stroke();
+  ctx.setLineDash([]);
+  /* Arrowhead at storm motion point */
+  var ang=Math.atan2(mXY.y-cy,mXY.x-cx);
+  ctx.beginPath();
+  ctx.moveTo(mXY.x,mXY.y);
+  ctx.lineTo(mXY.x-8*Math.cos(ang-0.4),mXY.y-8*Math.sin(ang-0.4));
+  ctx.lineTo(mXY.x-8*Math.cos(ang+0.4),mXY.y-8*Math.sin(ang+0.4));
+  ctx.closePath();
+  ctx.fill();
+  /* Label near storm motion */
+  ctx.font='9px Inter,monospace';
+  ctx.fillStyle='#00d4ff';
+  ctx.textAlign='left';
+  ctx.textBaseline='middle';
+  ctx.fillText('RM',mXY.x+8,mXY.y);
+
+  ctx.restore();
+
+  /* Draw outer circle border (after restore so it's not clipped) */
+  ctx.strokeStyle='#666';
+  ctx.lineWidth=1;
+  ctx.beginPath();
+  ctx.arc(cx,cy,r,0,2*Math.PI);
+  ctx.stroke();
+
+  /* Update info panel with key hodograph metrics */
+  if(info){
+    var shear01=sndBulkShear(data.levels,1);
+    var shear06=sndBulkShear(data.levels,6);
+    var srh01=sndSRH(data.levels,motion.u,motion.v,1000);
+    var srh03=sndSRH(data.levels,motion.u,motion.v,3000);
+    function f(v,u){return v==null?'—':v+(u?' '+u:'')}
+    info.innerHTML='<span style="color:var(--t2)">Shear 0-1km:</span> <b style="color:#ff5a5a">'+f(shear01,'kt')+'</b>'+' &nbsp;·&nbsp; '+'<span style="color:var(--t2)">0-6km:</span> <b style="color:#ffd60a">'+f(shear06,'kt')+'</b>'+' &nbsp;·&nbsp; '+'<span style="color:var(--t2)">SRH 0-1:</span> <b style="color:#ff5a5a">'+f(srh01,'m²/s²')+'</b>'+' &nbsp;·&nbsp; '+'<span style="color:var(--t2)">RM:</span> <b style="color:#00d4ff">'+motion.u+'/'+motion.v+' kt</b>';
+  }
 }
 
 /* ── Skew-T canvas renderer ── */
