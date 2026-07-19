@@ -1092,6 +1092,72 @@ body{
 }
 .snd-btn-acc:hover{background:#ff8c33;color:#0a0a0a}
 
+/* Legend & How to Read panel */
+.snd-legend{
+  background:var(--bg2);
+  border:1px solid var(--bdr);
+  border-radius:8px;
+  margin-bottom:14px;
+  overflow:hidden;
+}
+.snd-legend-header{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:10px 14px;
+  background:linear-gradient(180deg,rgba(255,115,0,.1),transparent);
+  border-bottom:1px solid var(--bdr);
+  font-size:12px;font-weight:700;
+  color:var(--acc);
+  text-transform:uppercase;letter-spacing:.04em;
+  cursor:pointer;
+  user-select:none;
+}
+.snd-legend-header:hover{background:rgba(255,115,0,.08)}
+.snd-legend-header i:first-child{margin-right:6px;font-size:11px}
+.snd-legend-body{
+  padding:14px;
+}
+.snd-legend-grid{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:16px;
+}
+@media(max-width:700px){
+  .snd-legend-grid{grid-template-columns:1fr}
+}
+.snd-legend-section h4{
+  font-size:11px;font-weight:700;
+  color:var(--acc);
+  text-transform:uppercase;letter-spacing:.04em;
+  margin:0 0 8px;
+  padding-bottom:4px;
+  border-bottom:1px solid var(--bdr);
+}
+.snd-legend-row{
+  display:flex;align-items:flex-start;gap:10px;
+  margin-bottom:8px;
+  font-size:10px;color:var(--t2);
+  line-height:1.5;
+}
+.snd-legend-row b{color:var(--t1)}
+.snd-legend-line{
+  flex:0 0 36px;
+  height:2px;
+  margin-top:5px;
+  border-radius:1px;
+  display:inline-block;
+}
+.snd-legend-tip{
+  font-size:10px;color:var(--t2);
+  line-height:1.5;
+  margin-bottom:8px;
+  padding-left:4px;
+  border-left:2px solid rgba(255,115,0,.2);
+  padding-left:8px;
+}
+.snd-legend-tip b{color:var(--t1)}
+.snd-legend-tip a{text-decoration:none}
+.snd-legend-tip a:hover{text-decoration:underline}
+
 .snd-layout{
   display:grid;
   grid-template-columns:minmax(0,1fr) 320px;
@@ -2251,6 +2317,140 @@ body.capturing .hamburger-menu{display:none!important}
       </div>
       <button class="snd-btn" onclick="sndFetchAndRender()" title="Reload sounding"><i class="fas fa-rotate"></i></button>
       <button class="snd-btn snd-btn-acc" onclick="sndScreenshot()" title="Screenshot"><i class="fas fa-camera"></i></button>
+      <button class="snd-btn" onclick="sndToggleLegend()" title="Legend & Instructions"><i class="fas fa-circle-info"></i> Legend</button>
+    </div>
+
+    <!-- Legend & How to Read (collapsible) -->
+    <div class="snd-legend" id="sndLegend" style="display:none">
+      <div class="snd-legend-header" onclick="sndToggleLegend()">
+        <span><i class="fas fa-circle-info"></i> Skew-T Legend &amp; How to Read</span>
+        <i class="fas fa-chevron-up"></i>
+      </div>
+      <div class="snd-legend-body">
+        <div class="snd-legend-grid">
+          <!-- Chart lines legend -->
+          <div class="snd-legend-section">
+            <h4>Chart Lines</h4>
+            <div class="snd-legend-row">
+              <span class="snd-legend-line" style="background:#2a2a2a;height:2px;transform:none"></span>
+              <span><b>Isobars</b> — Horizontal lines of equal pressure (hPa). Log-spaced: 1000 hPa at bottom (sea level) to 100 hPa at top (stratosphere). Labeled on the left.</span>
+            </div>
+            <div class="snd-legend-row">
+              <span class="snd-legend-line" style="background:#2a2a2a;height:1.5px;transform:rotate(-30deg)"></span>
+              <span><b>Isotherms</b> — Skewed lines of equal temperature (°C). Slant from bottom-left to top-right. Labeled at the bottom. 0°C highlighted white.</span>
+            </div>
+            <div class="snd-legend-row">
+              <span class="snd-legend-line" style="background:#4a3030;height:1.5px"></span>
+              <span><b>Dry Adiabats</b> — Solid brown-red curves sloping SE to NW. Show how unsaturated air cools as it rises (~9.8°C/km). Lines of constant potential temperature (θ).</span>
+            </div>
+            <div class="snd-legend-row">
+              <span class="snd-legend-line" style="background:#2c3d3a;height:1.5px"></span>
+              <span><b>Moist Adiabats</b> — Solid green-cyan curves. Show how saturated air cools as it rises (~4°C/km near surface, approaches dry rate aloft). Lines of constant equivalent potential temperature (θe).</span>
+            </div>
+            <div class="snd-legend-row">
+              <span class="snd-legend-line" style="background:#2a3a2c;height:1px;border-top:1px dashed #2a3a2c;background:none"></span>
+              <span><b>Mixing Ratio Lines</b> — Dashed green lines. Lines of constant water vapor content (g/kg). Slant from bottom-left to top-right, nearly parallel to isotherms.</span>
+            </div>
+            <div class="snd-legend-row">
+              <span class="snd-legend-line" style="background:linear-gradient(90deg,#ff5a5a 0%,#ff5a5a 25%,#ffb340 50%,#ffd60a 75%,#00d4ff 100%);height:2.5px"></span>
+              <span><b>Temperature Trace</b> — Color-coded by altitude: red (low-level &lt;700hPa), orange (mid 700-500hPa), yellow (high 500-300hPa), cyan (upper &gt;300hPa). The actual measured environmental temperature.</span>
+            </div>
+            <div class="snd-legend-row">
+              <span class="snd-legend-line" style="background:#5aff7a;height:2px"></span>
+              <span><b>Dewpoint Trace</b> — Solid green line. Always left of (colder than) the temperature trace. Shows moisture content; closer to temp trace = more humid.</span>
+            </div>
+            <div class="snd-legend-row">
+              <span class="snd-legend-line" style="background:repeating-linear-gradient(90deg,#ffd60a 0,#ffd60a 4px,transparent 4px,transparent 7px);height:1.5px"></span>
+              <span><b>Parcel Ascent</b> — Dashed yellow line. Shows the path a surface parcel would take if lifted. Used to calculate CAPE, CIN, LI.</span>
+            </div>
+            <div class="snd-legend-row">
+              <span style="display:inline-flex;gap:6px;align-items:center">
+                <span style="width:8px;height:8px;border-radius:50%;background:#ffd60a;display:inline-block"></span>
+                <span style="width:8px;height:8px;border-radius:50%;background:#39d353;display:inline-block"></span>
+                <span style="width:8px;height:8px;border-radius:50%;background:#ff5a5a;display:inline-block"></span>
+              </span>
+              <span><b>Parcel Levels:</b> <span style="color:#ffd60a">●LCL</span> (Lifted Condensation Level — cloud base) · <span style="color:#39d353">●LFC</span> (Level of Free Convection — where parcel becomes buoyant) · <span style="color:#ff5a5a">●EL</span> (Equilibrium Level — where buoyancy ends)</span>
+            </div>
+          </div>
+
+          <!-- How to read -->
+          <div class="snd-legend-section">
+            <h4>How to Read the Chart</h4>
+            <div class="snd-legend-tip">
+              <b>Y-Axis (Pressure):</b> Higher pressure = lower altitude (bottom). Lower pressure = higher altitude (top). The log spacing compresses upper levels — this is normal and matches how the atmosphere thins with height.
+            </div>
+            <div class="snd-legend-tip">
+              <b>X-Axis (Temperature):</b> Skewed at 45°. Cold temperatures are on the left, warm on the right. The skew makes the adiabats appear as gentle curves instead of steep lines.
+            </div>
+            <div class="snd-legend-tip">
+              <b>Instability (CAPE):</b> The area between the parcel ascent (yellow dashed) and the temperature trace (red), from LFC to EL, where the parcel is warmer than the environment. Larger area = more CAPE = stronger updrafts.
+            </div>
+            <div class="snd-legend-tip">
+              <b>Capping (CIN):</b> The negative area below the LFC where the parcel is colder than the environment. Strong cap = storms won't form unless broken. Weak cap = storms form easily but may be disorganized.
+            </div>
+            <div class="snd-legend-tip">
+              <b>Moisture:</b> The gap between the temperature (red) and dewpoint (green) traces shows how dry the air is. Wide gap = dry air. Narrow gap = humid. A dewpoint that drops sharply with height indicates a dry layer (important for severe weather — evaporative cooling, downbursts).
+            </div>
+            <div class="snd-legend-tip">
+              <b>Wind Shear:</b> The wind barbs on the right side show speed and direction at each level. Large changes in direction/speed between levels = strong shear. Check the hodograph (below) for a visual representation.
+            </div>
+            <div class="snd-legend-tip">
+              <b>0°C Freezing Level:</b> The white dashed isotherm. Precipitation type (rain vs. snow vs. freezing rain) depends on where this sits relative to the surface and any warm layers aloft.
+            </div>
+          </div>
+
+          <!-- Hodograph legend -->
+          <div class="snd-legend-section">
+            <h4>Hodograph</h4>
+            <div class="snd-legend-row">
+              <span class="snd-legend-line" style="background:#ff5a5a;height:2.5px"></span>
+              <span><b>0-1 km</b> (red) — Low-level shear. Long segment = strong low-level shear = tornado potential.</span>
+            </div>
+            <div class="snd-legend-row">
+              <span class="snd-legend-line" style="background:#ffb340;height:2.5px"></span>
+              <span><b>1-3 km</b> (orange) — Mid-level shear.</span>
+            </div>
+            <div class="snd-legend-row">
+              <span class="snd-legend-line" style="background:#ffd60a;height:2.5px"></span>
+              <span><b>3-6 km</b> (yellow) — Deep-layer shear. Long segment = supercell potential.</span>
+            </div>
+            <div class="snd-legend-row">
+              <span class="snd-legend-line" style="background:#39d353;height:2.5px"></span>
+              <span><b>6-12 km</b> (green) — Upper-level flow.</span>
+            </div>
+            <div class="snd-legend-row">
+              <span class="snd-legend-line" style="background:repeating-linear-gradient(90deg,#00d4ff 0,#00d4ff 4px,transparent 4px,transparent 7px);height:1.5px"></span>
+              <span><b>Storm Motion (RM)</b> — Cyan dashed arrow. Bunkers right-mover supercell motion vector.</span>
+            </div>
+            <div class="snd-legend-tip">
+              <b>Shape:</b> Straight line = unidirectional shear. Clockwise curve (veering) = warm advection, tornado-favorable. Counter-clockwise (backing) = cold advection.
+            </div>
+          </div>
+
+          <!-- Key parameters -->
+          <div class="snd-legend-section">
+            <h4>Key Parameters (right panel)</h4>
+            <div class="snd-legend-tip">
+              <b>CAPE:</b> <span style="color:#39d353">&gt;500 (green)</span> · <span style="color:#ffb340">&gt;1500 (amber)</span> · <span style="color:#ff5a5a">&gt;2500 (red)</span> J/kg. Convective available potential energy — fuel for updrafts.
+            </div>
+            <div class="snd-legend-tip">
+              <b>Lifted Index (LI):</b> <span style="color:#39d353">&lt;0 (green)</span> · <span style="color:#ffb340">&lt;-4 (amber)</span> · <span style="color:#ff5a5a">&lt;-6 (red)</span>. Negative = unstable. More negative = more unstable.
+            </div>
+            <div class="snd-legend-tip">
+              <b>Bulk Shear:</b> <span style="color:#ffb340">&gt;25kt (amber)</span> · <span style="color:#ff5a5a">&gt;40kt (red)</span>. 0-6km shear &gt;40kt supports organized severe storms/supercells.
+            </div>
+            <div class="snd-legend-tip">
+              <b>SRH (Storm-Relative Helicity):</b> <span style="color:#ffb340">&gt;100 (amber)</span> · <span style="color:#ff5a5a">&gt;200 (red)</span> m²/s². 0-1km SRH &gt;100 supports tornadoes; &gt;200 = significant tornado potential.
+            </div>
+            <div class="snd-legend-tip">
+              <b>Precipitable Water (PW):</b> Total moisture in the atmospheric column. &gt;35mm = heavy rain/flood threat. &gt;50mm = extreme moisture (atmospheric river).
+            </div>
+            <div class="snd-legend-tip" style="border-top:1px solid var(--bdr);padding-top:8px;margin-top:8px;font-size:9px;color:var(--t3)">
+              <i class="fas fa-book"></i> References: <a href="https://www.noaa.gov/jetstream/upperair/skew-t-log-p-diagrams" target="_blank" rel="noopener" style="color:var(--acc)">NOAA JetStream</a> · <a href="https://www.weather.gov/source/zhu/ZHU_Training_Page/convective_parameters/skewt/skewtinfo.html" target="_blank" rel="noopener" style="color:var(--acc)">NWS ZHU Training</a>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
 
     <div class="snd-layout">
@@ -7779,6 +7979,19 @@ function sndRenderHodograph(data){
 }
 
 /* ── Skew-T canvas renderer ── */
+/* Toggle the legend & instructions panel visibility */
+function sndToggleLegend(){
+  var el=document.getElementById('sndLegend');
+  if(!el)return;
+  if(el.style.display==='none'){
+    el.style.display='block';
+    /* Scroll the legend into view */
+    el.scrollIntoView({behavior:'smooth',block:'start'});
+  }else{
+    el.style.display='none';
+  }
+}
+
 function sndClearCanvas(){
   var c=document.getElementById('sndCanvas');
   if(!c)return;
