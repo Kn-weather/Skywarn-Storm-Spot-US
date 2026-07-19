@@ -7802,9 +7802,11 @@ function sndRenderSkewT(){
 
   /* Y axis: log scale on pressure */
   function pToY(p){
-    /* pMax at bottom (Y=mt+ph), pMin at top (Y=mt) */
+    /* HIGH pressure (1000 hPa, sea level) → BOTTOM of chart (y = mt + ph)
+       LOW pressure (100 hPa, stratosphere) → TOP of chart (y = mt)
+       Matches TwisterData / NWS / COD standard orientation. */
     var lp=Math.log(p),lpMin=Math.log(pMin),lpMax=Math.log(pMax);
-    return mt+ph*(lpMax-lp)/(lpMax-lpMin);
+    return mt+ph*(lp-lpMin)/(lpMax-lpMin);
   }
 
   /* Temperature range: -50°C (left at 1050hPa) to +40°C — but skew-T
@@ -8959,8 +8961,15 @@ function sndRenderSkewTTo(c,data,stationOverride){
   var pw=W-ml-mr,ph=H-mt-mb;
   var pMin=100,pMax=1050;
   function pToY(p){
+    /* Convert pressure to y-coordinate on the canvas.
+       HIGH pressure (1000 hPa, sea level) → BOTTOM of chart (y = mt + ph)
+       LOW pressure (100 hPa, stratosphere) → TOP of chart (y = mt)
+       This matches the standard skew-T orientation used by TwisterData,
+       NWS, COD, etc. — sea level at the bottom, stratosphere at the top.
+       The formula uses (lp - lpMin) so that higher pressure (larger lp)
+       produces a larger y (further down on the canvas). */
     var lp=Math.log(p),lpMin=Math.log(pMin),lpMax=Math.log(pMax);
-    return mt+ph*(lpMax-lp)/(lpMax-lpMin);
+    return mt+ph*(lp-lpMin)/(lpMax-lpMin);
   }
   /* X-axis range set to -30..+40 to match TwisterData's layout.
      This centers the temperature trace in the chart (0°C sits near
