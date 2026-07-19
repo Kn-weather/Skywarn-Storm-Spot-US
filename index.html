@@ -7833,7 +7833,7 @@ function sndRenderSkewT(){
   function tToX(T,p){
     var lpFrac=(Math.log(pMax)-Math.log(p))/(Math.log(pMax)-Math.log(pMin));
     var totalRange=(tMax-tMin)+SKEW;
-    return ml+pw*(T-tMin+(1-lpFrac)*SKEW)/totalRange;
+    return ml+pw*(T-tMin+lpFrac*SKEW)/totalRange;
   }
 
   /* ── Clear & background ── */
@@ -8986,7 +8986,7 @@ function sndRenderSkewTTo(c,data,stationOverride){
   function tToX(T,p){
     var lpFrac=(Math.log(pMax)-Math.log(p))/(Math.log(pMax)-Math.log(pMin));
     var totalRange=(tMax-tMin)+SKEW;
-    return ml+pw*(T-tMin+(1-lpFrac)*SKEW)/totalRange;
+    return ml+pw*(T-tMin+lpFrac*SKEW)/totalRange;
   }
   ctx.fillStyle='#0e0e0e';
   ctx.fillRect(0,0,W,H);
