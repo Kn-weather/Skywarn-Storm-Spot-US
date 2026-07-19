@@ -1445,10 +1445,6 @@ body.capturing .hamburger-menu{display:none!important}
     <i class="fas fa-chart-line"></i>
     <span>Soundings</span>
   </div>
-  <div class="hamburger-menu-item" id="tab-mping" onclick="switchTab('mping')">
-    <i class="fas fa-comment-dots"></i>
-    <span>mPING Reports</span>
-  </div>
   <div class="hamburger-menu-item" id="tab-reference" onclick="switchTab('reference')">
     <i class="fas fa-book"></i>
     <span>Reference Library</span>
@@ -1724,6 +1720,26 @@ body.capturing .hamburger-menu{display:none!important}
         </div>
       </div>
 
+      <!-- Tornado Tracker Mode -->
+      <div class="wf-feed-card" style="margin-bottom:16px">
+        <div class="wf-feed-header"><i class="fas fa-tornado"></i> Tornado Tracker Mode</div>
+        <div class="wf-feed-body" style="padding:14px">
+          <label style="display:flex;align-items:flex-start;gap:8px;margin-bottom:8px;font-size:12px;color:var(--t1);cursor:pointer">
+            <input type="checkbox" id="settingTornadoTracker" onchange="onTornadoTrackerToggle()" style="accent-color:var(--acc);margin-top:2px">
+            <span>
+              <strong>Auto-zoom to new Tornado Warnings</strong><br>
+              <span style="font-size:10px;color:var(--t3);line-height:1.5;display:block;margin-top:4px">
+                When enabled, the map will automatically pan and zoom to any newly-issued Tornado Warning polygon. Useful for active chasing or situational awareness during severe weather outbreaks. Only triggers for warnings that are genuinely new (not re-added from filter toggles).
+              </span>
+            </span>
+          </label>
+          <div id="tornadoTrackerStatus" style="font-size:10px;color:var(--t3);margin-top:8px;padding:6px 10px;background:var(--bg2);border:1px solid var(--bdr);border-radius:4px;display:none">
+            <i class="fas fa-circle-check" style="color:var(--acc);margin-right:4px"></i>
+            <span>Active — watching for new Tornado Warnings</span>
+          </div>
+        </div>
+      </div>
+
       <!-- Console / Update Log -->
       <div class="wf-feed-card" style="margin-bottom:16px">
         <div class="wf-feed-header"><i class="fas fa-list-ul"></i> Update Log (Last 20)</div>
@@ -1745,13 +1761,6 @@ body.capturing .hamburger-menu{display:none!important}
         </div>
       </div>
     </div>
-  </div>
-</div>
-
-<!-- Tab View: mPING Reports -->
-<div id="view-mping" class="tab-view">
-  <div class="wf-frame-wrap" data-tab-label="mPING Reports" data-tab-icon="fa-comment-dots">
-    <iframe src="https://mping.ou.edu/display/" title="mPING Reports" allow="fullscreen; geolocation" referrerpolicy="no-referrer-when-downgrade"></iframe>
   </div>
 </div>
 
@@ -2015,6 +2024,48 @@ var alertLayerCache={};       /* keyed by alert ID → {layer, alert, event, cat
    of the page (across filter toggles, manual refreshes, etc.) and is
    only cleared on a full page reload. */
 var seenAlertIdsForSound={};
+
+/* ── Tornado Tracker Mode ──
+   When enabled, the map auto-pans and zooms to any newly-issued Tornado
+   Warning polygon. Persists in localStorage so the setting survives page
+   reloads. Only triggers for genuinely new warnings (using the same
+   seenAlertIdsForSound set as the alert sound), so toggling filters won't
+   cause the map to jump around. */
+var TORNADO_TRACKER_KEY='us_nws_tornado_tracker_enabled';
+var tornadoTrackerEnabled=false;
+try{
+  tornadoTrackerEnabled=localStorage.getItem(TORNADO_TRACKER_KEY)==='true';
+}catch(e){}
+
+function isTornadoTrackerEnabled(){
+  var cb=document.getElementById('settingTornadoTracker');
+  if(cb)return cb.checked;
+  return tornadoTrackerEnabled;
+}
+
+function onTornadoTrackerToggle(){
+  var cb=document.getElementById('settingTornadoTracker');
+  if(!cb)return;
+  tornadoTrackerEnabled=cb.checked;
+  try{localStorage.setItem(TORNADO_TRACKER_KEY,String(tornadoTrackerEnabled))}catch(e){}
+  var status=document.getElementById('tornadoTrackerStatus');
+  if(status)status.style.display=cb.checked?'block':'none';
+  if(cb.checked){
+    logConsole('Tornado Tracker Mode enabled — will auto-zoom to new Tornado Warnings','info');
+  }else{
+    logConsole('Tornado Tracker Mode disabled','info');
+  }
+}
+
+/* Restore the checkbox state on page load (called from boot sequence) */
+function restoreTornadoTrackerSetting(){
+  var cb=document.getElementById('settingTornadoTracker');
+  if(cb){
+    cb.checked=tornadoTrackerEnabled;
+    var status=document.getElementById('tornadoTrackerStatus');
+    if(status)status.style.display=tornadoTrackerEnabled?'block':'none';
+  }
+}
 
 /* Critical alerts that ALWAYS render on load regardless of category toggle
    state. This guarantees the user sees Tornado Warnings, Severe Thunderstorm
@@ -3859,6 +3910,9 @@ function checkForNewCriticalAlerts(prevAlertIds){
   var torWarnEnabled=!torWarnSound||torWarnSound.checked;
   var torWatchEnabled=!torWatchSound||torWatchSound.checked;
   var newTorWarnings=0,newTorWatches=0;
+  /* Collect newly-seen Tornado Warning alert data so we can auto-zoom
+     to the most recent one if Tornado Tracker Mode is enabled. */
+  var newTorWarningAlerts=[];
   drawnAlerts.forEach(function(a){
     var id=a.id||'';
     if(!id)return;
@@ -3869,6 +3923,7 @@ function checkForNewCriticalAlerts(prevAlertIds){
     var e=a.event.toLowerCase();
     if(e==='tornado warning'&&torWarnEnabled){
       newTorWarnings++;
+      newTorWarningAlerts.push(a);
     }else if(e==='tornado watch'&&torWatchEnabled){
       newTorWatches++;
     }
@@ -3876,6 +3931,35 @@ function checkForNewCriticalAlerts(prevAlertIds){
   if(newTorWarnings>0){
     logConsole('NEW Tornado Warning issued! ('+newTorWarnings+' new)','new');
     playAlertSound();
+    /* Tornado Tracker Mode: auto-zoom to the new Tornado Warning polygon.
+       If multiple new warnings, zoom to the combined bounds of all of them
+       so the user can see the full active threat area. */
+    if(isTornadoTrackerEnabled()&&alertMapInstance){
+      try{
+        var bounds=L.latLngBounds([]);
+        newTorWarningAlerts.forEach(function(a){
+          if(a.geoms&&a.geoms.length>0){
+            a.geoms.forEach(function(g){
+              try{
+                var testLayer=L.geoJSON(g);
+                if(testLayer.getBounds&&testLayer.getBounds().isValid()){
+                  bounds.extend(testLayer.getBounds());
+                }
+                testLayer.remove();
+              }catch(e){}
+            });
+          }
+        });
+        if(bounds.isValid()){
+          /* fitBounds with padding so the polygon isn't edge-to-edge.
+             maxZoom 11 prevents over-zooming on tiny polygons. */
+          alertMapInstance.fitBounds(bounds,{padding:[60,60],maxZoom:11});
+          logConsole('Tornado Tracker: zoomed to new Tornado Warning polygon','info');
+        }
+      }catch(e){
+        console.warn('[TornadoTracker] Could not zoom to warning:',e);
+      }
+    }
   }
   if(newTorWatches>0){
     logConsole('NEW Tornado Watch issued! ('+newTorWatches+' new)','new');
@@ -5713,8 +5797,6 @@ function switchTab(tab){
       sub.innerHTML='Spotter Safety &middot; ACES &amp; Field Guidelines';
     }else if(tab==='soundings'){
       sub.innerHTML='Soundings &middot; Skew-T &amp; Derived Parameters';
-    }else if(tab==='mping'){
-      sub.innerHTML='mPING Reports &middot; Crowd-Sourced Weather Observations';
     }
   }
   /* If switching to the Weather Feeds tab, load Twitter widgets and RSS feeds */
@@ -8028,6 +8110,9 @@ window.addEventListener('DOMContentLoaded',function(){
   initAlertMap();
   fAlertMap();
   updateLiveTime();
+  /* Restore persisted settings (Tornado Tracker mode, etc.) so they
+     survive page reloads. */
+  restoreTornadoTrackerSetting();
   /* Auto-refresh every 5 minutes (NWS API cache TTL is 1 min, but pulling
      all US alerts is heavy - 5 min gives a good balance of freshness
      without hammering the API). */
