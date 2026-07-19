@@ -9252,14 +9252,10 @@ function sndRenderSkewTTo(c,data,stationOverride){
     var lp=Math.log(p),lpMin=Math.log(pMin),lpMax=Math.log(pMax);
     return mt+ph*(lp-lpMin)/(lpMax-lpMin);
   }
-  /* X-axis range set to -30..+40 to match TwisterData's layout.
-     This centers the temperature trace in the chart (0°C sits near
-     horizontal center) and gives the warm side (+40°C) full visibility.
-     Cold upper-level temperatures (below -30°C at high altitude) will
-     extend past the left edge — same behavior as TwisterData. The
-     actual values are still readable from the params panel.
-     SKEW=33 maintains the standard 45° isotherm slope. */
-  var tMin=-30,tMax=40,SKEW=33;
+  /* X-axis range set to -80..+40 to ensure ALL temperature data stays
+     inside the chart axis. Real atmospheric soundings can reach -60°C
+     to -70°C at 100 hPa (lower stratosphere). */
+  var tMin=-80,tMax=40,SKEW=33;
   function tToX(T,p){
     var lpFrac=(Math.log(pMax)-Math.log(p))/(Math.log(pMax)-Math.log(pMin));
     var totalRange=(tMax-tMin)+SKEW;
@@ -9325,18 +9321,19 @@ function sndRenderSkewTTo(c,data,stationOverride){
   ctx.stroke();
   ctx.setLineDash([]);
 
-  /* Dry adiabats (clipped) — extended to cover the wider temperature range
-     (was -30 to +50, now -50 to +50) so cold upper-level dry adiabats
-     are visible. */
-  ctx.strokeStyle='#3d2c2c';
+  /* Dry adiabats (clipped) — lines of constant potential temperature (θ).
+     Per NWS: SOLID, slope SE to NW, arc northward with height.
+     θ = T0+273.15 (at 1000 hPa). T(p) = θ*(p/1000)^0.2854 - 273.15.
+     Range -30 to +50 — colder dry adiabats clutter the left edge. */
+  ctx.strokeStyle='#4a3030';
   ctx.lineWidth=0.7;
-  ctx.setLineDash([2,3]);
-  for(var T0=-50;T0<=50;T0+=10){
+  /* Solid lines (no dash) per NWS spec */
+  for(var T0=-30;T0<=50;T0+=10){
     ctx.beginPath();
     var started=false;
-    for(var lp=Math.log(pMax);lp>=Math.log(pMin);lp-=0.05){
+    var theta=(T0+273.15);
+    for(var lp=Math.log(pMax);lp>=Math.log(pMin);lp-=0.02){
       var p=Math.exp(lp);
-      var theta=(T0+273.15)*Math.pow(1000/p,0.2854);
       var Tt=theta*Math.pow(p/1000,0.2854)-273.15;
       var x=tToX(Tt,p),y=pToY(p);
       if(!started){ctx.moveTo(x,y);started=true}
@@ -9345,9 +9342,9 @@ function sndRenderSkewTTo(c,data,stationOverride){
     ctx.stroke();
   }
 
-  /* Moist adiabats (clipped) */
+  /* Moist adiabats (clipped) — every 10°C to reduce clutter. */
   ctx.strokeStyle='#2c3d3a';
-  for(var T0=0;T0<=40;T0+=5){
+  for(var T0=0;T0<=40;T0+=10){
     ctx.beginPath();
     var started=false;
     var parcel_T_K=T0+273.15;
