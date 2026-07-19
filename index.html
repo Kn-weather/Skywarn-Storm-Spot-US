@@ -7858,7 +7858,11 @@ function sndRenderSkewTTo(c,data,stationOverride){
   if(!c||!data)return;
   var ctx=c.getContext('2d');
   var W=c.width,H=c.height;
-  var ml=55,mr=80,mt=30,mb=50;
+  /* Increased top margin from 30 to 50 so the title + valid time + isotherm
+     labels all fit cleanly above the plot border without overlapping each
+     other or the plot area. Bottom margin bumped to 55 to give the x-axis
+     label a bit more breathing room. */
+  var ml=55,mr=80,mt=50,mb=55;
   var pw=W-ml-mr,ph=H-mt-mb;
   var pMin=100,pMax=1050;
   function pToY(p){
@@ -7873,32 +7877,53 @@ function sndRenderSkewTTo(c,data,stationOverride){
   }
   ctx.fillStyle='#0e0e0e';
   ctx.fillRect(0,0,W,H);
-  ctx.strokeStyle='#3a3a3a';
-  ctx.lineWidth=1;
-  ctx.strokeRect(ml,mt,pw,ph);
-  /* Isobars */
-  ctx.strokeStyle='#2a2a2a';
-  ctx.fillStyle='#666';
+
+  /* Draw the title and valid time FIRST, before the plot border, so they
+     sit cleanly in the top margin area without overlapping anything. */
+  ctx.fillStyle='#ff7300';
+  ctx.font='bold 13px Inter,monospace';
+  ctx.textAlign='left';
+  ctx.textBaseline='alphabetic';
+  var stnName=stationOverride?stationOverride.name:'';
+  var stnId=data.station||'';
+  ctx.fillText(stnId+' \u2014 '+stnName,ml+4,16);
+  ctx.fillStyle='#888';
   ctx.font='10px Inter,monospace';
+  if(data.valid){
+    var dt=data.valid.replace('T',' ').replace('Z',' Z');
+    ctx.fillText('Valid: '+dt,ml+4,30);
+  }
+
+  /* CLIP all subsequent drawing to the plot area so no traces, adiabats,
+     or grid lines can extend outside the bordered plot rectangle. This
+     is the key fix — previously the temp/dewpoint traces and moist
+     adiabats could extend past the right edge (hot temps at low pressure)
+     or below the bottom edge (data at pressures > 1050 hPa). */
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(ml,mt,pw,ph);
+  ctx.clip();
+
+  /* Isobars (drawn inside the clipped region so they don't extend past
+     the plot border; the labels are drawn AFTER restoring the clip) */
+  ctx.strokeStyle='#2a2a2a';
   ctx.lineWidth=0.7;
-  [1000,925,850,700,500,400,300,250,200,150,100].forEach(function(p){
+  var isobarLevels=[1000,925,850,700,500,400,300,250,200,150,100];
+  isobarLevels.forEach(function(p){
     if(p<pMin||p>pMax)return;
     var y=pToY(p);
     ctx.beginPath();ctx.moveTo(ml,y);ctx.lineTo(ml+pw,y);ctx.stroke();
-    ctx.textAlign='right';
-    ctx.fillText(p+'',ml-6,y+3);
   });
-  /* Isotherms */
+
+  /* Isotherms (clipped to plot area) */
   ctx.strokeStyle='#2a2a2a';
   ctx.lineWidth=0.7;
   for(var T=tMin;T<=tMax;T+=10){
     var xBottom=tToX(T,pMax),xTop=tToX(T,pMin);
     ctx.beginPath();ctx.moveTo(xBottom,mt+ph);ctx.lineTo(xTop,mt);ctx.stroke();
-    ctx.fillStyle=T===0?'#888':'#666';
-    ctx.textAlign='center';
-    ctx.fillText(T+'\u00B0',xTop,mt-6);
   }
-  /* Dry adiabats */
+
+  /* Dry adiabats (clipped) */
   ctx.strokeStyle='#3d2c2c';
   ctx.lineWidth=0.7;
   ctx.setLineDash([2,3]);
@@ -7915,7 +7940,8 @@ function sndRenderSkewTTo(c,data,stationOverride){
     }
     ctx.stroke();
   }
-  /* Moist adiabats */
+
+  /* Moist adiabats (clipped) */
   ctx.strokeStyle='#2c3d3a';
   for(var T0=0;T0<=40;T0+=5){
     ctx.beginPath();
@@ -7934,7 +7960,8 @@ function sndRenderSkewTTo(c,data,stationOverride){
     }
     ctx.stroke();
   }
-  /* Mixing ratio lines */
+
+  /* Mixing ratio lines (clipped) */
   ctx.strokeStyle='#2a3a2c';
   ctx.setLineDash([1,3]);
   [1,2,5,10,20].forEach(function(w){
@@ -7953,20 +7980,8 @@ function sndRenderSkewTTo(c,data,stationOverride){
     ctx.stroke();
   });
   ctx.setLineDash([]);
-  /* Title */
-  ctx.fillStyle='#ff7300';
-  ctx.font='bold 13px Inter,monospace';
-  ctx.textAlign='left';
-  var stnName=stationOverride?stationOverride.name:'';
-  var stnId=data.station||'';
-  ctx.fillText(stnId+' \u2014 '+stnName,ml+4,16);
-  ctx.fillStyle='#888';
-  ctx.font='10px Inter,monospace';
-  if(data.valid){
-    var dt=data.valid.replace('T',' ').replace('Z',' Z');
-    ctx.fillText('Valid: '+dt,ml+4,28);
-  }
-  /* Temperature trace */
+
+  /* Temperature trace (clipped) */
   ctx.strokeStyle='#ff5a5a';
   ctx.lineWidth=2;
   ctx.beginPath();
@@ -7979,7 +7994,8 @@ function sndRenderSkewTTo(c,data,stationOverride){
     else ctx.lineTo(x,y);
   });
   ctx.stroke();
-  /* Dewpoint trace */
+
+  /* Dewpoint trace (clipped) */
   ctx.strokeStyle='#5aff7a';
   ctx.lineWidth=2;
   ctx.beginPath();
@@ -7992,21 +8008,8 @@ function sndRenderSkewTTo(c,data,stationOverride){
     else ctx.lineTo(x,y);
   });
   ctx.stroke();
-  /* Wind barbs */
-  var barbLevels=[1000,925,850,700,500,400,300,250,200,150,100];
-  var barbX=ml+pw+18;
-  ctx.strokeStyle='#bbb';
-  ctx.fillStyle='#bbb';
-  ctx.lineWidth=1;
-  barbLevels.forEach(function(p){
-    if(p<pMin||p>pMax)return;
-    var dir=sndInterpLevel(data.levels,'p','dir',p);
-    var spd=sndInterpLevel(data.levels,'p','spd',p);
-    if(dir==null||spd==null)return;
-    var y=pToY(p);
-    sndDrawWindBarb(ctx,barbX,y,dir,spd);
-  });
-  /* Parcel ascent + LCL */
+
+  /* Parcel ascent + LCL (clipped) */
   var sfc=sndFindSfc(data.levels);
   if(sfc){
     var Td0=sndInterpLevel(data.levels,'p','Td',sfc.p);
@@ -8042,10 +8045,73 @@ function sndRenderSkewTTo(c,data,stationOverride){
       }
     }
   }
-  /* Axis labels */
+
+  /* Restore the clip — everything below this draws outside the plot area
+     (labels, border, wind barbs, axes). */
+  ctx.restore();
+
+  /* Plot border (drawn AFTER restore so it's not clipped) */
+  ctx.strokeStyle='#3a3a3a';
+  ctx.lineWidth=1;
+  ctx.strokeRect(ml,mt,pw,ph);
+
+  /* Isobar labels (left side, outside plot) */
+  ctx.fillStyle='#666';
+  ctx.font='10px Inter,monospace';
+  ctx.textAlign='right';
+  ctx.textBaseline='middle';
+  isobarLevels.forEach(function(p){
+    if(p<pMin||p>pMax)return;
+    var y=pToY(p);
+    ctx.fillText(p+'',ml-6,y);
+  });
+
+  /* Isotherm labels (top, outside plot) — placed at y=mt-6 which is now
+     comfortably below the title (y=16) and valid time (y=30) thanks to
+     the increased top margin. */
+  ctx.textAlign='center';
+  ctx.textBaseline='alphabetic';
+  for(var T=tMin;T<=tMax;T+=10){
+    var xTop=tToX(T,pMin);
+    ctx.fillStyle=T===0?'#888':'#666';
+    ctx.fillText(T+'\u00B0',xTop,mt-6);
+  }
+
+  /* Wind barbs (right side, outside plot) */
+  var barbLevels=[1000,925,850,700,500,400,300,250,200,150,100];
+  var barbX=ml+pw+18;
+  ctx.strokeStyle='#bbb';
+  ctx.fillStyle='#bbb';
+  ctx.lineWidth=1;
+  barbLevels.forEach(function(p){
+    if(p<pMin||p>pMax)return;
+    var dir=sndInterpLevel(data.levels,'p','dir',p);
+    var spd=sndInterpLevel(data.levels,'p','spd',p);
+    if(dir==null||spd==null)return;
+    var y=pToY(p);
+    sndDrawWindBarb(ctx,barbX,y,dir,spd);
+  });
+
+  /* LCL label (outside plot, drawn after restore so text isn't clipped) */
+  if(sfc){
+    var Td0b=sndInterpLevel(data.levels,'p','Td',sfc.p);
+    if(Td0b!=null){
+      var lcl2=sndLiftDryToLCL(sfc.p,sfc.T,Td0b);
+      if(lcl2){
+        ctx.fillStyle='#ffd60a';
+        ctx.font='bold 9px Inter,monospace';
+        ctx.textAlign='left';
+        ctx.textBaseline='middle';
+        ctx.fillText('LCL',tToX(lcl2.T_lcl,lcl2.p_lcl)+6,pToY(lcl2.p_lcl)-4);
+      }
+    }
+  }
+
+  /* Axis labels (outside plot) */
   ctx.fillStyle='#888';
   ctx.font='9px Inter,monospace';
   ctx.textAlign='center';
+  ctx.textBaseline='alphabetic';
   ctx.fillText('Temperature (\u00B0C)',ml+pw/2,H-12);
   ctx.save();
   ctx.translate(14,mt+ph/2);
