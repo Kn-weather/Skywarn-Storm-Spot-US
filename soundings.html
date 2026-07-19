@@ -1,0 +1,778 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no">
+<meta name="description" content="Skew-T Log-P Diagram with Hodograph — Storm Spotter Sounding Analysis">
+<title>Skew-T Soundings — Skywarn Storm Spotters</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+<style>
+:root{
+  --bg:#0a0a0a;
+  --bg2:#141414;
+  --bdr:#2a2a2a;
+  --bdr-a:rgba(255,255,255,.08);
+  --t1:#f0f0f0;
+  --t2:#a0a0a0;
+  --t3:#606060;
+  --acc:#ff7300;
+  --rs:6px;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+body{
+  background:var(--bg);
+  color:var(--t1);
+  font-family:'Inter',sans-serif;
+  font-size:13px;
+  -webkit-font-smoothing:antialiased;
+}
+</style>
+<link rel="stylesheet" href="data:text/css;charset=utf-8,"
+</head>
+<body>
+
+<!-- ════════════════════════════════════════════════════════════════════════
+     SKew-T Soundings Standalone Page
+     Extracted from Skywarn Storm Spotters & Chasers United States
+     Data source: Iowa Environmental Mesonet (Iowa State University)
+     ════════════════════════════════════════════════════════════════════════ -->
+
+<div class="snd-wrap">
+  <div class="snd-header">
+    <h2><i class="fas fa-chart-line"></i> Soundings <span class="snd-title-sub">Skew-T / Log-P</span></h2>
+    <p class="snd-sub">Observed RAOB soundings from NWS upper-air stations. Click the map to fetch the nearest station, or pick from the dropdown. Data updates at 00Z and 12Z.</p>
+  </div>
+
+  <div class="snd-controls">
+    <div class="snd-control-group">
+      <label>Station</label>
+      <select id="sndStation" onchange="sndOnStationChange()"></select>
+    </div>
+    <div class="snd-control-group">
+      <label>Run Time</label>
+      <select id="sndTime" onchange="sndFetchAndRender()"></select>
+    </div>
+    <button class="snd-btn" onclick="sndFetchAndRender()" title="Reload sounding"><i class="fas fa-rotate"></i></button>
+    <button class="snd-btn snd-btn-acc" onclick="sndScreenshot()" title="Screenshot"><i class="fas fa-camera"></i></button>
+    <button class="snd-btn" onclick="sndToggleLegend()" title="Legend & Instructions"><i class="fas fa-circle-info"></i> Legend</button>
+  </div>
+
+  <!-- Legend & How to Read (collapsible) -->
+  <div class="snd-legend" id="sndLegend" style="display:none">
+    <div class="snd-legend-header" onclick="sndToggleLegend()">
+      <span><i class="fas fa-circle-info"></i> Skew-T Legend &amp; How to Read</span>
+      <i class="fas fa-chevron-up"></i>
+    </div>
+    <div class="snd-legend-body">
+      <div class="snd-legend-grid">
+        <div class="snd-legend-section">
+          <h4>Chart Lines</h4>
+          <div class="snd-legend-row"><span class="snd-legend-line" style="background:#2a2a2a;height:2px"></span><span><b>Isobars</b> — Horizontal lines of equal pressure (hPa). 1000 hPa at bottom (sea level) to 100 hPa at top (stratosphere). Labeled on the left.</span></div>
+          <div class="snd-legend-row"><span class="snd-legend-line" style="background:#2a2a2a;height:1.5px;transform:rotate(-30deg)"></span><span><b>Isotherms</b> — Skewed lines of equal temperature (°C). Slant bottom-left to top-right. Labeled at the bottom. 0°C highlighted white.</span></div>
+          <div class="snd-legend-row"><span class="snd-legend-line" style="background:#4a3030;height:1.5px"></span><span><b>Dry Adiabats</b> — Solid brown-red curves (SE to NW). How unsaturated air cools rising (~9.8°C/km).</span></div>
+          <div class="snd-legend-row"><span class="snd-legend-line" style="background:#2c3d3a;height:1.5px"></span><span><b>Moist Adiabats</b> — Solid green-cyan curves. How saturated air cools rising (~4°C/km near surface).</span></div>
+          <div class="snd-legend-row"><span class="snd-legend-line" style="border-top:1px dashed #2a3a2c;background:none"></span><span><b>Mixing Ratio Lines</b> — Dashed green. Constant water vapor content (g/kg).</span></div>
+          <div class="snd-legend-row"><span class="snd-legend-line" style="background:linear-gradient(90deg,#ff5a5a,#ffb340,#ffd60a,#00d4ff);height:2.5px"></span><span><b>Temperature Trace</b> — Color-coded by altitude: red (low), orange (mid), yellow (high), cyan (upper).</span></div>
+          <div class="snd-legend-row"><span class="snd-legend-line" style="background:#5aff7a;height:2px"></span><span><b>Dewpoint Trace</b> — Solid green. Left of temp trace. Close = humid, far = dry.</span></div>
+          <div class="snd-legend-row"><span class="snd-legend-line" style="background:repeating-linear-gradient(90deg,#ffd60a 0,#ffd60a 4px,transparent 4px,transparent 7px);height:1.5px"></span><span><b>Parcel Ascent</b> — Dashed yellow. Path of a lifted surface parcel. Calculates CAPE/CIN/LI.</span></div>
+          <div class="snd-legend-row"><span style="display:inline-flex;gap:6px"><span style="width:8px;height:8px;border-radius:50%;background:#ffd60a"></span><span style="width:8px;height:8px;border-radius:50%;background:#39d353"></span><span style="width:8px;height:8px;border-radius:50%;background:#ff5a5a"></span></span><span><b>Parcel Levels:</b> <span style="color:#ffd60a">LCL</span> (cloud base) · <span style="color:#39d353">LFC</span> (free convection) · <span style="color:#ff5a5a">EL</span> (equilibrium)</span></div>
+        </div>
+        <div class="snd-legend-section">
+          <h4>How to Read</h4>
+          <div class="snd-legend-tip"><b>Y-Axis:</b> Higher pressure = lower altitude (bottom). Lower pressure = higher altitude (top).</div>
+          <div class="snd-legend-tip"><b>X-Axis:</b> Skewed 45°. Cold left, warm right.</div>
+          <div class="snd-legend-tip"><b>CAPE:</b> Area between parcel ascent (yellow) and temp trace (red) from LFC to EL. Larger = more unstable.</div>
+          <div class="snd-legend-tip"><b>CIN:</b> Negative area below LFC. Strong cap suppresses storms.</div>
+          <div class="snd-legend-tip"><b>Moisture:</b> Gap between temp and dewpoint. Wide = dry, narrow = humid.</div>
+          <div class="snd-legend-tip"><b>Wind Shear:</b> Wind barbs on right. Check hodograph below for visual.</div>
+          <div class="snd-legend-tip"><b>0°C Level:</b> White dashed isotherm. Freezing level reference.</div>
+        </div>
+        <div class="snd-legend-section">
+          <h4>Hodograph</h4>
+          <div class="snd-legend-row"><span class="snd-legend-line" style="background:#ff5a5a;height:2.5px"></span><span><b>0-1 km</b> (red) — Low-level shear. Long = tornado potential.</span></div>
+          <div class="snd-legend-row"><span class="snd-legend-line" style="background:#ffb340;height:2.5px"></span><span><b>1-3 km</b> (orange) — Mid-level shear.</span></div>
+          <div class="snd-legend-row"><span class="snd-legend-line" style="background:#ffd60a;height:2.5px"></span><span><b>3-6 km</b> (yellow) — Deep-layer shear. Long = supercell potential.</span></div>
+          <div class="snd-legend-row"><span class="snd-legend-line" style="background:#39d353;height:2.5px"></span><span><b>6-12 km</b> (green) — Upper-level flow.</span></div>
+          <div class="snd-legend-row"><span class="snd-legend-line" style="background:repeating-linear-gradient(90deg,#00d4ff 0,#00d4ff 4px,transparent 4px,transparent 7px);height:1.5px"></span><span><b>Storm Motion (RM)</b> — Cyan dashed. Bunkers right-mover vector.</span></div>
+          <div class="snd-legend-tip"><b>Shape:</b> Straight = unidirectional. Clockwise (veering) = warm advection. Counter-clockwise (backing) = cold advection.</div>
+        </div>
+        <div class="snd-legend-section">
+          <h4>Key Parameters</h4>
+          <div class="snd-legend-tip"><b>CAPE:</b> <span style="color:#39d353">&gt;500</span> · <span style="color:#ffb340">&gt;1500</span> · <span style="color:#ff5a5a">&gt;2500</span> J/kg</div>
+          <div class="snd-legend-tip"><b>LI:</b> <span style="color:#39d353">&lt;0</span> · <span style="color:#ffb340">&lt;-4</span> · <span style="color:#ff5a5a">&lt;-6</span></div>
+          <div class="snd-legend-tip"><b>Shear 0-6km:</b> <span style="color:#ffb340">&gt;25kt</span> · <span style="color:#ff5a5a">&gt;40kt</span></div>
+          <div class="snd-legend-tip"><b>SRH 0-1km:</b> <span style="color:#ffb340">&gt;100</span> · <span style="color:#ff5a5a">&gt;200</span> m²/s²</div>
+          <div class="snd-legend-tip"><b>PW:</b> &gt;35mm heavy rain · &gt;50mm extreme</div>
+          <div class="snd-legend-tip" style="border-top:1px solid var(--bdr);padding-top:8px;margin-top:8px;font-size:9px;color:var(--t3)"><i class="fas fa-book"></i> <a href="https://www.noaa.gov/jetstream/upperair/skew-t-log-p-diagrams" target="_blank" rel="noopener" style="color:var(--acc)">NOAA JetStream</a> · <a href="https://www.weather.gov/source/zhu/ZHU_Training_Page/convective_parameters/skewt/skewtinfo.html" target="_blank" rel="noopener" style="color:var(--acc)">NWS ZHU Training</a></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="snd-layout">
+    <div class="snd-canvas-wrap">
+      <canvas id="sndCanvas" width="780" height="640"></canvas>
+      <div id="sndLoading" class="snd-loading" style="display:none"><i class="fas fa-spinner fa-spin"></i> Fetching sounding...</div>
+      <div id="sndError" class="snd-error" style="display:none"></div>
+    </div>
+    <div class="snd-right-col">
+      <div class="snd-params" id="sndParams"><div class="snd-params-empty">Select a station and fetch a sounding to see derived parameters.</div></div>
+      <div class="snd-hodo-wrap">
+        <div class="snd-hodo-header"><i class="fas fa-wind"></i> Hodograph <span class="snd-hodo-sub">0–6 km wind shear</span></div>
+        <canvas id="sndHodoCanvas" width="320" height="320"></canvas>
+        <div id="sndHodoInfo" class="snd-hodo-info">Fetch a sounding to display hodograph.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="snd-footer">
+    Source: Iowa Environmental Mesonet (Iowa State University) &middot;
+    <a href="https://mesonet.agron.iastate.edu/json/raob.py" target="_blank" rel="noopener">RAOB JSON API</a> &middot;
+    Observed soundings only (00Z / 12Z)
+  </div>
+</div>
+
+<style>
+.snd-wrap{position:fixed;top:0;left:0;right:0;bottom:0;background:#0a0a0a;overflow-y:auto;padding:14px;padding-bottom:calc(14px + env(safe-area-inset-bottom))}
+.snd-header h2{font-size:18px;color:var(--acc);margin-bottom:4px;text-transform:uppercase;letter-spacing:.04em;display:flex;align-items:center;gap:8px}
+.snd-header h2 i{font-size:16px}
+.snd-title-sub{font-size:11px;color:var(--t3);font-weight:400;text-transform:none;letter-spacing:0}
+.snd-sub{font-size:11px;color:var(--t3);line-height:1.5;margin-bottom:14px;max-width:780px}
+.snd-controls{display:flex;align-items:flex-end;gap:8px;flex-wrap:wrap;margin-bottom:14px;padding:10px;background:var(--bg2);border:1px solid var(--bdr);border-radius:8px}
+.snd-control-group{display:flex;flex-direction:column;gap:4px;flex:1 1 180px}
+.snd-control-group label{font-size:9px;color:var(--t3);text-transform:uppercase;letter-spacing:.05em;font-weight:600}
+.snd-control-group select{background:var(--bg);border:1px solid var(--bdr);color:var(--t1);font-family:inherit;font-size:12px;padding:7px 10px;border-radius:5px;cursor:pointer;outline:none}
+.snd-control-group select:focus{border-color:var(--acc)}
+.snd-btn{background:var(--bg2);border:1px solid var(--bdr);color:var(--t2);font-family:inherit;font-size:13px;padding:8px 12px;border-radius:5px;cursor:pointer;transition:background .15s,color .15s,border-color .15s;flex:0 0 auto}
+.snd-btn:hover{border-color:var(--acc);color:var(--t1)}
+.snd-btn-acc{background:var(--acc);color:#0a0a0a;border-color:var(--acc)}
+.snd-btn-acc:hover{background:#ff8c33;color:#0a0a0a}
+.snd-layout{display:grid;grid-template-columns:minmax(0,1fr) 320px;gap:14px;align-items:start}
+@media(max-width:900px){.snd-layout{grid-template-columns:1fr}}
+.snd-right-col{display:flex;flex-direction:column;gap:14px;min-width:0}
+.snd-canvas-wrap{position:relative;background:var(--bg2);border:1px solid var(--bdr);border-radius:8px;padding:8px;overflow:hidden}
+#sndCanvas{width:100%;height:auto;max-width:100%;display:block;background:#0e0e0e;border-radius:4px}
+.snd-loading,.snd-error{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);background:rgba(10,10,10,.92);padding:18px 26px;border-radius:8px;font-size:13px;color:var(--t1);border:1px solid var(--bdr);text-align:center}
+.snd-loading i{color:var(--acc);margin-right:6px}
+.snd-error{color:#ff5a5a;border-color:rgba(255,90,90,.4);max-width:80%}
+.snd-error i{color:#ff5a5a;margin-right:6px}
+.snd-params{background:var(--bg2);border:1px solid var(--bdr);border-radius:8px;padding:12px;font-size:11px;color:var(--t2)}
+.snd-params-empty{text-align:center;color:var(--t3);padding:30px 10px;font-size:11px;font-style:italic}
+.snd-param-section{margin-bottom:14px}
+.snd-param-section:last-child{margin-bottom:0}
+.snd-param-section-title{font-size:10px;font-weight:700;color:var(--acc);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px;padding-bottom:4px;border-bottom:1px solid var(--bdr)}
+.snd-param-row{display:flex;justify-content:space-between;padding:3px 0;font-size:11px}
+.snd-param-row .snd-param-label{color:var(--t2)}
+.snd-param-row .snd-param-value{color:var(--t1);font-weight:600;font-variant-numeric:tabular-nums}
+.snd-param-row .snd-param-value.warn{color:#ffb340}
+.snd-param-row .snd-param-value.crit{color:#ff5a5a}
+.snd-param-row .snd-param-value.good{color:#39d353}
+.snd-footer{margin-top:14px;font-size:9px;color:var(--t3);text-align:center;padding-top:10px;border-top:1px dashed var(--bdr);line-height:1.5}
+.snd-footer a{color:var(--acc);text-decoration:none}
+.snd-footer a:hover{text-decoration:underline}
+.snd-hodo-wrap{background:var(--bg2);border:1px solid var(--bdr);border-radius:8px;padding:10px}
+.snd-hodo-header{font-size:11px;font-weight:700;color:var(--acc);text-transform:uppercase;letter-spacing:.04em;margin-bottom:8px;display:flex;align-items:baseline;gap:8px}
+.snd-hodo-header i{font-size:10px}
+.snd-hodo-sub{font-size:9px;color:var(--t3);font-weight:400;text-transform:none;letter-spacing:0}
+#sndHodoCanvas{width:100%;height:auto;max-width:100%;display:block;background:#0e0e0e;border-radius:4px;border:1px solid var(--bdr)}
+.snd-hodo-info{font-size:10px;color:var(--t3);text-align:center;padding:8px 4px 2px;font-style:italic}
+.snd-legend{background:var(--bg2);border:1px solid var(--bdr);border-radius:8px;margin-bottom:14px;overflow:hidden}
+.snd-legend-header{display:flex;align-items:center;justify-content:space-between;padding:10px 14px;background:linear-gradient(180deg,rgba(255,115,0,.1),transparent);border-bottom:1px solid var(--bdr);font-size:12px;font-weight:700;color:var(--acc);text-transform:uppercase;letter-spacing:.04em;cursor:pointer;user-select:none}
+.snd-legend-header:hover{background:rgba(255,115,0,.08)}
+.snd-legend-header i:first-child{margin-right:6px;font-size:11px}
+.snd-legend-body{padding:14px}
+.snd-legend-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+@media(max-width:700px){.snd-legend-grid{grid-template-columns:1fr}}
+.snd-legend-section h4{font-size:11px;font-weight:700;color:var(--acc);text-transform:uppercase;letter-spacing:.04em;margin:0 0 8px;padding-bottom:4px;border-bottom:1px solid var(--bdr)}
+.snd-legend-row{display:flex;align-items:flex-start;gap:10px;margin-bottom:8px;font-size:10px;color:var(--t2);line-height:1.5}
+.snd-legend-row b{color:var(--t1)}
+.snd-legend-line{flex:0 0 36px;height:2px;margin-top:5px;border-radius:1px;display:inline-block}
+.snd-legend-tip{font-size:10px;color:var(--t2);line-height:1.5;margin-bottom:8px;padding-left:8px;border-left:2px solid rgba(255,115,0,.2)}
+.snd-legend-tip b{color:var(--t1)}
+.snd-legend-tip a{text-decoration:none}
+.snd-legend-tip a:hover{text-decoration:underline}
+</style>
+
+<script>
+/* ════════════════════════════════════════════════════════════════════════
+   Skew-T Soundings — Standalone JavaScript
+   ════════════════════════════════════════════════════════════════════════ */
+
+/* NWS upper-air (RAOB) station list — CONUS + nearby Canadian sites */
+var SND_STATIONS=[
+  {id:'ABQ',name:'Albuquerque NM',lat:35.04,lon:-106.62},{id:'ALB',name:'Albany NY',lat:42.75,lon:-73.80},
+  {id:'BIS',name:'Bismarck ND',lat:46.77,lon:-100.75},{id:'BNA',name:'Nashville TN',lat:36.13,lon:-86.68},
+  {id:'BOI',name:'Boise ID',lat:43.57,lon:-116.21},{id:'BRO',name:'Brownsville TX',lat:25.91,lon:-97.42},
+  {id:'BUF',name:'Buffalo NY',lat:42.94,lon:-78.74},{id:'CAR',name:'Caribou ME',lat:46.87,lon:-68.02},
+  {id:'CRP',name:'Corpus Christi TX',lat:27.77,lon:-97.51},{id:'DDC',name:'Dodge City KS',lat:37.77,lon:-99.97},
+  {id:'DNR',name:'Denver CO',lat:39.79,lon:-104.45},{id:'DTX',name:'Detroit MI',lat:42.70,lon:-83.47},
+  {id:'DVN',name:'Davenport IA',lat:41.61,lon:-90.58},{id:'EPZ',name:'El Paso TX',lat:31.87,lon:-106.70},
+  {id:'FFC',name:'Peachtree City GA',lat:33.36,lon:-84.57},{id:'FLG',name:'Flagstaff AZ',lat:35.23,lon:-111.82},
+  {id:'FWD',name:'Fort Worth TX',lat:32.83,lon:-97.30},{id:'GGW',name:'Glasgow MT',lat:48.21,lon:-106.62},
+  {id:'GJT',name:'Grand Junction CO',lat:39.12,lon:-108.52},{id:'GRB',name:'Green Bay WI',lat:44.49,lon:-88.13},
+  {id:'GSO',name:'Greensboro NC',lat:36.10,lon:-79.94},{id:'GSP',name:'Greer SC',lat:34.88,lon:-82.22},
+  {id:'IAD',name:'Sterling VA',lat:39.08,lon:-77.47},{id:'ILN',name:'Wilmington OH',lat:39.42,lon:-83.78},
+  {id:'ILX',name:'Lincoln IL',lat:40.16,lon:-89.34},{id:'INL',name:'International Falls MN',lat:48.57,lon:-93.38},
+  {id:'JAN',name:'Jackson MS',lat:32.32,lon:-89.99},{id:'JAX',name:'Jacksonville FL',lat:30.43,lon:-81.70},
+  {id:'LBF',name:'North Platte NE',lat:41.13,lon:-100.69},{id:'LCH',name:'Lake Charles LA',lat:30.13,lon:-93.22},
+  {id:'LIX',name:'Slidell LA',lat:30.34,lon:-89.82},{id:'LMK',name:'Louisville KY',lat:38.13,lon:-85.94},
+  {id:'LZK',name:'North Little Rock AR',lat:34.83,lon:-92.26},{id:'MAF',name:'Midland TX',lat:31.95,lon:-102.18},
+  {id:'MHX',name:'Morehead City NC',lat:34.78,lon:-76.88},{id:'MPX',name:'Minneapolis MN',lat:44.85,lon:-93.57},
+  {id:'MRB',name:'Martinsburg WV',lat:39.40,lon:-77.98},{id:'NKX',name:'San Diego CA',lat:32.85,lon:-117.12},
+  {id:'OAK',name:'Oakland CA',lat:37.74,lon:-122.22},{id:'OAX',name:'Omaha NE',lat:41.32,lon:-96.37},
+  {id:'OHX',name:'Old Hickory TN',lat:36.25,lon:-86.56},{id:'OKX',name:'Upton NY',lat:40.87,lon:-72.86},
+  {id:'OUN',name:'Norman OK',lat:35.18,lon:-97.44},{id:'PIT',name:'Pittsburgh PA',lat:40.50,lon:-80.22},
+  {id:'PDT',name:'Pendleton OR',lat:45.69,lon:-118.84},{id:'RIW',name:'Riverton WY',lat:43.06,lon:-108.46},
+  {id:'RNK',name:'Blacksburg VA',lat:37.21,lon:-80.41},{id:'SGF',name:'Springfield MO',lat:37.23,lon:-93.38},
+  {id:'SHV',name:'Shreveport LA',lat:32.45,lon:-93.84},{id:'SLE',name:'Salem OR',lat:44.91,lon:-123.00},
+  {id:'SLC',name:'Salt Lake City UT',lat:40.79,lon:-111.97},{id:'TBW',name:'Tampa Bay FL',lat:27.70,lon:-82.40},
+  {id:'TFX',name:'Great Falls MT',lat:47.46,lon:-111.38},{id:'TOP',name:'Topeka KS',lat:39.07,lon:-95.62},
+  {id:'TUS',name:'Tucson AZ',lat:32.13,lon:-110.93},{id:'VEF',name:'Las Vegas NV',lat:36.05,lon:-115.18},
+  {id:'WAL',name:'Wallops Island VA',lat:37.93,lon:-75.48},{id:'YQB',name:'Quebec QC',lat:46.80,lon:-71.39},
+  {id:'YQT',name:'Thunder Bay ON',lat:48.37,lon:-89.32},{id:'YUL',name:'Montreal QC',lat:45.47,lon:-73.75},
+  {id:'YWG',name:'Winnipeg MB',lat:49.91,lon:-97.24},{id:'YYC',name:'Calgary AB',lat:51.12,lon:-114.01},
+  {id:'YYZ',name:'Toronto ON',lat:43.68,lon:-79.61}
+];
+
+/* State */
+var sndCurrentStation=null;
+var sndCurrentData=null;
+var LOGO_DATA_URL=null;
+
+/* ── CORS proxy for NWS API (IEM is CORS-enabled, but kept for fallback) ── */
+async function fP(url){
+  try{
+    var r=await fetch(url,{headers:{'Accept':'application/geo+json,application/json'}});
+    if(!r.ok)throw new Error('HTTP '+r.status);
+    return await r.text();
+  }catch(e){
+    /* Try allorigins proxy */
+    try{
+      var r2=await fetch('https://api.allorigins.win/raw?url='+encodeURIComponent(url));
+      if(!r2.ok)throw new Error('Proxy HTTP '+r2.status);
+      return await r2.text();
+    }catch(e2){
+      console.error('[fP] Both direct and proxy failed:',e,e2);
+      return null;
+    }
+  }
+}
+
+/* ── Init ── */
+function initSoundingsTab(){
+  var sel=document.getElementById('sndStation');
+  if(sel&&sel.options.length===0){
+    var sorted=SND_STATIONS.slice().sort(function(a,b){return a.name.localeCompare(b.name)});
+    sorted.forEach(function(s){
+      var o=document.createElement('option');
+      o.value=s.id;
+      o.textContent=s.id+' — '+s.name;
+      sel.appendChild(o);
+    });
+    sel.value='DTX';
+    sndCurrentStation=SND_STATIONS.find(function(s){return s.id==='DTX'});
+  }
+  sndPopulateTimeDropdown();
+}
+
+function sndPopulateTimeDropdown(){
+  var sel=document.getElementById('sndTime');
+  if(!sel)return;
+  sel.innerHTML='';
+  var now=new Date();
+  for(var i=0;i<14;i++){
+    var d=new Date(now.getTime()-i*12*3600*1000);
+    var h=d.getUTCHours();
+    var snapH=(h>=18||h<6)?0:12;
+    var snap=new Date(Date.UTC(d.getUTCFullYear(),d.getUTCMonth(),d.getUTCDate(),snapH,0,0));
+    if(snap>now)snap=new Date(snap.getTime()-12*3600*1000);
+    var o=document.createElement('option');
+    o.value=snap.toISOString().replace(/\.\d+Z$/,'Z');
+    var label=snap.toISOString().slice(0,16).replace('T',' ')+'Z';
+    var age=Math.round((now-snap)/3600000);
+    var ageStr=age<24?age+'h ago':Math.round(age/24)+'d ago';
+    o.textContent=label+' ('+ageStr+')';
+    sel.appendChild(o);
+  }
+}
+
+function sndOnStationChange(){
+  var sel=document.getElementById('sndStation');
+  if(!sel)return;
+  sndCurrentStation=SND_STATIONS.find(function(s){return s.id===sel.value});
+  sndFetchAndRender();
+}
+
+/* ── Data fetching ── */
+function sndShowLoading(show){var el=document.getElementById('sndLoading');if(el)el.style.display=show?'block':'none'}
+function sndShowError(msg){var el=document.getElementById('sndError');if(!el)return;if(!msg){el.style.display='none';return}el.innerHTML='<i class="fas fa-triangle-exclamation"></i> '+msg;el.style.display='block'}
+
+function sndLatestCycleISO(){
+  var now=new Date();var h=now.getUTCHours();var snapH;
+  if(h<1.5){snapH=12;var d=new Date(now.getTime()-24*3600*1000);return sndSnapCycleISO(d,snapH)}
+  if(h<13.5){snapH=0;return sndSnapCycleISO(now,snapH)}
+  snapH=12;return sndSnapCycleISO(now,snapH);
+}
+function sndSnapCycleISO(d,snapH){var snap=new Date(Date.UTC(d.getUTCFullYear(),d.getUTCMonth(),d.getUTCDate(),snapH,0,0));return snap.toISOString().replace(/\.\d+Z$/,'Z')}
+
+async function sndFetchAndRender(){
+  if(!sndCurrentStation){sndShowError('No station selected.');return}
+  var timeSel=document.getElementById('sndTime');
+  var ts=timeSel?timeSel.value:'';
+  var url='https://mesonet.agron.iastate.edu/json/raob.py?station='+sndCurrentStation.id+'&network=_RAOB&ts='+encodeURIComponent(ts);
+  sndShowLoading(true);sndShowError('');
+  try{
+    var r=await fetch(url);
+    if(!r.ok)throw new Error('HTTP '+r.status);
+    var data=await r.json();
+    sndShowLoading(false);
+    var profiles=data.profiles||[];
+    if(profiles.length===0){
+      sndShowError('No sounding data available for '+sndCurrentStation.id+' at '+ts.replace('T',' ').replace('Z',' Z')+'. RAOB launches happen at 00Z and 12Z only, data appears ~1 hour after launch.');
+      sndCurrentData=null;sndRenderParams(null);sndRenderHodograph(null);sndClearCanvas();return;
+    }
+    sndCurrentData=sndParseProfile(profiles[0]);
+    sndRenderSkewT();sndRenderParams(sndCurrentData);sndRenderHodograph(sndCurrentData);
+  }catch(err){
+    sndShowLoading(false);
+    sndShowError('Failed to fetch sounding: '+(err.message||err)+'. The IEM server may be temporarily unavailable.');
+  }
+}
+
+function sndParseProfile(profile){
+  var levels=[];
+  (profile.profile||[]).forEach(function(l){
+    if(l.pres==null)return;
+    levels.push({p:l.pres,h:l.hght==null?null:l.hght,T:l.tmpc==null?null:l.tmpc,Td:l.dwpc==null?null:l.dwpc,dir:l.drct==null?null:l.drct,spd:l.sknt==null?null:l.sknt});
+  });
+  levels.sort(function(a,b){return b.p-a.p});
+  return{station:profile.station||'',valid:profile.valid||'',levels:levels};
+}
+
+/* ── Thermodynamic functions ── */
+function sndEs(T){return 6.1121*Math.exp((17.502*T)/(240.97+T))}
+function sndMixingRatio(T,Td,p){if(T==null||Td==null||p==null)return null;var e=sndEs(Td);return 621.97*e/(p-e)}
+function sndTheta(T_K,p){return T_K*Math.pow(1000/p,0.2854)}
+function sndLiftDryToLCL(p0,T_C,Td_C){
+  var T=T_C+273.15,Td=Td_C+273.15;
+  if(T<=0||Td<=0||Td>T)return null;
+  var TLCL=1.0/(1.0/(Td-56.0)+Math.log(T/Td)/800.0)+56.0;
+  var pLCL=p0*Math.pow(TLCL/T,1.0/0.2854);
+  return{p_lcl:pLCL,T_lcl:TLCL-273.15};
+}
+function sndLiftMoist(p_start,T_start_K,p_end){
+  var dp=2.0;var T=T_start_K;var p=p_start;
+  if(p_end<p_start){
+    while(p>p_end){
+      var pn=Math.max(p-dp,p_end);
+      var T_C=T-273.15;var e=sndEs(T_C);var w=0.622*e/(p-e);
+      var Lv=2.5e6,Rd=287.0,cp=1004.0;
+      var epsilon=Lv*w/(Rd*T);var denom=1+(Lv*Lv*w*0.622)/(cp*Rd*T*T);
+      var dlnT_dlnp=(0.2854*(1+epsilon))/denom;
+      T=T*Math.pow(pn/p,dlnT_dlnp);p=pn;if(T<50)break;
+    }
+  }
+  return T;
+}
+function sndFindLFC(levels,lcl){
+  if(!lcl)return null;var parcel_T_K=lcl.T_lcl+273.15;var p=lcl.p_lcl;var dp=5.0;
+  while(p>100){
+    var p_next=p-dp;if(p_next<100)break;
+    parcel_T_K=sndLiftMoist(p,parcel_T_K,p_next);
+    var env_T_C=sndInterpLevel(levels,'p','T',p_next);if(env_T_C==null)break;
+    if(parcel_T_K-273.15>=env_T_C)return{p:p_next,T:parcel_T_K-273.15};
+    p=p_next;
+  }
+  return null;
+}
+function sndFindEL(levels,lfc){
+  if(!lfc)return null;var parcel_T_K=lfc.T+273.15;var p=lfc.p;var dp=5.0;
+  while(p>100){
+    var p_next=p-dp;if(p_next<100)break;
+    parcel_T_K=sndLiftMoist(p,parcel_T_K,p_next);
+    var env_T_C=sndInterpLevel(levels,'p','T',p_next);if(env_T_C==null)break;
+    if(parcel_T_K-273.15<env_T_C)return{p:p_next,T:parcel_T_K-273.15};
+    p=p_next;
+  }
+  return null;
+}
+function sndComputeCAPE(levels,lcl,lfc,el){
+  if(!lcl||!lfc||!el)return{cape:0,cin:0};
+  var sfc=sndFindSfc(levels);if(!sfc)return{cape:0,cin:0};
+  var p0=sfc.p,T0=sfc.T,Td0=sndInterpLevel(levels,'p','Td',p0);
+  if(T0==null||Td0==null)return{cape:0,cin:0};
+  var cape=0,cin=0;var parcel_T_K=T0+273.15;var p=p0;var dp=5.0;
+  while(p>el.p-5){
+    var p_next=p-dp;if(p_next<el.p-5)p_next=el.p-5;
+    var env_T_C=sndInterpLevel(levels,'p','T',p_next);if(env_T_C==null)break;
+    var env_T_K=env_T_C+273.15;
+    if(p_next>lcl.p_lcl)parcel_T_K=parcel_T_K*Math.pow(p_next/p,0.2854);
+    else parcel_T_K=sndLiftMoist(p,parcel_T_K,p_next);
+    var avg_T=(parcel_T_K+env_T_K)/2;
+    var dcape=(287.0*avg_T)*(parcel_T_K-env_T_K)/avg_T*Math.log(p/p_next);
+    if(dcape>0)cape+=dcape;else cin+=dcape;
+    p=p_next;
+  }
+  cin=Math.abs(cin);if(cin>500)cin=500;if(cape<0)cape=0;
+  return{cape:Math.round(cape),cin:Math.round(cin)};
+}
+function sndLiftedIndex(levels){
+  var sfc=sndFindSfc(levels);if(!sfc)return null;
+  var T0=sfc.T,Td0=sndInterpLevel(levels,'p','Td',sfc.p);if(T0==null||Td0==null)return null;
+  var lcl=sndLiftDryToLCL(sfc.p,T0,Td0);if(!lcl)return null;
+  var parcel_T_K=sndLiftMoist(lcl.p_lcl,lcl.T_lcl+273.15,500);
+  var env_T_500=sndInterpLevel(levels,'p','T',500);if(env_T_500==null)return null;
+  return Math.round((env_T_500-(parcel_T_K-273.15))*10)/10;
+}
+function sndShowalter(levels){
+  var T850=sndInterpLevel(levels,'p','T',850),Td850=sndInterpLevel(levels,'p','Td',850);
+  if(T850==null||Td850==null)return null;
+  var lcl=sndLiftDryToLCL(850,T850,Td850);if(!lcl)return null;
+  var parcel_T_K=sndLiftMoist(lcl.p_lcl,lcl.T_lcl+273.15,500);
+  var env_T_500=sndInterpLevel(levels,'p','T',500);if(env_T_500==null)return null;
+  return Math.round((env_T_500-(parcel_T_K-273.15))*10)/10;
+}
+function sndKIndex(levels){
+  var T850=sndInterpLevel(levels,'p','T',850),T700=sndInterpLevel(levels,'p','T',700),T500=sndInterpLevel(levels,'p','T',500);
+  var Td850=sndInterpLevel(levels,'p','Td',850),Td700=sndInterpLevel(levels,'p','Td',700);
+  if([T850,T700,T500,Td850,Td700].some(function(v){return v==null}))return null;
+  return Math.round((T850-T500+(Td850-Td700)-T700)*10)/10;
+}
+function sndTotalTotals(levels){
+  var T850=sndInterpLevel(levels,'p','T',850),T500=sndInterpLevel(levels,'p','T',500),Td850=sndInterpLevel(levels,'p','Td',850);
+  if([T850,T500,Td850].some(function(v){return v==null}))return null;
+  return Math.round(((T850-T500)+(Td850-T500))*10)/10;
+}
+function sndPrecipWater(levels){
+  var sfc=sndFindSfc(levels);if(!sfc)return null;var p=sfc.p;var dp=10.0;var pw=0;
+  while(p>500){
+    var p_next=p-dp;if(p_next<500)p_next=500;
+    var T=sndInterpLevel(levels,'p','T',p),Td=sndInterpLevel(levels,'p','Td',p);
+    var w=sndMixingRatio(T,Td,p);if(w!=null)pw+=w*(p-p_next)/9.81;p=p_next;
+  }
+  return Math.round(pw*10)/10;
+}
+function sndWindUV(dir,spd){if(dir==null||spd==null)return null;var rad=dir*Math.PI/180;return{u:-spd*Math.sin(rad),v:-spd*Math.cos(rad)}}
+function sndBulkShear(levels,topKm){
+  var sfc=sndFindSfc(levels);if(!sfc)return null;var h0=sfc.h||0;
+  var uv0=sndWindUV(sfc.dir,sfc.spd);if(!uv0)return null;
+  var topH=h0+topKm*1000;var uvTop=sndInterpWindByHeight(levels,topH);if(!uvTop)return null;
+  var du=uvTop.u-uv0.u,dv=uvTop.v-uv0.v;
+  return Math.round(Math.sqrt(du*du+dv*dv)*10)/10;
+}
+function sndSRH(levels,stormU,stormV,depthM){
+  var sfc=sndFindSfc(levels);if(!sfc)return null;
+  var pts=[];levels.forEach(function(l){if(l.h!=null&&l.dir!=null&&l.spd!=null&&l.h>=sfc.h-50&&l.h<=sfc.h+depthM+50){var uv=sndWindUV(l.dir,l.spd);if(uv)pts.push({h:l.h,u:uv.u,v:uv.v})}});
+  if(pts.length<2)return null;pts.sort(function(a,b){return a.h-b.h});
+  if(Math.abs(pts[0].h-sfc.h)>50){var uvSfc=sndWindUV(sfc.dir,sfc.spd);if(uvSfc)pts.unshift({h:sfc.h,u:uvSfc.u,v:uvSfc.v})}
+  var KTS_TO_MS=0.5144;var srh=0;
+  for(var i=1;i<pts.length;i++){var z0=pts[i-1].h,z1=pts[i].h,dz=z1-z0;if(dz<=0)continue;
+    var u0=pts[i-1].u*KTS_TO_MS,v0=pts[i-1].v*KTS_TO_MS,u1=pts[i].u*KTS_TO_MS,v1=pts[i].v*KTS_TO_MS;
+    var du=(u0+u1)/2-stormU*KTS_TO_MS,dv=v1-v0;srh-=du*dv;}
+  return Math.round(srh);
+}
+function sndBunkersRM(levels){
+  var sfc=sndFindSfc(levels);if(!sfc)return{u:0,v:0};
+  var pts=[];levels.forEach(function(l){if(l.h!=null&&l.dir!=null&&l.spd!=null&&l.h>=sfc.h-50&&l.h<=sfc.h+6000){var uv=sndWindUV(l.dir,l.spd);if(uv)pts.push({h:l.h,u:uv.u,v:uv.v})}});
+  if(pts.length===0)return{u:0,v:0};
+  var meanU=0,meanV=0;pts.forEach(function(p){meanU+=p.u;meanV+=p.v});meanU/=pts.length;meanV/=pts.length;
+  var shear=sndBulkShearUV(levels,6);if(!shear)return{u:Math.round(meanU),v:Math.round(meanV)};
+  var magShear=Math.sqrt(shear.du*shear.du+shear.dv*shear.dv);if(magShear===0)return{u:Math.round(meanU),v:Math.round(meanV)};
+  var offset=14.6;var perpU=shear.dv/magShear*offset,perpV=-shear.du/magShear*offset;
+  return{u:Math.round(meanU+perpU),v:Math.round(meanV+perpV)};
+}
+function sndBulkShearUV(levels,topKm){
+  var sfc=sndFindSfc(levels);if(!sfc)return null;var h0=sfc.h||0;
+  var uv0=sndWindUV(sfc.dir,sfc.spd);if(!uv0)return null;
+  var topH=h0+topKm*1000;var uvTop=sndInterpWindByHeight(levels,topH);if(!uvTop)return null;
+  return{du:uvTop.u-uv0.u,dv:uvTop.v-uv0.v};
+}
+function sndInterpWindByHeight(levels,h){
+  var pts=[];levels.forEach(function(l){if(l.h!=null&&l.dir!=null&&l.spd!=null){var uv=sndWindUV(l.dir,l.spd);if(uv)pts.push({h:l.h,u:uv.u,v:uv.v})}});
+  if(pts.length===0)return null;pts.sort(function(a,b){return a.h-b.h});
+  if(h<=pts[0].h)return pts[0];if(h>=pts[pts.length-1].h)return pts[pts.length-1];
+  for(var i=1;i<pts.length;i++){if(h<=pts[i].h){var t=(h-pts[i-1].h)/(pts[i].h-pts[i-1].h);return{u:pts[i-1].u+(pts[i].u-pts[i-1].u)*t,v:pts[i-1].v+(pts[i].v-pts[i-1].v)*t}}}
+  return pts[pts.length-1];
+}
+function sndInterpLevel(levels,key,field,targetValue){
+  var pts=levels.filter(function(l){return l[key]!=null&&l[field]!=null}).sort(function(a,b){return b[key]-a[key]});
+  if(pts.length===0)return null;if(targetValue>=pts[0][key])return pts[0][field];if(targetValue<=pts[pts.length-1][key])return pts[pts.length-1][field];
+  for(var i=1;i<pts.length;i++){if(targetValue<=pts[i-1][key]&&targetValue>=pts[i][key]){var t=(pts[i-1][key]-targetValue)/(pts[i-1][key]-pts[i][key]);return pts[i-1][field]+(pts[i][field]-pts[i-1][field])*t}}
+  return null;
+}
+function sndFindSfc(levels){var sfc=null;levels.forEach(function(l){if(l.T!=null){if(!sfc||l.p>sfc.p)sfc=l}});return sfc}
+
+/* ── Compute all params ── */
+function sndComputeParams(data){
+  if(!data||!data.levels||data.levels.length===0)return null;
+  var levels=data.levels;var sfc=sndFindSfc(levels);if(!sfc)return null;
+  var T0=sfc.T,Td0=sndInterpLevel(levels,'p','Td',sfc.p);if(T0==null||Td0==null)return null;
+  var params={};params.T_sfc=T0;params.Td_sfc=Td0;params.p_sfc=sfc.p;params.h_sfc=sfc.h||0;
+  var lcl=sndLiftDryToLCL(sfc.p,T0,Td0);
+  if(lcl){params.LCL_p=Math.round(lcl.p_lcl);params.LCL_T=Math.round(lcl.T_lcl*10)/10;params.LCL_h=Math.round(sndInterpLevel(levels,'p','h',lcl.p_lcl)||0)}
+  var lfc=sndFindLFC(levels,lcl);
+  if(lfc){params.LFC_p=Math.round(lfc.p);params.LFC_T=Math.round(lfc.T*10)/10;params.LFC_h=Math.round(sndInterpLevel(levels,'p','h',lfc.p)||0)}
+  var el=sndFindEL(levels,lfc);
+  if(el){params.EL_p=Math.round(el.p);params.EL_T=Math.round(el.T*10)/10;params.EL_h=Math.round(sndInterpLevel(levels,'p','h',el.p)||0)}
+  var cape=sndComputeCAPE(levels,lcl,lfc,el);params.SBCAPE=cape.cape;params.SBCIN=cape.cin;
+  params.LI=sndLiftedIndex(levels);params.SH=sndShowalter(levels);params.K=sndKIndex(levels);
+  params.TT=sndTotalTotals(levels);params.PW=sndPrecipWater(levels);
+  params.shear_01=sndBulkShear(levels,1);params.shear_03=sndBulkShear(levels,3);params.shear_06=sndBulkShear(levels,6);
+  var motion=sndBunkersRM(levels);params.stormU=motion.u;params.stormV=motion.v;
+  params.SRH_01=sndSRH(levels,motion.u,motion.v,1000);params.SRH_03=sndSRH(levels,motion.u,motion.v,3000);
+  ['1000','925','850','700','500','300','250'].forEach(function(p){
+    params['T_'+p]=sndInterpLevel(levels,'p','T',parseInt(p));
+    params['Td_'+p]=sndInterpLevel(levels,'p','Td',parseInt(p));
+    params['dir_'+p]=sndInterpLevel(levels,'p','dir',parseInt(p));
+    params['spd_'+p]=sndInterpLevel(levels,'p','spd',parseInt(p));
+  });
+  return params;
+}
+
+/* ── Params panel ── */
+function sndRenderParams(data){
+  var el=document.getElementById('sndParams');if(!el)return;
+  if(!data){el.innerHTML='<div class="snd-params-empty">Select a station and fetch a sounding to see derived parameters.</div>';return}
+  var params=sndComputeParams(data);if(!params){el.innerHTML='<div class="snd-params-empty">No surface data available.</div>';return}
+  function row(label,value,unit,severity){
+    if(value==null||isNaN(value))return'';var cls='';
+    if(severity==='warn')cls='warn';else if(severity==='crit')cls='crit';else if(severity==='good')cls='good';
+    return'<div class="snd-param-row"><span class="snd-param-label">'+label+'</span><span class="snd-param-value '+cls+'">'+value+(unit?' '+unit:'')+'</span></div>';
+  }
+  function capeS(v){return v>=2500?'crit':v>=1500?'warn':v>=500?'good':''}
+  function liS(v){return v==null?'':v<=-6?'crit':v<=-4?'warn':v<=0?'good':''}
+  function shS(v){return v==null?'':v>=40?'crit':v>=25?'warn':''}
+  function srhS(v){return v==null?'':v>=200?'crit':v>=100?'warn':''}
+  var html='';
+  html+='<div class="snd-param-section"><div class="snd-param-section-title">Surface</div>'+row('Pressure',params.p_sfc,'hPa')+row('Temperature',params.T_sfc,'°C')+row('Dewpoint',params.Td_sfc,'°C')+'</div>';
+  html+='<div class="snd-param-section"><div class="snd-param-section-title">Parcel Levels</div>'+row('LCL',params.LCL_p,'hPa')+row('LCL Height',params.LCL_h,'m')+(params.LFC_p?row('LFC',params.LFC_p,'hPa'):'')+(params.EL_p?row('EL',params.EL_p,'hPa'):'')+'</div>';
+  html+='<div class="snd-param-section"><div class="snd-param-section-title">Instability</div>'+row('SBCAPE',params.SBCAPE,'J/kg',capeS(params.SBCAPE))+row('SBCIN',params.SBCIN,'J/kg')+row('Lifted Index',params.LI,'',liS(params.LI))+row('Showalter',params.SH,'')+row('K Index',params.K,'')+row('Total Totals',params.TT,'')+row('Precip Water',params.PW,'mm')+'</div>';
+  html+='<div class="snd-param-section"><div class="snd-param-section-title">Bulk Shear</div>'+row('0-1 km',params.shear_01,'kt',shS(params.shear_01))+row('0-3 km',params.shear_03,'kt',shS(params.shear_03))+row('0-6 km',params.shear_06,'kt',shS(params.shear_06))+'</div>';
+  html+='<div class="snd-param-section"><div class="snd-param-section-title">Storm-Relative Helicity</div>'+row('SRH 0-1 km',params.SRH_01,'m²/s²',srhS(params.SRH_01))+row('SRH 0-3 km',params.SRH_03,'m²/s²',srhS(params.SRH_03))+row('Storm Motion',params.stormU+'/'+params.stormV,'kt')+'</div>';
+  html+='<div class="snd-param-section"><div class="snd-param-section-title">Key Levels (T/Td/Wind)</div>';
+  ['1000','925','850','700','500','300','250'].forEach(function(p){
+    var T=params['T_'+p],Td=params['Td_'+p],dir=params['dir_'+p],spd=params['spd_'+p];if(T==null&&dir==null)return;
+    var val='';if(T!=null)val+=T.toFixed(1)+'/'+(Td==null?'-':Td.toFixed(1));if(dir!=null&&spd!=null)val+=(val?' · ':'')+Math.round(dir)+'°@'+Math.round(spd)+'kt';
+    html+=row(p+' hPa',val);
+  });
+  html+='</div>';el.innerHTML=html;
+}
+
+/* ── Skew-T renderer ── */
+function sndClearCanvas(){var c=document.getElementById('sndCanvas');if(!c)return;var ctx=c.getContext('2d');ctx.clearRect(0,0,c.width,c.height)}
+
+function sndRenderSkewT(){
+  var c=document.getElementById('sndCanvas');if(!c||!sndCurrentData)return;
+  var ctx=c.getContext('2d');var W=c.width,H=c.height;
+  var ml=55,mr=80,mt=30,mb=55;var pw=W-ml-mr,ph=H-mt-mb;
+  var pMin=100,pMax=1050;
+  function pToY(p){var lp=Math.log(p);return mt+ph*(lp-Math.log(pMin))/(Math.log(pMax)-Math.log(pMin))}
+  var tMin=-80,tMax=40,SKEW=33;
+  function tToX(T,p){var lpFrac=(Math.log(pMax)-Math.log(p))/(Math.log(pMax)-Math.log(pMin));var totalRange=(tMax-tMin)+SKEW;return ml+pw*(T-tMin+lpFrac*SKEW)/totalRange}
+
+  ctx.fillStyle='#0e0e0e';ctx.fillRect(0,0,W,H);
+  /* Title */
+  ctx.fillStyle='#ff7300';ctx.font='bold 13px Inter,monospace';ctx.textAlign='left';ctx.textBaseline='alphabetic';
+  ctx.fillText((sndCurrentData.station||'')+' — '+(sndCurrentStation?sndCurrentStation.name:''),ml+4,16);
+  ctx.fillStyle='#888';ctx.font='10px Inter,monospace';
+  if(sndCurrentData.valid)ctx.fillText('Valid: '+sndCurrentData.valid.replace('T',' ').replace('Z',' Z'),ml+4,30);
+
+  /* CLIP to plot area */
+  ctx.save();ctx.beginPath();ctx.rect(ml,mt,pw,ph);ctx.clip();
+
+  /* Plot border */
+  ctx.strokeStyle='#3a3a3a';ctx.lineWidth=1;ctx.strokeRect(ml,mt,pw,ph);
+  /* Isobars */
+  ctx.strokeStyle='#2a2a2a';ctx.lineWidth=0.7;
+  [1000,925,850,700,500,400,300,250,200,150,100].forEach(function(p){if(p<pMin||p>pMax)return;var y=pToY(p);ctx.beginPath();ctx.moveTo(ml,y);ctx.lineTo(ml+pw,y);ctx.stroke()});
+  /* Isotherms */
+  ctx.strokeStyle='#2a2a2a';ctx.lineWidth=0.7;
+  for(var T=tMin;T<=tMax;T+=10){if(T===0)continue;ctx.beginPath();ctx.moveTo(tToX(T,pMax),mt+ph);ctx.lineTo(tToX(T,pMin),mt);ctx.stroke()}
+  /* 0°C highlight */
+  ctx.strokeStyle='rgba(255,255,255,.45)';ctx.lineWidth=1.5;ctx.setLineDash([6,3]);ctx.beginPath();ctx.moveTo(tToX(0,pMax),mt+ph);ctx.lineTo(tToX(0,pMin),mt);ctx.stroke();ctx.setLineDash([]);
+  /* Dry adiabats */
+  ctx.strokeStyle='#4a3030';ctx.lineWidth=0.7;
+  for(var T0=-30;T0<=50;T0+=10){ctx.beginPath();var started=false;var theta=T0+273.15;for(var lp=Math.log(pMax);lp>=Math.log(pMin);lp-=0.02){var p=Math.exp(lp);var Tt=theta*Math.pow(p/1000,0.2854)-273.15;var x=tToX(Tt,p),y=pToY(p);if(!started){ctx.moveTo(x,y);started=true}else ctx.lineTo(x,y)}ctx.stroke()}
+  /* Moist adiabats */
+  ctx.strokeStyle='#2c3d3a';
+  for(var T0=0;T0<=40;T0+=10){ctx.beginPath();var started=false;var parcel_T_K=T0+273.15;var p=1000;while(p>=pMin){var Tt=parcel_T_K-273.15;var x=tToX(Tt,p),y=pToY(p);if(!started){ctx.moveTo(x,y);started=true}else ctx.lineTo(x,y);var nextP=p-10;parcel_T_K=sndLiftMoist(p,parcel_T_K,nextP);p=nextP;if(parcel_T_K<100)break}ctx.stroke()}
+  /* Mixing ratio lines */
+  ctx.strokeStyle='#2a3a2c';ctx.setLineDash([1,3]);
+  [1,2,5,10,20].forEach(function(w){ctx.beginPath();var started=false;for(var lp=Math.log(pMax);lp>=Math.log(pMin);lp-=0.05){var p=Math.exp(lp);var e=w*p/(621.97+w);var ratio=e/6.1121;if(ratio<=0)continue;var Td=240.97*Math.log(ratio)/(17.502-Math.log(ratio));var x=tToX(Td,p),y=pToY(p);if(!started){ctx.moveTo(x,y);started=true}else ctx.lineTo(x,y)}ctx.stroke()});
+  ctx.setLineDash([]);
+  /* Temperature trace (color-coded) */
+  ctx.lineWidth=2.5;
+  function tempTraceColor(p){if(p>700)return'#ff5a5a';if(p>500)return'#ffb340';if(p>300)return'#ffd60a';return'#00d4ff'}
+  var tempPts=[];sndCurrentData.levels.forEach(function(l){if(l.T==null)return;if(l.p<pMin||l.p>pMax)return;tempPts.push({x:tToX(l.T,l.p),y:pToY(l.p),p:l.p})});
+  for(var i=1;i<tempPts.length;i++){var avgP=(tempPts[i-1].p+tempPts[i].p)/2;ctx.strokeStyle=tempTraceColor(avgP);ctx.beginPath();ctx.moveTo(tempPts[i-1].x,tempPts[i-1].y);ctx.lineTo(tempPts[i].x,tempPts[i].y);ctx.stroke()}
+  /* Dewpoint trace */
+  ctx.strokeStyle='#5aff7a';ctx.lineWidth=2;ctx.beginPath();var dwStarted=false;
+  sndCurrentData.levels.forEach(function(l){if(l.Td==null)return;if(l.p<pMin||l.p>pMax)return;var x=tToX(l.Td,l.p),y=pToY(l.p);if(!dwStarted){ctx.moveTo(x,y);dwStarted=true}else ctx.lineTo(x,y)});ctx.stroke();
+  /* Parcel ascent + LCL/LFC/EL */
+  var sfc=sndFindSfc(sndCurrentData.levels);var parcelLFC=null,parcelEL=null;
+  if(sfc){var Td0=sndInterpLevel(sndCurrentData.levels,'p','Td',sfc.p);if(Td0!=null){var lcl=sndLiftDryToLCL(sfc.p,sfc.T,Td0);if(lcl){
+    ctx.strokeStyle='#ffd60a';ctx.setLineDash([4,3]);ctx.lineWidth=1.5;ctx.beginPath();ctx.moveTo(tToX(sfc.T,sfc.p),pToY(sfc.p));ctx.lineTo(tToX(lcl.T_lcl,lcl.p_lcl),pToY(lcl.p_lcl));ctx.stroke();ctx.setLineDash([]);
+    parcelLFC=sndFindLFC(sndCurrentData.levels,lcl);parcelEL=sndFindEL(sndCurrentData.levels,parcelLFC);
+    var parcel_T_K=lcl.T_lcl+273.15;var p=lcl.p_lcl;ctx.strokeStyle='#ffd60a';ctx.setLineDash([4,3]);ctx.beginPath();ctx.moveTo(tToX(lcl.T_lcl,lcl.p_lcl),pToY(lcl.p_lcl));
+    while(p>100){var nextP=p-5;parcel_T_K=sndLiftMoist(p,parcel_T_K,nextP);ctx.lineTo(tToX(parcel_T_K-273.15,nextP),pToY(nextP));p=nextP}
+    ctx.stroke();ctx.setLineDash([]);
+    ctx.fillStyle='#ffd60a';ctx.beginPath();ctx.arc(tToX(lcl.T_lcl,lcl.p_lcl),pToY(lcl.p_lcl),4,0,2*Math.PI);ctx.fill();
+    if(parcelLFC){ctx.fillStyle='#39d353';ctx.beginPath();ctx.arc(tToX(parcelLFC.T,parcelLFC.p),pToY(parcelLFC.p),4,0,2*Math.PI);ctx.fill()}
+    if(parcelEL){ctx.fillStyle='#ff5a5a';ctx.beginPath();ctx.arc(tToX(parcelEL.T,parcelEL.p),pToY(parcelEL.p),4,0,2*Math.PI);ctx.fill()}
+  }}}
+
+  ctx.restore();
+
+  /* Labels (outside clip) */
+  ctx.fillStyle='#666';ctx.font='10px Inter,monospace';ctx.textAlign='right';ctx.textBaseline='middle';
+  [1000,925,850,700,500,400,300,250,200,150,100].forEach(function(p){if(p<pMin||p>pMax)return;ctx.fillText(p+'',ml-6,pToY(p))});
+  ctx.textAlign='center';ctx.textBaseline='alphabetic';
+  for(var T=tMin;T<=tMax;T+=10){if(T===0){ctx.fillStyle='#fff';ctx.font='bold 11px Inter,monospace'}else{ctx.fillStyle='#666';ctx.font='10px Inter,monospace'}ctx.fillText(T+'°',tToX(T,pMax),mt+ph+14)}
+  /* Wind barbs */
+  var barbLevels=[1000,925,850,700,500,400,300,250,200,150,100];var barbX=ml+pw+18;
+  ctx.strokeStyle='#bbb';ctx.fillStyle='#bbb';ctx.lineWidth=1;
+  barbLevels.forEach(function(p){if(p<pMin||p>pMax)return;var dir=sndInterpLevel(sndCurrentData.levels,'p','dir',p),spd=sndInterpLevel(sndCurrentData.levels,'p','spd',p);if(dir==null||spd==null)return;sndDrawWindBarb(ctx,barbX,pToY(p),dir,spd)});
+  /* LCL/LFC/EL labels */
+  if(sfc){var Td0b=sndInterpLevel(sndCurrentData.levels,'p','Td',sfc.p);if(Td0b!=null){var lcl2=sndLiftDryToLCL(sfc.p,sfc.T,Td0b);if(lcl2){
+    ctx.fillStyle='#ffd60a';ctx.font='bold 9px Inter,monospace';ctx.textAlign='left';ctx.textBaseline='middle';ctx.fillText('LCL',tToX(lcl2.T_lcl,lcl2.p_lcl)+6,pToY(lcl2.p_lcl)-4);
+    if(parcelLFC){ctx.fillStyle='#39d353';ctx.fillText('LFC',tToX(parcelLFC.T,parcelLFC.p)+6,pToY(parcelLFC.p)-4)}
+    if(parcelEL){ctx.fillStyle='#ff5a5a';ctx.fillText('EL',tToX(parcelEL.T,parcelEL.p)+6,pToY(parcelEL.p)-4)}
+  }}}
+  /* Axis labels */
+  ctx.fillStyle='#888';ctx.font='9px Inter,monospace';ctx.textAlign='center';ctx.textBaseline='alphabetic';
+  ctx.fillText('Temperature (°C)',ml+pw/2,H-12);
+  ctx.save();ctx.translate(14,mt+ph/2);ctx.rotate(-Math.PI/2);ctx.fillText('Pressure (hPa)',0,0);ctx.restore();
+}
+
+/* ── Wind barb ── */
+function sndDrawWindBarb(ctx,x,y,dir,spd){
+  var rad=dir*Math.PI/180;var len=22;var dx=-Math.sin(rad)*len,dy=-Math.cos(rad)*len;
+  ctx.strokeStyle='#bbb';ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(x,y);ctx.lineTo(x+dx,y+dy);ctx.stroke();
+  var remaining=Math.round(spd);var px=x+dx,py=y+dy;
+  var pdx=-dy/len*4,pdy=dx/len*4;var flagStep=len/5;var flagX=px,flagY=py;
+  while(remaining>=50){var tx=flagX-dx/len*flagStep,ty=flagY-dy/len*flagStep;ctx.fillStyle='#bbb';ctx.beginPath();ctx.moveTo(flagX,flagY);ctx.lineTo(tx,ty);ctx.lineTo(tx+pdx*1.5,ty+pdy*1.5);ctx.closePath();ctx.fill();flagX=tx;flagY=ty;remaining-=50}
+  while(remaining>=10){var tx=flagX-dx/len*flagStep,ty=flagY-dy/len*flagStep;ctx.beginPath();ctx.moveTo(flagX,flagY);ctx.lineTo(tx+pdx*1.5,ty+pdy*1.5);ctx.stroke();flagX=tx;flagY=ty;remaining-=10}
+  if(remaining>=5){var tx=flagX-dx/len*(flagStep*0.5),ty=flagY-dy/len*(flagStep*0.5);ctx.beginPath();ctx.moveTo(flagX,flagY);ctx.lineTo(tx+pdx*1.0,ty+pdy*1.0);ctx.stroke()}
+}
+
+/* ── Hodograph ── */
+function sndRenderHodograph(data){
+  var c=document.getElementById('sndHodoCanvas');var info=document.getElementById('sndHodoInfo');if(!c)return;
+  var ctx=c.getContext('2d');var W=c.width,H=c.height;
+  ctx.fillStyle='#0e0e0e';ctx.fillRect(0,0,W,H);
+  if(!data||!data.levels||data.levels.length===0){if(info)info.textContent='Fetch a sounding to display hodograph.';return}
+  var sfc=sndFindSfc(data.levels);if(!sfc||sfc.h==null){if(info)info.textContent='No surface height data for hodograph.';return}
+  var pts=[];data.levels.forEach(function(l){if(l.h==null||l.dir==null||l.spd==null)return;var hAGL=l.h-sfc.h;if(hAGL<-100)return;if(hAGL>12000)return;var uv=sndWindUV(l.dir,l.spd);if(uv)pts.push({h:hAGL,u:uv.u,v:uv.v})});
+  if(pts.length<2){if(info)info.textContent='Not enough wind data for hodograph.';return}
+  pts.sort(function(a,b){return a.h-b.h});
+  var maxMag=0;pts.forEach(function(p){var m=Math.sqrt(p.u*p.u+p.v*p.v);if(m>maxMag)maxMag=m});
+  var motion=sndBunkersRM(data.levels);var motionMag=Math.sqrt(motion.u*motion.u+motion.v*motion.v);
+  if(motionMag>maxMag)maxMag=motionMag;var scaleMax=maxMag*1.25||60;if(scaleMax<30)scaleMax=30;
+  var pad=30;var size=Math.min(W,H)-pad*2;var cx=W/2,cy=H/2;var r=size/2;
+  function ktToXY(u,v){return{x:cx+(u/scaleMax)*r,y:cy-(v/scaleMax)*r}}
+  ctx.save();ctx.beginPath();ctx.arc(cx,cy,r+2,0,2*Math.PI);ctx.clip();
+  /* Range rings */
+  ctx.strokeStyle='#2a2a2a';ctx.lineWidth=0.7;
+  for(var ring=10;ring<=scaleMax;ring+=10){var rr=(ring/scaleMax)*r;ctx.beginPath();ctx.arc(cx,cy,rr,0,2*Math.PI);ctx.stroke();ctx.fillStyle='#555';ctx.font='8px Inter,monospace';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(ring+'',cx+rr*Math.cos(-Math.PI/4),cy+rr*Math.sin(-Math.PI/4))}
+  /* Cardinal axes */
+  ctx.strokeStyle='#3a3a3a';ctx.beginPath();ctx.moveTo(cx-r,cy);ctx.lineTo(cx+r,cy);ctx.moveTo(cx,cy-r);ctx.lineTo(cx,cy+r);ctx.stroke();
+  ctx.fillStyle='#888';ctx.font='bold 10px Inter,monospace';ctx.textAlign='center';ctx.textBaseline='middle';
+  ctx.fillText('N',cx,cy-r+10);ctx.fillText('S',cx,cy+r-10);ctx.fillText('E',cx+r-10,cy);ctx.fillText('W',cx-r+10,cy);
+  /* Hodograph curve */
+  function colorForAltitude(h){if(h<1000)return'#ff5a5a';if(h<3000)return'#ffb340';if(h<6000)return'#ffd60a';return'#39d353'}
+  ctx.lineWidth=2.5;
+  for(var i=1;i<pts.length;i++){var p0=ktToXY(pts[i-1].u,pts[i-1].v),p1=ktToXY(pts[i].u,pts[i].v);ctx.strokeStyle=colorForAltitude((pts[i-1].h+pts[i].h)/2);ctx.beginPath();ctx.moveTo(p0.x,p0.y);ctx.lineTo(p1.x,p1.y);ctx.stroke()}
+  pts.forEach(function(p){var xy=ktToXY(p.u,p.v);ctx.fillStyle=colorForAltitude(p.h);ctx.beginPath();ctx.arc(xy.x,xy.y,2,0,2*Math.PI);ctx.fill()});
+  /* Storm motion */
+  var mXY=ktToXY(motion.u,motion.v);ctx.strokeStyle='#00d4ff';ctx.fillStyle='#00d4ff';ctx.lineWidth=1.5;ctx.setLineDash([4,3]);ctx.beginPath();ctx.moveTo(cx,cy);ctx.lineTo(mXY.x,mXY.y);ctx.stroke();ctx.setLineDash([]);
+  var ang=Math.atan2(mXY.y-cy,mXY.x-cx);ctx.beginPath();ctx.moveTo(mXY.x,mXY.y);ctx.lineTo(mXY.x-8*Math.cos(ang-0.4),mXY.y-8*Math.sin(ang-0.4));ctx.lineTo(mXY.x-8*Math.cos(ang+0.4),mXY.y-8*Math.sin(ang+0.4));ctx.closePath();ctx.fill();
+  ctx.font='9px Inter,monospace';ctx.textAlign='left';ctx.textBaseline='middle';ctx.fillText('RM',mXY.x+8,mXY.y);
+  ctx.restore();
+  ctx.strokeStyle='#666';ctx.lineWidth=1;ctx.beginPath();ctx.arc(cx,cy,r,0,2*Math.PI);ctx.stroke();
+  if(info){
+    var shear01=sndBulkShear(data.levels,1),shear06=sndBulkShear(data.levels,6),srh01=sndSRH(data.levels,motion.u,motion.v,1000);
+    function f(v,u){return v==null?'—':v+(u?' '+u:'')}
+    info.innerHTML='<span style="color:var(--t2)">Shear 0-1km:</span> <b style="color:#ff5a5a">'+f(shear01,'kt')+'</b> · <span style="color:var(--t2)">0-6km:</span> <b style="color:#ffd60a">'+f(shear06,'kt')+'</b> · <span style="color:var(--t2)">SRH 0-1:</span> <b style="color:#ff5a5a">'+f(srh01,'m²/s²')+'</b> · <span style="color:var(--t2)">RM:</span> <b style="color:#00d4ff">'+motion.u+'/'+motion.v+' kt</b>';
+  }
+}
+
+/* ── Legend toggle ── */
+function sndToggleLegend(){var el=document.getElementById('sndLegend');if(!el)return;if(el.style.display==='none'){el.style.display='block';el.scrollIntoView({behavior:'smooth',block:'start'})}else{el.style.display='none'}}
+
+/* ── Screenshot (collage) ── */
+async function preloadLogoDataUrl(){
+  if(LOGO_DATA_URL)return LOGO_DATA_URL;
+  try{var resp=await fetch('https://kn-weather.github.io/Skywarn-Storm-Spot-US/skywarn-logo.png');var blob=await resp.blob();
+    return new Promise(function(resolve){var reader=new FileReader();reader.onload=function(){LOGO_DATA_URL=reader.result;resolve(LOGO_DATA_URL)};reader.onerror=function(){resolve(null)};reader.readAsDataURL(blob)})}catch(e){return null}
+}
+
+async function sndScreenshot(){
+  var sndCanvas=document.getElementById('sndCanvas');var hodoCanvas=document.getElementById('sndHodoCanvas');
+  if(!sndCanvas||!sndCurrentData){sndShowError('Fetch a sounding first.');setTimeout(function(){sndShowError('')},3000);return}
+  sndShowLoading(true);
+  try{
+    await preloadLogoDataUrl();var params=sndComputeParams(sndCurrentData);
+    var LEFT_W=340,RIGHT_W=720,GAP=10,HEADER_H=50,FOOTER_H=96,SKEW_T_H=640,HODO_W=720,HODO_H=320,PAD=14;
+    var totalW=LEFT_W+GAP+RIGHT_W+PAD*2,totalH=HEADER_H+SKEW_T_H+GAP+HODO_H+FOOTER_H+PAD*2;
+    var composite=document.createElement('canvas');composite.width=totalW;composite.height=totalH;var ctx=composite.getContext('2d');
+    ctx.fillStyle='#0a0a0a';ctx.fillRect(0,0,totalW,totalH);
+    /* Header */
+    var headerY=PAD;ctx.fillStyle='#ff7300';ctx.fillRect(PAD,headerY,totalW-PAD*2,2);
+    ctx.fillStyle='#ff7300';ctx.font='bold 18px Inter,sans-serif';ctx.textAlign='left';ctx.textBaseline='middle';
+    ctx.fillText((sndCurrentData.station||'')+(sndCurrentStation?' — '+sndCurrentStation.name:''),PAD+4,headerY+18);
+    ctx.fillStyle='#888';ctx.font='12px Inter,sans-serif';if(sndCurrentData.valid)ctx.fillText('Valid: '+sndCurrentData.valid.replace('T',' ').replace('Z',' Z'),PAD+4,headerY+38);
+    ctx.fillStyle='#666';ctx.font='10px Inter,sans-serif';ctx.textAlign='right';ctx.fillText('Source: Iowa Environmental Mesonet',totalW-PAD-4,headerY+18);
+    /* Left panel */
+    var leftX=PAD,leftY=headerY+HEADER_H+GAP,leftW=LEFT_W,leftH=SKEW_T_H+GAP+HODO_H;
+    ctx.fillStyle='#141414';ctx.fillRect(leftX,leftY,leftW,leftH);ctx.strokeStyle='#3a3a3a';ctx.lineWidth=1;ctx.strokeRect(leftX,leftY,leftW,leftH);
+    function fmt(v,u){return v==null?'—':(Math.round(v*10)/10)+(u?' '+u:'')}
+    function drawSection(title,rows,startY){var y=startY;ctx.fillStyle='#ff7300';ctx.font='bold 11px Inter,sans-serif';ctx.textAlign='left';ctx.textBaseline='top';ctx.fillText(title,leftX+12,y);y+=16;ctx.strokeStyle='#3a3a3a';ctx.lineWidth=0.7;ctx.beginPath();ctx.moveTo(leftX+12,y);ctx.lineTo(leftX+leftW-12,y);ctx.stroke();y+=6;rows.forEach(function(row){ctx.fillStyle='#a0a0a0';ctx.font='11px Inter,sans-serif';ctx.textAlign='left';ctx.fillText(row[0],leftX+12,y);ctx.fillStyle=row[2]||'#f0f0f0';ctx.font='bold 11px Inter,sans-serif';ctx.textAlign='right';ctx.fillText(row[1],leftX+leftW-12,y);y+=16});return y+8}
+    var yPos=leftY+12;
+    if(params){
+      yPos=drawSection('SURFACE',[['Pressure',fmt(params.p_sfc,'hPa')],['Temperature',fmt(params.T_sfc,'°F')],['Dewpoint',fmt(params.Td_sfc,'°F')]],yPos);
+      var pr=[];if(params.LCL_p)pr.push(['LCL',params.LCL_p+' hPa']);if(params.LFC_p)pr.push(['LFC',params.LFC_p+' hPa']);if(params.EL_p)pr.push(['EL',params.EL_p+' hPa']);if(pr.length)yPos=drawSection('PARCEL LEVELS',pr,yPos);
+      function capeC(v){return v>=2500?'#ff5a5a':v>=1500?'#ffb340':v>=500?'#39d353':'#f0f0f0'}
+      function liC(v){return v==null?'#f0f0f0':v<=-6?'#ff5a5a':v<=-4?'#ffb340':v<=0?'#39d353':'#f0f0f0'}
+      function shC(v){return v==null?'#f0f0f0':v>=40?'#ff5a5a':v>=25?'#ffb340':'#f0f0f0'}
+      function srhC(v){return v==null?'#f0f0f0':v>=200?'#ff5a5a':v>=100?'#ffb340':'#f0f0f0'}
+      yPos=drawSection('INSTABILITY',[['SBCAPE',fmt(params.SBCAPE,'J/kg'),capeC(params.SBCAPE)],['SBCIN',fmt(params.SBCIN,'J/kg')],['Lifted Index',fmt(params.LI),liC(params.LI)],['Showalter',fmt(params.SH)],['K Index',fmt(params.K)],['Total Totals',fmt(params.TT)],['Precip Water',fmt(params.PW,'mm')]],yPos);
+      yPos=drawSection('BULK SHEAR',[['0-1 km',fmt(params.shear_01,'kt'),shC(params.shear_01)],['0-3 km',fmt(params.shear_03,'kt'),shC(params.shear_03)],['0-6 km',fmt(params.shear_06,'kt'),shC(params.shear_06)]],yPos);
+      var srhR=[['SRH 0-1 km',fmt(params.SRH_01,'m²/s²'),srhC(params.SRH_01)],['SRH 0-3 km',fmt(params.SRH_03,'m²/s²'),srhC(params.SRH_03)]];if(params.stormU!=null)srhR.push(['Storm Motion',params.stormU+'/'+params.stormV+' kt','#00d4ff']);yPos=drawSection('STORM-RELATIVE HELICITY',srhR,yPos);
+    }
+    /* Skew-T */
+    var skewX=leftX+leftW+GAP,skewY=leftY,skewW=RIGHT_W,skewH=SKEW_T_H;
+    ctx.fillStyle='#0e0e0e';ctx.fillRect(skewX,skewY,skewW,skewH);
+    var srcW=sndCanvas.width,srcH=sndCanvas.height,srcA=srcW/srcH,dstA=skewW/skewH;var dW,dH,dX,dY;
+    if(srcA>dstA){dW=skewW;dH=skewW/srcA;dX=skewX;dY=skewY+(skewH-dH)/2}else{dH=skewH;dW=skewH*srcA;dX=skewX+(skewW-dW)/2;dY=skewY}
+    ctx.drawImage(sndCanvas,dX,dY,dW,dH);ctx.strokeStyle='#3a3a3a';ctx.lineWidth=1;ctx.strokeRect(skewX,skewY,skewW,skewH);
+    /* Hodograph */
+    var hodoX=skewX,hodoY=skewY+skewH+GAP,hodoW=HODO_W,hodoH2=HODO_H;
+    ctx.fillStyle='#0e0e0e';ctx.fillRect(hodoX,hodoY,hodoW,hodoH2);
+    if(hodoCanvas){var hA=hodoCanvas.width/hodoCanvas.height,hDH=hodoH2,hDW=hodoH2*hA;if(hDW>hodoW){hDW=hodoW;hDH=hodoW/hA}ctx.drawImage(hodoCanvas,hodoX+(hodoW-hDW)/2,hodoY+(hodoH2-hDH)/2,hDW,hDH)}
+    ctx.strokeStyle='#3a3a3a';ctx.lineWidth=1;ctx.strokeRect(hodoX,hodoY,hodoW,hodoH2);
+    /* Footer */
+    var logoSize=64,padX=16,padY=12,siteName='Skywarn Storm Spotters & Chasers United States';
+    var stampStr=new Date().toLocaleString('en-US',{weekday:'short',year:'numeric',month:'short',day:'numeric',hour:'2-digit',minute:'2-digit',hour12:true});
+    var titleFontPx=20,stampFontPx=13;ctx.font='bold '+titleFontPx+'px Inter,sans-serif';var nameW=ctx.measureText(siteName).width;ctx.font=stampFontPx+'px Inter,sans-serif';var stampW=ctx.measureText(stampStr).width;var textW=Math.max(nameW,stampW);var fGap=16;var contentW=logoSize+fGap+textW;var availW=totalW-padX*2;var fitScale=1;if(contentW>availW){fitScale=Math.max(0.5,availW/contentW);logoSize=Math.floor(logoSize*fitScale);titleFontPx=Math.max(11,Math.floor(titleFontPx*fitScale));stampFontPx=Math.max(9,Math.floor(stampFontPx*fitScale))}
+    var barH=logoSize+padY*2,barY=totalH-barH;ctx.fillStyle='rgba(0,0,0,.85)';ctx.fillRect(0,barY,totalW,barH);ctx.fillStyle='#ff7300';ctx.fillRect(0,barY-2,totalW,2);
+    var groupX=Math.floor((totalW-contentW)/2),logoX=groupX,logoY=barY+padY;
+    if(LOGO_DATA_URL){var logoImg=new Image();await new Promise(function(resolve){logoImg.onload=function(){try{ctx.drawImage(logoImg,logoX,logoY,logoSize,logoSize)}catch(e){}resolve()};logoImg.onerror=function(){resolve()};logoImg.src=LOGO_DATA_URL})}
+    var textX=logoX+logoSize+fGap;ctx.fillStyle='#ff7300';ctx.font='bold '+titleFontPx+'px Inter,sans-serif';ctx.textBaseline='middle';ctx.textAlign='left';ctx.fillText(siteName,textX,barY+padY+logoSize/2-13*fitScale);ctx.fillStyle='#a0a0a0';ctx.font=stampFontPx+'px Inter,sans-serif';ctx.fillText(stampStr,textX,barY+padY+logoSize/2+15*fitScale);
+    /* Download */
+    sndShowLoading(false);
+    composite.toBlob(function(blob){if(!blob)return;var url=URL.createObjectURL(blob);var a=document.createElement('a');a.href=url;a.download='skywarn-sounding-'+sndCurrentData.station+'-'+(sndCurrentData.valid||'').replace(/[:T]/g,'-').replace('Z','')+'.png';document.body.appendChild(a);a.click();document.body.removeChild(a);setTimeout(function(){URL.revokeObjectURL(url)},1000)},'image/png');
+  }catch(e){sndShowLoading(false);sndShowError('Screenshot failed: '+(e.message||e));setTimeout(function(){sndShowError('')},5000)}
+}
+
+/* ── Boot ── */
+window.addEventListener('DOMContentLoaded',function(){
+  initSoundingsTab();
+  sndFetchAndRender();
+});
+</script>
+</body>
+</html>
