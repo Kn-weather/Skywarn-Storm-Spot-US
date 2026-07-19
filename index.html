@@ -2244,8 +2244,10 @@ function saveAlertTypeHidden(){
 function resetAlertTypeHidden(){
   ALERT_TYPE_HIDDEN={};
   saveAlertTypeHidden();
-  alertLayerCache={};  /* force full redraw */
-  fAlertMap();
+  /* Force a full clear + redraw so all alert types reappear immediately.
+     Uses onAlertFilterChange() (not just alertLayerCache={}) so the
+     polygons are actually removed from the map before re-fetching. */
+  onAlertFilterChange();
 }
 /* Hide all currently-drawn alert types at once. Adds every event name
    from the drawnAlerts list to ALERT_TYPE_HIDDEN so nothing renders on
@@ -2256,8 +2258,11 @@ function hideAllAlertTypes(){
     ALERT_TYPE_HIDDEN[a.event]=true;
   });
   saveAlertTypeHidden();
-  alertLayerCache={};  /* force full redraw */
-  fAlertMap();
+  /* Force a full clear + redraw. onAlertFilterChange() calls
+     clearAllAlertLayers() synchronously so all polygons disappear
+     instantly, then fetches fresh data which (because every type is
+     now hidden) won't re-add them. */
+  onAlertFilterChange();
 }
 function toggleAlertType(eventName){
   if(!eventName)return;
@@ -2283,7 +2288,11 @@ function toggleAlertType(eventName){
     else ALERT_TYPE_HIDDEN[eventName]=true;
   }
   saveAlertTypeHidden();
-  fAlertMap();
+  /* Force a full clear + redraw so the change is reflected immediately.
+     The delta-update path skips re-drawing cached layers, which would
+     leave polygons on the map when hiding a type — so we MUST clear
+     the cache and force a full redraw here. */
+  onAlertFilterChange();
 }
 
 /* ── Build the dynamic legend with per-type visibility checkboxes ──────── */
