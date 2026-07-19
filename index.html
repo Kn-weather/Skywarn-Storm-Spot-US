@@ -8962,7 +8962,13 @@ function sndRenderSkewTTo(c,data,stationOverride){
     var lp=Math.log(p),lpMin=Math.log(pMin),lpMax=Math.log(pMax);
     return mt+ph*(lpMax-lp)/(lpMax-lpMin);
   }
-  var tMin=-60,tMax=40,SKEW=33;
+  /* X-axis range widened from -60..+40 to -80..+40 so cold upper-level
+     temperatures (which legitimately reach -60°C at 100 hPa / 16 km)
+     have breathing room on the left side of the chart instead of
+     touching the left border. The -60°C isotherm now sits ~14% in
+     from the left edge, with -70°C and -80°C available as additional
+     reference lines for very cold upper-level air masses. */
+  var tMin=-80,tMax=40,SKEW=33;
   function tToX(T,p){
     var lpFrac=(Math.log(pMax)-Math.log(p))/(Math.log(pMax)-Math.log(pMin));
     var totalRange=(tMax-tMin)+SKEW;
@@ -9028,11 +9034,13 @@ function sndRenderSkewTTo(c,data,stationOverride){
   ctx.stroke();
   ctx.setLineDash([]);
 
-  /* Dry adiabats (clipped) */
+  /* Dry adiabats (clipped) — extended to cover the wider temperature range
+     (was -30 to +50, now -50 to +50) so cold upper-level dry adiabats
+     are visible. */
   ctx.strokeStyle='#3d2c2c';
   ctx.lineWidth=0.7;
   ctx.setLineDash([2,3]);
-  for(var T0=-30;T0<=50;T0+=10){
+  for(var T0=-50;T0<=50;T0+=10){
     ctx.beginPath();
     var started=false;
     for(var lp=Math.log(pMax);lp>=Math.log(pMin);lp-=0.05){
