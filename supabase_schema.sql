@@ -1,11 +1,10 @@
 -- ──────────────────────────────────────────────────────────────────────────
--- Skywarn Storm Spotters — Spotting Journal Schema (v2 — with Auth)
+-- Skywarn Storm Spotters — Spotting Journal Schema (v2.1 — with Auth)
 -- Run this in your Supabase SQL Editor (Dashboard → SQL → New Query)
 --
--- This is a fresh re-creation of the schema. If you already ran v1,
--- this version is safe to re-run — it uses IF NOT EXISTS / DROP IF EXISTS
--- for idempotency. The RLS policies are updated to require auth for
--- insert/update/delete (read stays public).
+-- This version is fully idempotent — safe to re-run any number of times.
+-- It drops ALL policies (both v1 and v2 names) before recreating them,
+-- so re-running won't fail with "policy already exists" errors.
 -- ──────────────────────────────────────────────────────────────────────────
 
 -- ── 1. journal_events ──────────────────────────────────────────────────────
@@ -63,14 +62,18 @@ CREATE INDEX IF NOT EXISTS idx_journal_events_user_id ON public.journal_events(u
 ALTER TABLE public.journal_events ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.journal_entries ENABLE ROW LEVEL SECURITY;
 
--- Drop existing policies
+-- ── Drop ALL existing policies (v1 AND v2 names) ──
+-- This is the key fix — drop both old and new policy names so re-running
+-- the script doesn't fail with "policy already exists" errors.
 DROP POLICY IF EXISTS "Public read on journal_events" ON public.journal_events;
 DROP POLICY IF EXISTS "Public insert on journal_events" ON public.journal_events;
+DROP POLICY IF EXISTS "Authenticated insert on journal_events" ON public.journal_events;
 DROP POLICY IF EXISTS "Update own journal_events" ON public.journal_events;
 DROP POLICY IF EXISTS "Delete own journal_events" ON public.journal_events;
 
 DROP POLICY IF EXISTS "Public read on journal_entries" ON public.journal_entries;
 DROP POLICY IF EXISTS "Public insert on journal_entries" ON public.journal_entries;
+DROP POLICY IF EXISTS "Authenticated insert on journal_entries" ON public.journal_entries;
 DROP POLICY IF EXISTS "Update own journal_entries" ON public.journal_entries;
 DROP POLICY IF EXISTS "Delete own journal_entries" ON public.journal_entries;
 
@@ -115,8 +118,9 @@ INSERT INTO storage.buckets (id, name, public)
 VALUES ('journal-photos', 'journal-photos', true)
 ON CONFLICT (id) DO NOTHING;
 
--- Storage RLS policies
+-- Storage RLS policies — drop ALL existing first
 DROP POLICY IF EXISTS "Public read journal-photos" ON storage.objects;
+DROP POLICY IF EXISTS "Public upload journal-photos" ON storage.objects;
 DROP POLICY IF EXISTS "Authenticated upload journal-photos" ON storage.objects;
 DROP POLICY IF EXISTS "Update own journal-photos" ON storage.objects;
 DROP POLICY IF EXISTS "Delete own journal-photos" ON storage.objects;
@@ -187,3 +191,4 @@ CREATE TRIGGER journal_entries_set_user_id
 --   Supabase Dashboard → Authentication → Providers → Email → Enable
 --   (Make sure "Confirm email" is OFF for dev, ON for production)
 -- ──────────────────────────────────────────────────────────────────────────
+
