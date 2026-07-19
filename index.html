@@ -2026,6 +2026,32 @@ body.capturing .hamburger-menu{display:none!important}
         </div>
       </div>
 
+      <!-- User Account -->
+      <div class="wf-feed-card" style="margin-bottom:16px">
+        <div class="wf-feed-header"><i class="fas fa-user-shield"></i> User Account</div>
+        <div class="wf-feed-body" style="padding:14px">
+          <div id="authSignedOut">
+            <div style="font-size:11px;color:var(--t2);margin-bottom:10px;line-height:1.5">
+              Sign in to create, edit, and delete journal entries. Magic-link auth — no password required.
+            </div>
+            <input type="email" id="authEmail" placeholder="your@email.com" class="jrnl-input" style="margin-bottom:8px">
+            <button onclick="authSendMagicLink()" style="background:var(--acc);color:#000;border:none;padding:8px 14px;border-radius:5px;cursor:pointer;font-size:11px;font-weight:600;font-family:inherit;display:inline-flex;align-items:center;gap:5px">
+              <i class="fas fa-paper-plane"></i> Send Magic Link
+            </button>
+            <div id="authStatus" style="font-size:10px;color:var(--t3);margin-top:8px;display:none;padding:8px 10px;background:var(--bg2);border:1px solid var(--bdr);border-radius:4px"></div>
+          </div>
+          <div id="authSignedIn" style="display:none">
+            <div style="font-size:11px;color:var(--t2);margin-bottom:10px;line-height:1.5">
+              <i class="fas fa-circle-check" style="color:var(--acc);margin-right:4px"></i>
+              Signed in as <b id="authEmailDisplay" style="color:var(--acc)"></b>
+            </div>
+            <button onclick="authSignOut()" style="background:var(--bg2);color:var(--t1);border:1px solid var(--bdr);padding:7px 14px;border-radius:5px;cursor:pointer;font-size:11px;font-weight:600;font-family:inherit;display:inline-flex;align-items:center;gap:5px">
+              <i class="fas fa-right-from-bracket"></i> Sign Out
+            </button>
+          </div>
+        </div>
+      </div>
+
       <!-- Tornado Tracker Mode -->
       <div class="wf-feed-card" style="margin-bottom:16px">
         <div class="wf-feed-header"><i class="fas fa-tornado"></i> Tornado Tracker Mode</div>
@@ -2301,6 +2327,19 @@ body.capturing .hamburger-menu{display:none!important}
               <button class="jrnl-btn" onclick="jrnlAutofillLocation()"><i class="fas fa-location-crosshairs"></i> Use My Location</button>
               <span class="jrnl-coords" id="jrnlCoords">No location set</span>
             </div>
+            <div class="jrnl-form-row" style="margin-bottom:6px">
+              <label style="font-size:9px;color:var(--t3);text-transform:uppercase;letter-spacing:.04em;display:flex;align-items:center;gap:4px">
+                Lat
+                <input type="number" id="jrnlLatInput" step="0.0001" min="-90" max="90" class="jrnl-input" style="margin:0;width:90px;padding:5px 7px" oninput="jrnlOnManualLatLon()">
+              </label>
+              <label style="font-size:9px;color:var(--t3);text-transform:uppercase;letter-spacing:.04em;display:flex;align-items:center;gap:4px">
+                Lon
+                <input type="number" id="jrnlLonInput" step="0.0001" min="-180" max="180" class="jrnl-input" style="margin:0;width:90px;padding:5px 7px" oninput="jrnlOnManualLatLon()">
+              </label>
+              <button class="jrnl-btn-sm" onclick="jrnlLookupLocation()" title="Look up coordinates from a place name"><i class="fas fa-magnifying-glass"></i> Lookup</button>
+              <button class="jrnl-btn-sm" onclick="jrnlPickOnMap()" title="Pick on mini-map"><i class="fas fa-map-pin"></i> Map</button>
+            </div>
+            <input type="text" id="jrnlLocationLookup" placeholder="Place name (e.g. 'Topeka, KS' or 'I-94 & M-14, Ann Arbor')" class="jrnl-input" style="margin-bottom:6px">
             <div class="jrnl-form-grid">
               <label>Temp °F<input type="number" id="jrnlTempF" step="0.1" class="jrnl-input"></label>
               <label>Dewpoint °F<input type="number" id="jrnlDewpointF" step="0.1" class="jrnl-input"></label>
@@ -2322,7 +2361,7 @@ body.capturing .hamburger-menu{display:none!important}
             <div id="jrnlRadarPreview" style="display:none;margin-top:8px">
               <img id="jrnlRadarImg" style="width:100%;border-radius:4px;border:1px solid var(--bdr)" alt="Radar screenshot">
             </div>
-            <button class="jrnl-btn jrnl-btn-acc" onclick="jrnlSaveEntry()" style="width:100%;margin-top:8px"><i class="fas fa-floppy-disk"></i> Save Entry</button>
+            <button class="jrnl-btn jrnl-btn-acc" id="jrnlSaveBtn" onclick="jrnlSaveEntry()" style="width:100%;margin-top:8px"><i class="fas fa-floppy-disk"></i> Save Entry</button>
           </div>
         </div>
       </div>
@@ -2384,6 +2423,7 @@ body.capturing .hamburger-menu{display:none!important}
       <div class="shot-modal-actions">
         <button class="shot-btn shot-btn-secondary" onclick="closeShotModal()"><i class="fas fa-xmark"></i> Close</button>
         <a id="shotDownloadLink" class="shot-btn shot-btn-primary" download=""><i class="fas fa-download"></i> Download PNG</a>
+        <button class="shot-btn shot-btn-secondary" onclick="saveScreenshotToJournal()" style="background:#ff7300;color:#0a0a0a;border-color:#ff7300"><i class="fas fa-book-bookmark"></i> + Journal</button>
         <button class="shot-btn shot-btn-secondary" onclick="shareScreenshot('facebook')" style="background:#1877f2;color:#fff;border-color:#1877f2"><i class="fab fa-facebook"></i> Facebook</button>
         <button class="shot-btn shot-btn-secondary" onclick="shareScreenshot('discord')" style="background:#5865f2;color:#fff;border-color:#5865f2"><i class="fab fa-discord"></i> Discord</button>
         <button class="shot-btn shot-btn-secondary" onclick="shareScreenshot('native')" id="shareNativeBtn" style="display:none"><i class="fas fa-share-nodes"></i> Share</button>
@@ -8859,6 +8899,8 @@ function initJournalTab(){
     console.error('[Journal] Failed to init Supabase:',e);
     return;
   }
+  /* Initialize auth state listener */
+  authInit();
   /* Initialize mini-map */
   jrnlInitMiniMap();
   /* Load events list */
@@ -8891,16 +8933,21 @@ function jrnlRenderEventsList(){
     el.innerHTML='<div class="jrnl-empty">No events yet. Click "New Event" to create your first one.</div>';
     return;
   }
+  var currentUserId=authCurrentUser?authCurrentUser.id:null;
   var html='';
   jrnlEvents.forEach(function(ev){
     var active=ev.id===jrnlCurrentEventId?'active':'';
     var dt=new Date(ev.created_at).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
+    var isOwner=currentUserId&&ev.user_id===currentUserId;
     html+='<div class="jrnl-event-item '+active+'" onclick="jrnlSelectEvent(\''+ev.id+'\')">';
     html+='<div class="jrnl-event-icon"><i class="fas fa-folder"></i></div>';
     html+='<div class="jrnl-event-info">';
     html+='<div class="jrnl-event-title">'+jrnlEscape(ev.title)+'</div>';
     html+='<div class="jrnl-event-meta">'+dt+'</div>';
     html+='</div>';
+    if(isOwner){
+      html+='<button class="jrnl-btn-sm" onclick="event.stopPropagation();jrnlDeleteEvent(\''+ev.id+'\')" title="Delete event" style="color:#ff5a5a;border-color:rgba(255,90,90,.3)"><i class="fas fa-trash"></i></button>';
+    }
     html+='</div>';
   });
   el.innerHTML=html;
@@ -8918,6 +8965,11 @@ function jrnlHideNewEventForm(){
 
 async function jrnlCreateEvent(){
   if(!jrnlSupabase)return;
+  if(!authCurrentUser){
+    jrnlToast('Please sign in first (Site Settings → User Account)','warn');
+    switchTab('settings');
+    return;
+  }
   var title=document.getElementById('jrnlEventTitle').value.trim();
   var desc=document.getElementById('jrnlEventDesc').value.trim();
   if(!title){
@@ -8927,7 +8979,7 @@ async function jrnlCreateEvent(){
   try{
     var result=await jrnlSupabase
       .from('journal_events')
-      .insert({title:title,description:desc||null,is_public:true})
+      .insert({title:title,description:desc||null,is_public:true,user_id:authCurrentUser.id})
       .select();
     if(result.error)throw result.error;
     jrnlHideNewEventForm();
@@ -8981,14 +9033,23 @@ function jrnlRenderEntriesList(){
     el.innerHTML='<div class="jrnl-empty">No entries yet. Use the form on the left to add the first observation.</div>';
     return;
   }
+  var currentUserId=authCurrentUser?authCurrentUser.id:null;
   var html='';
   /* Show entries in reverse chronological order (most recent first) */
   jrnlEntries.slice().reverse().forEach(function(e){
     var dt=new Date(e.observed_at).toLocaleString('en-US',{
       month:'short',day:'numeric',hour:'2-digit',minute:'2-digit',hour12:true
     });
+    var isOwner=currentUserId&&e.user_id===currentUserId;
     html+='<div class="jrnl-entry-item">';
-    html+='<div class="jrnl-entry-time"><i class="fas fa-clock"></i> '+dt+'</div>';
+    html+='<div class="jrnl-entry-time"><i class="fas fa-clock"></i> '+dt;
+    if(isOwner){
+      html+='<span style="float:right;display:flex;gap:4px">';
+      html+='<button class="jrnl-btn-sm" onclick="event.stopPropagation();jrnlEditEntry(\''+e.id+'\')" title="Edit"><i class="fas fa-pen"></i></button>';
+      html+='<button class="jrnl-btn-sm" onclick="event.stopPropagation();jrnlDeleteEntry(\''+e.id+'\')" title="Delete" style="color:#ff5a5a;border-color:rgba(255,90,90,.3)"><i class="fas fa-trash"></i></button>';
+      html+='</span>';
+    }
+    html+='</div>';
     if(e.location_label){
       html+='<div class="jrnl-entry-loc"><i class="fas fa-map-marker-alt"></i> '+jrnlEscape(e.location_label)+'</div>';
     }else if(e.lat!=null&&e.lon!=null){
@@ -9168,10 +9229,15 @@ async function jrnlCaptureRadar(){
   }
 }
 
-/* ── Save entry ── */
+/* ── Save entry (handles both INSERT for new and UPDATE for edit) ── */
 async function jrnlSaveEntry(){
   if(!jrnlSupabase||!jrnlCurrentEventId){
     jrnlToast('Select or create an event first','warn');
+    return;
+  }
+  if(!authCurrentUser){
+    jrnlToast('Please sign in first (Site Settings → User Account)','warn');
+    switchTab('settings');
     return;
   }
   /* Gather form values */
@@ -9208,9 +9274,14 @@ async function jrnlSaveEntry(){
     entry.lat=jrnlCurrentLocation.lat;
     entry.lon=jrnlCurrentLocation.lon;
   }
-  jrnlToast('Saving entry...','info');
+  /* For new entries, set user_id. For edits, keep original user_id. */
+  if(!jrnlEditingEntryId){
+    entry.user_id=authCurrentUser.id;
+  }
+  var isEditing=!!jrnlEditingEntryId;
+  jrnlToast(isEditing?'Updating entry...':'Saving entry...','info');
   try{
-    /* Upload photo if selected */
+    /* Upload photo if selected (only on new entries or if a new photo was picked) */
     if(jrnlPhotoFile){
       var photoPath='photos/'+Date.now()+'-'+jrnlPhotoFile.name.replace(/[^a-zA-Z0-9.\-]/g,'_');
       var photoUpload=await jrnlSupabase.storage
@@ -9223,7 +9294,6 @@ async function jrnlSaveEntry(){
     /* Upload radar screenshot if captured */
     if(jrnlRadarDataUrl){
       var radarPath='radar/'+Date.now()+'.png';
-      /* Convert data URL to blob */
       var radarBlob=jrnlDataUrlToBlob(jrnlRadarDataUrl);
       var radarUpload=await jrnlSupabase.storage
         .from('journal-photos')
@@ -9232,14 +9302,26 @@ async function jrnlSaveEntry(){
       var radarUrl=jrnlSupabase.storage.from('journal-photos').getPublicUrl(radarPath).data.publicUrl;
       entry.radar_screenshot_url=radarUrl;
     }
-    /* Insert entry */
-    var result=await jrnlSupabase.from('journal_entries').insert(entry).select();
+    /* Insert or update */
+    var result;
+    if(isEditing){
+      result=await jrnlSupabase
+        .from('journal_entries')
+        .update(entry)
+        .eq('id',jrnlEditingEntryId)
+        .select();
+    }else{
+      result=await jrnlSupabase
+        .from('journal_entries')
+        .insert(entry)
+        .select();
+    }
     if(result.error)throw result.error;
     /* Reset form */
     jrnlResetForm();
     /* Reload entries */
     await jrnlLoadEntries();
-    jrnlToast('Entry saved','success');
+    jrnlToast(isEditing?'Entry updated':'Entry saved','success');
   }catch(e){
     console.error('[Journal] Save failed:',e);
     jrnlToast('Save failed: '+(e.message||e),'error');
@@ -9247,7 +9329,7 @@ async function jrnlSaveEntry(){
 }
 
 function jrnlResetForm(){
-  ['jrnlTempF','jrnlDewpointF','jrnlWindDir','jrnlWindSpeed','jrnlPressure','jrnlLocationLabel','jrnlSky','jrnlNotes'].forEach(function(id){
+  ['jrnlTempF','jrnlDewpointF','jrnlWindDir','jrnlWindSpeed','jrnlPressure','jrnlLocationLabel','jrnlSky','jrnlNotes','jrnlLatInput','jrnlLonInput','jrnlLocationLookup'].forEach(function(id){
     var el=document.getElementById(id);
     if(el)el.value='';
   });
@@ -9258,11 +9340,346 @@ function jrnlResetForm(){
   jrnlRadarDataUrl=null;
   jrnlCurrentLocation=null;
   jrnlAutoFilled=false;
+  jrnlEditingEntryId=null;
   document.getElementById('jrnlCoords').textContent='No location set';
+  /* Update save button text back to "Save Entry" */
+  var saveBtn=document.getElementById('jrnlSaveBtn');
+  if(saveBtn)saveBtn.innerHTML='<i class="fas fa-floppy-disk"></i> Save Entry';
   /* Reset observed_at to now */
   var now=new Date();
   var offset=now.getTimezoneOffset()*60000;
   document.getElementById('jrnlObservedAt').value=new Date(now.getTime()-offset).toISOString().slice(0,16);
+}
+
+/* ── Manual location entry ── */
+
+/* When user types lat/lon manually, update jrnlCurrentLocation */
+function jrnlOnManualLatLon(){
+  var lat=parseFloat(document.getElementById('jrnlLatInput').value);
+  var lon=parseFloat(document.getElementById('jrnlLonInput').value);
+  if(!isNaN(lat)&&!isNaN(lon)){
+    jrnlCurrentLocation={lat:lat,lon:lon};
+    var el=document.getElementById('jrnlCoords');
+    if(el)el.textContent=lat.toFixed(4)+', '+lon.toFixed(4);
+  }else{
+    jrnlCurrentLocation=null;
+    var el=document.getElementById('jrnlCoords');
+    if(el)el.textContent='No location set';
+  }
+}
+
+/* Lookup coordinates from a place name using NWS points API (which
+   does forward geocoding via lat/lon, but we need the reverse). We'll
+   use the free OpenStreetMap Nominatim API instead. */
+async function jrnlLookupLocation(){
+  var q=document.getElementById('jrnlLocationLookup').value.trim();
+  if(!q){
+    jrnlToast('Enter a place name in the lookup field first','warn');
+    return;
+  }
+  jrnlToast('Looking up "'+q+'"...','info');
+  try{
+    var url='https://nominatim.openstreetmap.org/search?format=json&q='+encodeURIComponent(q)+'&limit=1&countrycodes=us';
+    var resp=await fetch(url,{headers:{'Accept':'application/json'}});
+    if(!resp.ok)throw new Error('HTTP '+resp.status);
+    var data=await resp.json();
+    if(!data||data.length===0){
+      jrnlToast('No match found for "'+q+'"','warn');
+      return;
+    }
+    var lat=parseFloat(data[0].lat);
+    var lon=parseFloat(data[0].lon);
+    document.getElementById('jrnlLatInput').value=lat.toFixed(4);
+    document.getElementById('jrnlLonInput').value=lon.toFixed(4);
+    jrnlOnManualLatLon();
+    /* Also set the location label to the display name */
+    if(data[0].display_name){
+      /* Take just the first few components of the display name for brevity */
+      var parts=data[0].display_name.split(',');
+      var label=parts.slice(0,3).join(', ');
+      document.getElementById('jrnlLocationLabel').value=label;
+    }
+    jrnlToast('Found: '+(data[0].display_name||q).split(',').slice(0,2).join(','),'success');
+  }catch(e){
+    jrnlToast('Lookup failed: '+(e.message||e),'error');
+  }
+}
+
+/* Pick a location by clicking on the mini-map. Switches mini-map into
+   "pick mode" — next click sets the location. */
+function jrnlPickOnMap(){
+  if(!jrnlMiniMap){
+    jrnlToast('Mini-map not ready. Open the journal tab first.','warn');
+    return;
+  }
+  jrnlToast('Click anywhere on the mini-map to set the location','info');
+  /* Add a temporary click handler that captures the next click */
+  jrnlMiniMap.once('click',function(e){
+    var lat=e.latlng.lat,lon=e.latlng.lng;
+    /* Clamp to valid range */
+    if(lat<-90)lat=-90;if(lat>90)lat=90;
+    if(lon<-180)lon=-180;if(lon>180)lon=180;
+    document.getElementById('jrnlLatInput').value=lat.toFixed(4);
+    document.getElementById('jrnlLonInput').value=lon.toFixed(4);
+    jrnlOnManualLatLon();
+    /* Add a temporary marker so the user sees where they clicked */
+    if(jrnlPickMarker){jrnlMiniMap.removeLayer(jrnlPickMarker)}
+    jrnlPickMarker=L.marker([lat,lon]).addTo(jrnlMiniMap);
+    /* Remove the pick marker after 3 seconds */
+    setTimeout(function(){
+      if(jrnlPickMarker){try{jrnlMiniMap.removeLayer(jrnlPickMarker);jrnlPickMarker=null}catch(e){}}
+    },3000);
+    jrnlToast('Location set to '+lat.toFixed(4)+', '+lon.toFixed(4),'success');
+  });
+}
+
+var jrnlPickMarker=null;
+
+/* ── Auth (magic link via Supabase) ── */
+
+var authCurrentUser=null;
+
+/* Check auth state on init and on every auth state change */
+function authInit(){
+  if(!jrnlSupabase)return;
+  /* Check current session */
+  jrnlSupabase.auth.getSession().then(function(result){
+    if(result.data&&result.data.session&&result.data.session.user){
+      authOnSignedIn(result.data.session.user);
+    }else{
+      authOnSignedOut();
+    }
+  }).catch(function(){authOnSignedOut()});
+  /* Listen for auth state changes (e.g. when magic link redirects back) */
+  jrnlSupabase.auth.onAuthStateChange(function(event,session){
+    if(event==='SIGNED_IN'&&session&&session.user){
+      authOnSignedIn(session.user);
+    }else if(event==='SIGNED_OUT'){
+      authOnSignedOut();
+    }
+  });
+}
+
+function authOnSignedIn(user){
+  authCurrentUser=user;
+  var email=user.email||'(unknown)';
+  var signedOut=document.getElementById('authSignedOut');
+  var signedIn=document.getElementById('authSignedIn');
+  var display=document.getElementById('authEmailDisplay');
+  if(signedOut)signedOut.style.display='none';
+  if(signedIn)signedIn.style.display='block';
+  if(display)display.textContent=email;
+  logConsole('Signed in as '+email,'info');
+  /* Reload journal events/entries so owner-only edit/delete buttons show */
+  if(jrnlInited){
+    jrnlLoadEvents();
+    if(jrnlCurrentEventId)jrnlLoadEntries();
+  }
+}
+
+function authOnSignedOut(){
+  authCurrentUser=null;
+  var signedOut=document.getElementById('authSignedOut');
+  var signedIn=document.getElementById('authSignedIn');
+  if(signedOut)signedOut.style.display='block';
+  if(signedIn)signedIn.style.display='none';
+  /* Reload journal entries so edit/delete buttons disappear */
+  if(jrnlInited){
+    jrnlLoadEvents();
+    if(jrnlCurrentEventId)jrnlLoadEntries();
+  }
+}
+
+async function authSendMagicLink(){
+  if(!jrnlSupabase){
+    jrnlToast('Supabase not configured','error');
+    return;
+  }
+  var email=document.getElementById('authEmail').value.trim();
+  if(!email){
+    jrnlToast('Enter your email address','warn');
+    return;
+  }
+  var statusEl=document.getElementById('authStatus');
+  if(statusEl){
+    statusEl.style.display='block';
+    statusEl.style.color='var(--acc)';
+    statusEl.innerHTML='<i class="fas fa-spinner fa-spin"></i> Sending magic link...';
+  }
+  try{
+    /* redirectTo points back to the app so the magic link click opens the app
+       and signs the user in automatically. */
+    var result=await jrnlSupabase.auth.signInWithOtp({
+      email:email,
+      options:{
+        emailRedirectTo:window.location.origin+window.location.pathname
+      }
+    });
+    if(result.error)throw result.error;
+    if(statusEl){
+      statusEl.style.color='#39d353';
+      statusEl.innerHTML='<i class="fas fa-check"></i> Magic link sent! Check your email and click the link to sign in.';
+    }
+    jrnlToast('Magic link sent to '+email,'success');
+  }catch(e){
+    if(statusEl){
+      statusEl.style.color='#ff5a5a';
+      statusEl.innerHTML='<i class="fas fa-triangle-exclamation"></i> '+(e.message||e);
+    }
+    jrnlToast('Failed to send magic link: '+(e.message||e),'error');
+  }
+}
+
+async function authSignOut(){
+  if(!jrnlSupabase)return;
+  try{
+    await jrnlSupabase.auth.signOut();
+    /* authOnSignedOut will be called by the auth state change listener */
+    jrnlToast('Signed out','success');
+  }catch(e){
+    jrnlToast('Sign out failed: '+(e.message||e),'error');
+  }
+}
+
+/* ── Edit + Delete entries (owner-only) ── */
+
+var jrnlEditingEntryId=null;
+
+/* Populate the form with an existing entry's data for editing */
+function jrnlEditEntry(entryId){
+  var entry=jrnlEntries.find(function(e){return e.id===entryId});
+  if(!entry)return;
+  jrnlEditingEntryId=entryId;
+  /* Scroll to the form */
+  var formCard=document.getElementById('jrnlNewEntryCard');
+  if(formCard){
+    formCard.style.display='block';
+    formCard.scrollIntoView({behavior:'smooth',block:'start'});
+  }
+  /* Fill in the form fields */
+  document.getElementById('jrnlTempF').value=entry.temp_f!=null?entry.temp_f:'';
+  document.getElementById('jrnlDewpointF').value=entry.dewpoint_f!=null?entry.dewpoint_f:'';
+  document.getElementById('jrnlWindDir').value=entry.wind_dir!=null?entry.wind_dir:'';
+  document.getElementById('jrnlWindSpeed').value=entry.wind_speed_kt!=null?entry.wind_speed_kt:'';
+  document.getElementById('jrnlPressure').value=entry.pressure_hpa!=null?entry.pressure_hpa:'';
+  document.getElementById('jrnlLocationLabel').value=entry.location_label||'';
+  document.getElementById('jrnlSky').value=entry.sky_conditions||'';
+  document.getElementById('jrnlNotes').value=entry.notes||'';
+  if(entry.lat!=null)document.getElementById('jrnlLatInput').value=entry.lat.toFixed(4);
+  if(entry.lon!=null)document.getElementById('jrnlLonInput').value=entry.lon.toFixed(4);
+  jrnlCurrentLocation=(entry.lat!=null&&entry.lon!=null)?{lat:entry.lat,lon:entry.lon}:null;
+  var coordsEl=document.getElementById('jrnlCoords');
+  if(coordsEl&&entry.lat!=null)coordsEl.textContent=entry.lat.toFixed(4)+', '+entry.lon.toFixed(4);
+  /* Set observed_at (convert ISO to local datetime-local format) */
+  if(entry.observed_at){
+    var dt=new Date(entry.observed_at);
+    var offset=dt.getTimezoneOffset()*60000;
+    document.getElementById('jrnlObservedAt').value=new Date(dt.getTime()-offset).toISOString().slice(0,16);
+  }
+  /* Update save button text */
+  var saveBtn=document.getElementById('jrnlSaveBtn');
+  if(saveBtn)saveBtn.innerHTML='<i class="fas fa-check"></i> Update Entry';
+  jrnlToast('Editing entry — make changes and click Update','info');
+}
+
+async function jrnlDeleteEntry(entryId){
+  if(!jrnlSupabase)return;
+  if(!confirm('Delete this entry? This cannot be undone.'))return;
+  try{
+    var result=await jrnlSupabase
+      .from('journal_entries')
+      .delete()
+      .eq('id',entryId);
+    if(result.error)throw result.error;
+    jrnlToast('Entry deleted','success');
+    await jrnlLoadEntries();
+  }catch(e){
+    jrnlToast('Delete failed: '+(e.message||e),'error');
+  }
+}
+
+async function jrnlDeleteEvent(eventId){
+  if(!jrnlSupabase)return;
+  if(!confirm('Delete this event AND all its entries? This cannot be undone.'))return;
+  try{
+    var result=await jrnlSupabase
+      .from('journal_events')
+      .delete()
+      .eq('id',eventId);
+    if(result.error)throw result.error;
+    if(jrnlCurrentEventId===eventId){
+      jrnlCurrentEventId=null;
+      document.getElementById('jrnlNewEntryCard').style.display='none';
+      jrnlEntries=[];
+      jrnlRenderEntriesList();
+      jrnlRenderGraph();
+      jrnlUpdateMiniMap();
+    }
+    jrnlToast('Event deleted','success');
+    await jrnlLoadEvents();
+  }catch(e){
+    jrnlToast('Delete failed: '+(e.message||e),'error');
+  }
+}
+
+/* ── Screenshot → Journal ──
+   When user clicks "+ Journal" in the screenshot preview modal, this
+   captures the current screenshot data URL, switches to the journal tab,
+   and prompts the user to pick an event (or create one) to attach the
+   screenshot to as a radar_screenshot_url. */
+async function saveScreenshotToJournal(){
+  if(!jrnlSupabase){
+    jrnlToast('Supabase not configured — cannot save to journal','error');
+    return;
+  }
+  if(!authCurrentUser){
+    jrnlToast('Please sign in first (Site Settings → User Account)','warn');
+    /* Open settings tab so user can sign in */
+    switchTab('settings');
+    return;
+  }
+  /* Get the screenshot from the preview modal */
+  var previewImg=document.getElementById('shotPreviewImg');
+  if(!previewImg||!previewImg.src){
+    jrnlToast('No screenshot to save','warn');
+    return;
+  }
+  /* Close the modal */
+  closeShotModal();
+  /* Switch to journal tab + ensure it's initialized */
+  switchTab('journal');
+  if(!jrnlInited){
+    initJournalTab();
+  }
+  /* Wait a moment for the tab to render */
+  await new Promise(function(r){setTimeout(r,300)});
+  /* If no event is selected, prompt user to create/select one */
+  if(!jrnlCurrentEventId){
+    jrnlToast('Select or create an event first, then click "+ Journal" again','info');
+    jrnlShowNewEventForm();
+    /* Stash the screenshot data URL so we can use it after event creation */
+    jrnlRadarDataUrl=previewImg.src;
+    /* Show preview in the form */
+    var prev=document.getElementById('jrnlRadarPreview');
+    var img=document.getElementById('jrnlRadarImg');
+    if(prev&&img){
+      img.src=previewImg.src;
+      prev.style.display='block';
+    }
+    return;
+  }
+  /* Stash the screenshot in the form preview so it'll be saved with the next entry */
+  jrnlRadarDataUrl=previewImg.src;
+  var prev=document.getElementById('jrnlRadarPreview');
+  var img=document.getElementById('jrnlRadarImg');
+  if(prev&&img){
+    img.src=previewImg.src;
+    prev.style.display='block';
+  }
+  jrnlToast('Screenshot attached! Fill in any optional notes and click Save Entry to add it to the journal.','success');
+  /* Scroll to the entry form */
+  var formCard=document.getElementById('jrnlNewEntryCard');
+  if(formCard)formCard.scrollIntoView({behavior:'smooth',block:'start'});
 }
 
 /* ── Graph rendering ── */
