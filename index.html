@@ -2032,10 +2032,21 @@ body.capturing .hamburger-menu{display:none!important}
         <div class="wf-feed-body" style="padding:14px">
           <div id="authSignedOut">
             <div style="font-size:11px;color:var(--t2);margin-bottom:10px;line-height:1.5">
-              Sign in to create, edit, and delete journal entries. Magic-link auth — no password required.
+              Sign in to create, edit, and delete journal entries.
             </div>
+            <!-- Facebook sign-in (primary — for the Facebook community) -->
+            <button onclick="authSignInWithFacebook()" style="background:#1877f2;color:#fff;border:none;padding:10px 16px;border-radius:5px;cursor:pointer;font-size:13px;font-weight:600;font-family:inherit;display:flex;align-items:center;justify-content:center;gap:8px;width:100%;margin-bottom:8px;transition:background .15s">
+              <i class="fab fa-facebook" style="font-size:16px"></i> Continue with Facebook
+            </button>
+            <!-- Divider -->
+            <div style="display:flex;align-items:center;gap:10px;margin:12px 0">
+              <div style="flex:1;height:1px;background:var(--bdr)"></div>
+              <span style="font-size:9px;color:var(--t3);text-transform:uppercase;letter-spacing:.05em">or</span>
+              <div style="flex:1;height:1px;background:var(--bdr)"></div>
+            </div>
+            <!-- Magic link (secondary) -->
             <input type="email" id="authEmail" placeholder="your@email.com" class="jrnl-input" style="margin-bottom:8px">
-            <button onclick="authSendMagicLink()" style="background:var(--acc);color:#000;border:none;padding:8px 14px;border-radius:5px;cursor:pointer;font-size:11px;font-weight:600;font-family:inherit;display:inline-flex;align-items:center;gap:5px">
+            <button onclick="authSendMagicLink()" style="background:var(--bg2);color:var(--t1);border:1px solid var(--bdr);padding:8px 14px;border-radius:5px;cursor:pointer;font-size:11px;font-weight:600;font-family:inherit;display:inline-flex;align-items:center;gap:5px">
               <i class="fas fa-paper-plane"></i> Send Magic Link
             </button>
             <div id="authStatus" style="font-size:10px;color:var(--t3);margin-top:8px;display:none;padding:8px 10px;background:var(--bg2);border:1px solid var(--bdr);border-radius:4px"></div>
@@ -9516,6 +9527,33 @@ function authOnSignedOut(){
   if(jrnlInited){
     jrnlLoadEvents();
     if(jrnlCurrentEventId)jrnlLoadEntries();
+  }
+}
+
+/* Sign in with Facebook OAuth. Opens the Facebook login flow in a popup
+   or redirect. Supabase handles the OAuth callback automatically. */
+async function authSignInWithFacebook(){
+  if(!jrnlSupabase){
+    jrnlToast('Supabase not configured','error');
+    return;
+  }
+  jrnlToast('Redirecting to Facebook...','info');
+  try{
+    /* signInWithOAuth opens the Facebook login page. By default it uses
+       a redirect (full-page navigation to Facebook, then back to the app
+       after login). We set redirectTo so the user comes back to the app. */
+    var result=await jrnlSupabase.auth.signInWithOAuth({
+      provider:'facebook',
+      options:{
+        redirectTo:window.location.origin+window.location.pathname
+      }
+    });
+    if(result.error)throw result.error;
+    /* If we get here, the redirect has started. The page will navigate
+       away to Facebook, so no toast needed. */
+  }catch(e){
+    console.error('[Auth] Facebook sign-in failed:',e);
+    jrnlToast('Facebook sign-in failed: '+(e.message||e)+'. Make sure Facebook is enabled in Supabase Dashboard → Authentication → Providers.','error');
   }
 }
 
