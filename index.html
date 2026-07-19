@@ -8115,44 +8115,391 @@ function sndDrawWindBarb(ctx,x,y,dir,spd){
 }
 
 /* ── Screenshot ── */
-function sndScreenshot(){
-  var c=document.getElementById('sndCanvas');
-  if(!c||!sndCurrentData){
+/* ── Sounding screenshot (collage layout) ──
+   Builds a composite image with:
+   - LEFT panel: station info + derived parameters (thermo + wind)
+   - TOP-RIGHT: skew-T chart (from the on-page canvas)
+   - BOTTOM-RIGHT: hodograph (from the on-page canvas)
+   - Footer: Skywarn branding bar with logo + site name + timestamp
+   Then opens the screenshot preview modal so the user can download,
+   share, or attach to journal — same UX as the alert screenshots. */
+async function sndScreenshot(){
+  var sndCanvas=document.getElementById('sndCanvas');
+  var hodoCanvas=document.getElementById('sndHodoCanvas');
+  if(!sndCanvas||!sndCurrentData){
     sndShowError('Fetch a sounding first.');
     setTimeout(function(){sndShowError('')},3000);
     return;
   }
-  /* Build a composite image: station info header + skew-T canvas + params panel */
-  var composite=document.createElement('canvas');
-  composite.width=c.width;
-  composite.height=c.height+60;
-  var ctx=composite.getContext('2d');
-  /* Top banner */
-  ctx.fillStyle='#0a0a0a';
-  ctx.fillRect(0,0,composite.width,60);
-  ctx.fillStyle='#ff7300';
-  ctx.font='bold 16px Inter,sans-serif';
-  ctx.textAlign='left';
-  ctx.fillText('SKYWARN \u2014 '+(sndCurrentData.station||'')+' \u2014 '+(sndCurrentStation?sndCurrentStation.name:''),12,22);
-  ctx.fillStyle='#888';
-  ctx.font='11px Inter,sans-serif';
-  ctx.fillText('Valid: '+(sndCurrentData.valid||'').replace('T',' ').replace('Z',' Z'),12,42);
-  ctx.fillStyle='#666';
-  ctx.font='10px Inter,sans-serif';
-  ctx.textAlign='right';
-  ctx.fillText('Source: Iowa Environmental Mesonet \u00B7 '+new Date().toISOString().slice(0,16).replace('T',' ')+'Z',composite.width-12,42);
-  /* Copy skew-T canvas below banner */
-  ctx.drawImage(c,0,60);
-  /* Trigger download + show in modal */
-  composite.toBlob(function(blob){
-    if(!blob)return;
-    var url=URL.createObjectURL(blob);
-    var a=document.createElement('a');
-    a.href=url;
-    a.download='skywarn-sounding-'+sndCurrentData.station+'-'+(sndCurrentData.valid||'').replace(/[:T]/g,'-').replace('Z','')+'.png';
-    document.body.appendChild(a);a.click();document.body.removeChild(a);
-    setTimeout(function(){URL.revokeObjectURL(url)},1000);
-  },'image/png');
+  /* Set the current screenshot type for the share text */
+  currentScreenshotType='Sounding: '+(sndCurrentData.station||'')+(sndCurrentStation?' — '+sndCurrentStation.name:'');
+  /* Clear any alert-specific screenshot metadata (this is a sounding, not an alert) */
+  currentScreenshotAlertCoords=null;
+  currentScreenshotAlertMeta=null;
+
+  /* Show a brief loading toast */
+  jrnlToast('Building sounding collage...','info');
+
+  try{
+    /* Preload the logo as a data URL for the footer watermark */
+    await preloadLogoDataUrl();
+
+    /* Compute derived parameters for the data panel */
+    var params=sndComputeParams(sndCurrentData);
+
+    /* ── Layout dimensions ──
+       Composite canvas is sized for a clean landscape layout:
+       - Left panel: 320px wide (data + station info)
+       - Right area: 720px wide (skew-T on top, hodograph on bottom)
+       - Header: 50px tall (station name + valid time)
+       - Footer: 96px tall (branding bar with logo)
+       - Gaps: 10px between panels
+       Total: 320 + 10 + 720 = 1050 wide
+              50 (header) + 640 (skew-T) + 10 + 320 (hodograph) + 96 (footer) = 1116 tall
+       (Hodograph height tuned to match the skew-T width / 2.25 for a nice aspect) */
+    var LEFT_W=340;
+    var RIGHT_W=720;
+    var GAP=10;
+    var HEADER_H=50;
+    var FOOTER_H=96;
+    var SKEW_T_H=640;
+    var HODO_W=720;
+    var HODO_H=320;
+    var PAD=14;
+
+    var totalW=LEFT_W+GAP+RIGHT_W+PAD*2;
+    var totalH=HEADER_H+SKEW_T_H+GAP+HODO_H+FOOTER_H+PAD*2;
+
+    var composite=document.createElement('canvas');
+    composite.width=totalW;
+    composite.height=totalH;
+    var ctx=composite.getContext('2d');
+
+    /* ── Background ── */
+    ctx.fillStyle='#0a0a0a';
+    ctx.fillRect(0,0,totalW,totalH);
+
+    /* ── Header bar (station info) ── */
+    var headerY=PAD;
+    var headerH=HEADER_H;
+    /* Orange accent line at top of header */
+    ctx.fillStyle='#ff7300';
+    ctx.fillRect(PAD,headerY,totalW-PAD*2,2);
+    /* Station name (left-aligned) */
+    ctx.fillStyle='#ff7300';
+    ctx.font='bold 18px Inter,sans-serif';
+    ctx.textAlign='left';
+    ctx.textBaseline='middle';
+    var stationTitle=(sndCurrentData.station||'')+(sndCurrentStation?' \u2014 '+sndCurrentStation.name:'');
+    ctx.fillText(stationTitle,PAD+4,headerY+18);
+    /* Valid time (below station name) */
+    ctx.fillStyle='#888';
+    ctx.font='12px Inter,sans-serif';
+    if(sndCurrentData.valid){
+      var dt=sndCurrentData.valid.replace('T',' ').replace('Z',' Z');
+      ctx.fillText('Valid: '+dt,PAD+4,headerY+38);
+    }
+    /* Source attribution (right-aligned) */
+    ctx.fillStyle='#666';
+    ctx.font='10px Inter,sans-serif';
+    ctx.textAlign='right';
+    ctx.fillText('Source: Iowa Environmental Mesonet',totalW-PAD-4,headerY+18);
+    ctx.fillText('Generated: '+new Date().toLocaleString('en-US',{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit',hour12:true}),totalW-PAD-4,headerY+38);
+
+    /* ── Left panel: station info + derived parameters ── */
+    var leftX=PAD;
+    var leftY=headerY+headerH+GAP;
+    var leftW=LEFT_W;
+    var leftH=SKEW_T_H+GAP+HODO_H;  /* same height as the right column */
+
+    /* Panel background */
+    ctx.fillStyle='#141414';
+    ctx.fillRect(leftX,leftY,leftW,leftH);
+    ctx.strokeStyle='#3a3a3a';
+    ctx.lineWidth=1;
+    ctx.strokeRect(leftX,leftY,leftW,leftH);
+
+    /* Build the parameter rows */
+    function fmt(v,u){return v==null?'—':(Math.round(v*10)/10)+(u?' '+u:'')}
+    function capeColor(v){return v>=2500?'#ff5a5a':v>=1500?'#ffb340':v>=500?'#39d353':'#f0f0f0'}
+    function liColor(v){return v==null?'#f0f0f0':v<=-6?'#ff5a5a':v<=-4?'#ffb340':v<=0?'#39d353':'#f0f0f0'}
+    function shearColor(v){return v==null?'#f0f0f0':v>=40?'#ff5a5a':v>=25?'#ffb340':'#f0f0f0'}
+    function srhColor(v){return v==null?'#f0f0f0':v>=200?'#ff5a5a':v>=100?'#ffb340':'#f0f0f0'}
+
+    /* Section helper: draws a section title + a list of (label, value) rows */
+    function drawSection(title,rows,startY){
+      var y=startY;
+      /* Section title */
+      ctx.fillStyle='#ff7300';
+      ctx.font='bold 11px Inter,sans-serif';
+      ctx.textAlign='left';
+      ctx.textBaseline='top';
+      ctx.fillText(title,leftX+12,y);
+      y+=16;
+      /* Divider line under title */
+      ctx.strokeStyle='#3a3a3a';
+      ctx.lineWidth=0.7;
+      ctx.beginPath();
+      ctx.moveTo(leftX+12,y);
+      ctx.lineTo(leftX+leftW-12,y);
+      ctx.stroke();
+      y+=6;
+      /* Rows */
+      rows.forEach(function(row){
+        /* row = [label, value, color] */
+        ctx.fillStyle='#a0a0a0';
+        ctx.font='11px Inter,sans-serif';
+        ctx.textAlign='left';
+        ctx.fillText(row[0],leftX+12,y);
+        ctx.fillStyle=row[2]||'#f0f0f0';
+        ctx.font='bold 11px Inter,sans-serif';
+        ctx.textAlign='right';
+        ctx.fillText(row[1],leftX+leftW-12,y);
+        y+=16;
+      });
+      return y+8;  /* gap after section */
+    }
+
+    var yPos=leftY+12;
+    if(params){
+      /* Surface section */
+      yPos=drawSection('SURFACE',[
+        ['Pressure',fmt(params.p_sfc,'hPa')],
+        ['Temperature',fmt(params.T_sfc,'\u00B0F')],
+        ['Dewpoint',fmt(params.Td_sfc,'\u00B0F')]
+      ],yPos);
+
+      /* Parcel levels */
+      var parcelRows=[];
+      if(params.LCL_p!=null)parcelRows.push(['LCL',params.LCL_p+' hPa']);
+      if(params.LCL_h!=null)parcelRows.push(['LCL Height',params.LCL_h+' m']);
+      if(params.LFC_p!=null)parcelRows.push(['LFC',params.LFC_p+' hPa']);
+      if(params.EL_p!=null)parcelRows.push(['EL',params.EL_p+' hPa']);
+      if(parcelRows.length>0){
+        yPos=drawSection('PARCEL LEVELS',parcelRows,yPos);
+      }
+
+      /* Instability */
+      yPos=drawSection('INSTABILITY',[
+        ['SBCAPE',fmt(params.SBCAPE,'J/kg'),capeColor(params.SBCAPE)],
+        ['SBCIN',fmt(params.SBCIN,'J/kg')],
+        ['Lifted Index',fmt(params.LI),liColor(params.LI)],
+        ['Showalter',fmt(params.SH)],
+        ['K Index',fmt(params.K)],
+        ['Total Totals',fmt(params.TT)],
+        ['Precip Water',fmt(params.PW,'mm')]
+      ],yPos);
+
+      /* Bulk shear */
+      yPos=drawSection('BULK SHEAR',[
+        ['0-1 km',fmt(params.shear_01,'kt'),shearColor(params.shear_01)],
+        ['0-3 km',fmt(params.shear_03,'kt'),shearColor(params.shear_03)],
+        ['0-6 km',fmt(params.shear_06,'kt'),shearColor(params.shear_06)]
+      ],yPos);
+
+      /* Storm-relative helicity */
+      var srhRows=[
+        ['SRH 0-1 km',fmt(params.SRH_01,'m\u00B2/s\u00B2'),srhColor(params.SRH_01)],
+        ['SRH 0-3 km',fmt(params.SRH_03,'m\u00B2/s\u00B2'),srhColor(params.SRH_03)]
+      ];
+      if(params.stormU!=null&&params.stormV!=null){
+        srhRows.push(['Storm Motion',params.stormU+'/'+params.stormV+' kt','#00d4ff']);
+      }
+      yPos=drawSection('STORM-RELATIVE HELICITY',srhRows,yPos);
+
+      /* Key level winds */
+      var keyLevels=['1000','925','850','700','500','300','250'];
+      var keyRows=[];
+      keyLevels.forEach(function(p){
+        var T=params['T_'+p],Td=params['Td_'+p],dir=params['dir_'+p],spd=params['spd_'+p];
+        if(T==null&&dir==null)return;
+        var val='';
+        if(T!=null)val+=T.toFixed(1)+'/'+(Td==null?'-':Td.toFixed(1));
+        if(dir!=null&&spd!=null)val+=(val?' \u00B7 ':'')+Math.round(dir)+'\u00B0@'+Math.round(spd)+'kt';
+        keyRows.push([p+' hPa',val]);
+      });
+      if(keyRows.length>0){
+        yPos=drawSection('KEY LEVELS (T/Td/Wind)',keyRows,yPos);
+      }
+    }else{
+      ctx.fillStyle='#888';
+      ctx.font='12px Inter,sans-serif';
+      ctx.textAlign='center';
+      ctx.fillText('No parameters available',leftX+leftW/2,leftY+leftH/2);
+    }
+
+    /* ── Right-top: skew-T chart ── */
+    var skewX=leftX+leftW+GAP;
+    var skewY=leftY;
+    var skewW=RIGHT_W;
+    var skewH=SKEW_T_H;
+    /* Dark background for the skew-T area */
+    ctx.fillStyle='#0e0e0e';
+    ctx.fillRect(skewX,skewY,skewW,skewH);
+    /* Draw the skew-T canvas, scaled to fit the area.
+       The source canvas is 780x640. We scale it to fit skewW x skewH
+       while preserving aspect ratio (centered). */
+    var srcW=sndCanvas.width;
+    var srcH=sndCanvas.height;
+    var srcAspect=srcW/srcH;
+    var dstAspect=skewW/skewH;
+    var drawW,drawH,drawX,drawY;
+    if(srcAspect>dstAspect){
+      /* Source is wider — fit to width */
+      drawW=skewW;
+      drawH=skewW/srcAspect;
+      drawX=skewX;
+      drawY=skewY+(skewH-drawH)/2;
+    }else{
+      /* Source is taller — fit to height */
+      drawH=skewH;
+      drawW=skewH*srcAspect;
+      drawX=skewX+(skewW-drawW)/2;
+      drawY=skewY;
+    }
+    ctx.drawImage(sndCanvas,drawX,drawY,drawW,drawH);
+    /* Border around skew-T */
+    ctx.strokeStyle='#3a3a3a';
+    ctx.lineWidth=1;
+    ctx.strokeRect(skewX,skewY,skewW,skewH);
+
+    /* ── Right-bottom: hodograph ── */
+    var hodoX=skewX;
+    var hodoY=skewY+skewH+GAP;
+    var hodoW=HODO_W;
+    var hodoH2=HODO_H;
+    /* Dark background */
+    ctx.fillStyle='#0e0e0e';
+    ctx.fillRect(hodoX,hodoY,hodoW,hodoH2);
+    /* Draw the hodograph canvas, scaled to fit.
+       The source hodograph canvas is 320x320 (square). We want it
+       centered horizontally in the 720px-wide area. */
+    if(hodoCanvas){
+      var hSrcW=hodoCanvas.width;
+      var hSrcH=hodoCanvas.height;
+      var hAspect=hSrcW/hSrcH;
+      var hDrawH=hodoH2;  /* fill height */
+      var hDrawW=hodoH2*hAspect;
+      /* If the hodograph is wider than the area, scale by width instead */
+      if(hDrawW>hodoW){
+        hDrawW=hodoW;
+        hDrawH=hodoW/hAspect;
+      }
+      var hDrawX=hodoX+(hodoW-hDrawW)/2;  /* center horizontally */
+      var hDrawY=hodoY+(hodoH2-hDrawH)/2;  /* center vertically */
+      ctx.drawImage(hodoCanvas,hDrawX,hDrawY,hDrawW,hDrawH);
+    }else{
+      ctx.fillStyle='#666';
+      ctx.font='12px Inter,sans-serif';
+      ctx.textAlign='center';
+      ctx.fillText('Hodograph not available',hodoX+hodoW/2,hodoY+hodoH2/2);
+    }
+    /* Border around hodograph */
+    ctx.strokeStyle='#3a3a3a';
+    ctx.lineWidth=1;
+    ctx.strokeRect(hodoX,hodoY,hodoW,hodoH2);
+
+    /* ── Footer: Skywarn branding bar (reuses the alert screenshot footer logic) ── */
+    var logoSize=64;
+    var padX=16,padY=12;
+    var siteName='Skywarn Storm Spotters & Chasers United States';
+    var stampStr=new Date().toLocaleString('en-US',{
+      weekday:'short',year:'numeric',month:'short',day:'numeric',
+      hour:'2-digit',minute:'2-digit',hour12:true
+    });
+    /* Measure text widths */
+    var titleFontPx=20;
+    var stampFontPx=13;
+    ctx.font='bold '+titleFontPx+'px Inter,sans-serif';
+    var nameW=ctx.measureText(siteName).width;
+    ctx.font=stampFontPx+'px Inter,sans-serif';
+    var stampW=ctx.measureText(stampStr).width;
+    var textW=Math.max(nameW,stampW);
+    var footerGap=16;
+    var contentW=logoSize+footerGap+textW;
+    var availW=totalW-padX*2;
+    /* Responsive scaling if content too wide */
+    var fitScale=1;
+    if(contentW>availW){
+      fitScale=Math.max(0.5,availW/contentW);
+      logoSize=Math.floor(logoSize*fitScale);
+      titleFontPx=Math.max(11,Math.floor(titleFontPx*fitScale));
+      stampFontPx=Math.max(9,Math.floor(stampFontPx*fitScale));
+      ctx.font='bold '+titleFontPx+'px Inter,sans-serif';
+      nameW=ctx.measureText(siteName).width;
+      ctx.font=stampFontPx+'px Inter,sans-serif';
+      stampW=ctx.measureText(stampStr).width;
+      textW=Math.max(nameW,stampW);
+      contentW=logoSize+footerGap+textW;
+    }
+    var barH=logoSize+padY*2;
+    var barY=totalH-barH;
+    /* Full-width semi-transparent black bar */
+    ctx.fillStyle='rgba(0,0,0,.85)';
+    ctx.fillRect(0,barY,totalW,barH);
+    /* Orange top border line */
+    ctx.fillStyle='#ff7300';
+    ctx.fillRect(0,barY-2,totalW,2);
+    /* Center the logo+text group */
+    var groupX=Math.floor((totalW-contentW)/2);
+    var logoX=groupX;
+    var logoY=barY+padY;
+    /* Draw the logo */
+    if(LOGO_DATA_URL){
+      var logoImg=new Image();
+      await new Promise(function(resolve){
+        logoImg.onload=function(){
+          try{ctx.drawImage(logoImg,logoX,logoY,logoSize,logoSize)}catch(e){}
+          resolve();
+        };
+        logoImg.onerror=function(){resolve()};
+        logoImg.src=LOGO_DATA_URL;
+      });
+    }else{
+      ctx.fillStyle='#ff7300';
+      ctx.beginPath();
+      ctx.arc(logoX+logoSize/2,logoY+logoSize/2,logoSize/2,0,2*Math.PI);
+      ctx.fill();
+    }
+    /* Site name */
+    var textX=logoX+logoSize+footerGap;
+    ctx.fillStyle='#ff7300';
+    ctx.font='bold '+titleFontPx+'px Inter,sans-serif';
+    ctx.textBaseline='middle';
+    ctx.textAlign='left';
+    var titleY=barY+padY+logoSize/2-13*fitScale;
+    var stampY=barY+padY+logoSize/2+15*fitScale;
+    ctx.fillText(siteName,textX,titleY);
+    /* Timestamp */
+    ctx.fillStyle='#a0a0a0';
+    ctx.font=stampFontPx+'px Inter,sans-serif';
+    ctx.fillText(stampStr,textX,stampY);
+
+    /* ── Convert to PNG + open preview modal ── */
+    var dataUrl=composite.toDataURL('image/png');
+
+    /* Show in the screenshot preview modal (reuses the alert screenshot modal) */
+    var previewImg=document.getElementById('shotPreviewImg');
+    var downloadLink=document.getElementById('shotDownloadLink');
+    var infoEl=document.getElementById('shotInfo');
+    if(previewImg)previewImg.src=dataUrl;
+    if(downloadLink){
+      var filename='skywarn-sounding-'+(sndCurrentData.station||'unknown')+'-'+(sndCurrentData.valid||'').replace(/[:T]/g,'-').replace('Z','')+'.png';
+      downloadLink.download=filename;
+      downloadLink.href=dataUrl;
+    }
+    if(infoEl){
+      infoEl.textContent=(sndCurrentData.station||'')+' \u2014 '+(sndCurrentStation?sndCurrentStation.name:'')+' \u00B7 '+(sndCurrentData.valid||'').replace('T',' ').replace('Z',' Z');
+    }
+    var modal=document.getElementById('shotModal');
+    if(modal)modal.classList.add('visible');
+
+    jrnlToast('Sounding screenshot ready','success');
+  }catch(e){
+    console.error('[SndScreenshot] Failed:',e);
+    sndShowError('Screenshot failed: '+(e.message||e));
+    setTimeout(function(){sndShowError('')},5000);
+  }
 }
 
 /* ── Sounding station pin layer on the polygon map ──
