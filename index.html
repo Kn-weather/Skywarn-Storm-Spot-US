@@ -8951,11 +8951,11 @@ function sndRenderSkewTTo(c,data,stationOverride){
   if(!c||!data)return;
   var ctx=c.getContext('2d');
   var W=c.width,H=c.height;
-  /* Increased top margin from 30 to 50 so the title + valid time + isotherm
-     labels all fit cleanly above the plot border without overlapping each
-     other or the plot area. Bottom margin bumped to 55 to give the x-axis
-     label a bit more breathing room. */
-  var ml=55,mr=80,mt=50,mb=55;
+  /* Increased right margin from 80 to 115 to fit:
+     - Right-side pressure labels (mirrors left side)
+     - Height scale (km AGL)
+     - Wind barbs (moved further right) */
+  var ml=55,mr=115,mt=50,mb=55;
   var pw=W-ml-mr,ph=H-mt-mb;
   var pMin=100,pMax=1050;
   function pToY(p){
@@ -9012,9 +9012,21 @@ function sndRenderSkewTTo(c,data,stationOverride){
   ctx.strokeStyle='#2a2a2a';
   ctx.lineWidth=0.7;
   for(var T=tMin;T<=tMax;T+=10){
+    if(T===0)continue;  /* Draw 0°C separately with highlight */
     var xBottom=tToX(T,pMax),xTop=tToX(T,pMin);
     ctx.beginPath();ctx.moveTo(xBottom,mt+ph);ctx.lineTo(xTop,mt);ctx.stroke();
   }
+  /* 0°C isotherm highlight — thicker, brighter, and slightly transparent
+     so it stands out as the freezing level reference. Drawn after the
+     other isotherms so it's on top. */
+  ctx.strokeStyle='rgba(255,255,255,.45)';
+  ctx.lineWidth=1.5;
+  ctx.setLineDash([6,3]);
+  ctx.beginPath();
+  ctx.moveTo(tToX(0,pMax),mt+ph);
+  ctx.lineTo(tToX(0,pMin),mt);
+  ctx.stroke();
+  ctx.setLineDash([]);
 
   /* Dry adiabats (clipped) */
   ctx.strokeStyle='#3d2c2c';
@@ -9074,19 +9086,36 @@ function sndRenderSkewTTo(c,data,stationOverride){
   });
   ctx.setLineDash([]);
 
-  /* Temperature trace (clipped) */
-  ctx.strokeStyle='#ff5a5a';
-  ctx.lineWidth=2;
-  ctx.beginPath();
-  var started=false;
+  /* Temperature trace (clipped) — color-coded by altitude:
+     - Below 700 hPa (low-level): bright red #ff5a5a
+     - 700-500 hPa (mid-level): orange #ffb340
+     - 500-300 hPa (high-level): yellow #ffd60a
+     - Above 300 hPa (upper-level): cyan #00d4ff
+     Each segment between consecutive levels is drawn separately with
+     the color based on the segment's average pressure. */
+  ctx.lineWidth=2.5;
+  function tempTraceColor(p){
+    if(p>700)return '#ff5a5a';   /* low-level: red */
+    if(p>500)return '#ffb340';   /* mid-level: orange */
+    if(p>300)return '#ffd60a';   /* high-level: yellow */
+    return '#00d4ff';            /* upper-level: cyan */
+  }
+  /* Collect valid temp points first */
+  var tempPts=[];
   data.levels.forEach(function(l){
     if(l.T==null)return;
     if(l.p<pMin||l.p>pMax)return;
-    var x=tToX(l.T,l.p),y=pToY(l.p);
-    if(!started){ctx.moveTo(x,y);started=true}
-    else ctx.lineTo(x,y);
+    tempPts.push({x:tToX(l.T,l.p),y:pToY(l.p),p:l.p});
   });
-  ctx.stroke();
+  /* Draw each segment with its altitude-appropriate color */
+  for(var i=1;i<tempPts.length;i++){
+    var avgP=(tempPts[i-1].p+tempPts[i].p)/2;
+    ctx.strokeStyle=tempTraceColor(avgP);
+    ctx.beginPath();
+    ctx.moveTo(tempPts[i-1].x,tempPts[i-1].y);
+    ctx.lineTo(tempPts[i].x,tempPts[i].y);
+    ctx.stroke();
+  }
 
   /* Dewpoint trace (clipped) */
   ctx.strokeStyle='#5aff7a';
@@ -9102,13 +9131,16 @@ function sndRenderSkewTTo(c,data,stationOverride){
   });
   ctx.stroke();
 
-  /* Parcel ascent + LCL (clipped) */
+  /* Parcel ascent + LCL + LFC + EL (clipped) */
   var sfc=sndFindSfc(data.levels);
+  /* Compute LFC and EL for labeling (outside clip) */
+  var parcelLFC=null,parcelEL=null;
   if(sfc){
     var Td0=sndInterpLevel(data.levels,'p','Td',sfc.p);
     if(Td0!=null){
       var lcl=sndLiftDryToLCL(sfc.p,sfc.T,Td0);
       if(lcl){
+        /* Draw dry ascent (sfc to LCL) */
         ctx.strokeStyle='#ffd60a';
         ctx.setLineDash([4,3]);
         ctx.lineWidth=1.5;
@@ -9117,10 +9149,15 @@ function sndRenderSkewTTo(c,data,stationOverride){
         ctx.lineTo(tToX(lcl.T_lcl,lcl.p_lcl),pToY(lcl.p_lcl));
         ctx.stroke();
         ctx.setLineDash([]);
+        /* Compute LFC and EL for labeling */
+        parcelLFC=sndFindLFC(data.levels,lcl);
+        parcelEL=sndFindEL(data.levels,parcelLFC);
+        /* Draw moist ascent (LCL upward) */
         var parcel_T_K=lcl.T_lcl+273.15;
         var p=lcl.p_lcl;
         ctx.strokeStyle='#ffd60a';
         ctx.setLineDash([4,3]);
+        ctx.lineWidth=1.5;
         ctx.beginPath();
         ctx.moveTo(tToX(lcl.T_lcl,lcl.p_lcl),pToY(lcl.p_lcl));
         while(p>100){
@@ -9131,10 +9168,25 @@ function sndRenderSkewTTo(c,data,stationOverride){
         }
         ctx.stroke();
         ctx.setLineDash([]);
+        /* Draw LCL dot */
         ctx.fillStyle='#ffd60a';
         ctx.beginPath();
         ctx.arc(tToX(lcl.T_lcl,lcl.p_lcl),pToY(lcl.p_lcl),4,0,2*Math.PI);
         ctx.fill();
+        /* Draw LFC marker (green dot + label inside clip) */
+        if(parcelLFC){
+          ctx.fillStyle='#39d353';
+          ctx.beginPath();
+          ctx.arc(tToX(parcelLFC.T,parcelLFC.p),pToY(parcelLFC.p),4,0,2*Math.PI);
+          ctx.fill();
+        }
+        /* Draw EL marker (red dot) */
+        if(parcelEL){
+          ctx.fillStyle='#ff5a5a';
+          ctx.beginPath();
+          ctx.arc(tToX(parcelEL.T,parcelEL.p),pToY(parcelEL.p),4,0,2*Math.PI);
+          ctx.fill();
+        }
       }
     }
   }
@@ -9159,20 +9211,68 @@ function sndRenderSkewTTo(c,data,stationOverride){
     ctx.fillText(p+'',ml-6,y);
   });
 
+  /* Right-side pressure labels (mirror of left, inside right margin) */
+  ctx.fillStyle='#666';
+  ctx.font='10px Inter,monospace';
+  ctx.textAlign='left';
+  ctx.textBaseline='middle';
+  isobarLevels.forEach(function(p){
+    if(p<pMin||p>pMax)return;
+    var y=pToY(p);
+    ctx.fillText(p+'',ml+pw+5,y);
+  });
+
+  /* Height scale (km AGL) — second column in the right margin.
+     Uses the actual sounding's height data (interpolated at each
+     standard pressure level) minus the surface height to get AGL.
+     Falls back to standard atmosphere if height data is missing. */
+  ctx.fillStyle='#888';
+  ctx.font='9px Inter,monospace';
+  ctx.textAlign='left';
+  ctx.textBaseline='bottom';
+  ctx.fillText('km',ml+pw+32,mt-3);  /* Header label */
+  ctx.textBaseline='middle';
+  ctx.fillStyle='#888';
+  var sfcH=0;
+  if(sfc&&sfc.h!=null)sfcH=sfc.h;
+  isobarLevels.forEach(function(p){
+    if(p<pMin||p>pMax)return;
+    var y=pToY(p);
+    var h=sndInterpLevel(data.levels,'p','h',p);
+    if(h!=null){
+      var kmAGL=(h-sfcH)/1000;
+      ctx.fillText(kmAGL.toFixed(1),ml+pw+32,y);
+    }else{
+      /* Fallback: standard atmosphere formula */
+      var stdH=44330*(1-Math.pow(p/1013.25,0.1903));
+      var kmAGL=(stdH-sfcH)/1000;
+      if(kmAGL>=0)ctx.fillText(kmAGL.toFixed(1),ml+pw+32,y);
+    }
+  });
+
   /* Isotherm labels (top, outside plot) — placed at y=mt-6 which is now
      comfortably below the title (y=16) and valid time (y=30) thanks to
-     the increased top margin. */
+     the increased top margin. 0°C label is highlighted to match the
+     isotherm highlight inside the plot. */
   ctx.textAlign='center';
   ctx.textBaseline='alphabetic';
   for(var T=tMin;T<=tMax;T+=10){
     var xTop=tToX(T,pMin);
-    ctx.fillStyle=T===0?'#888':'#666';
+    if(T===0){
+      /* Highlight 0°C label */
+      ctx.fillStyle='#fff';
+      ctx.font='bold 11px Inter,monospace';
+    }else{
+      ctx.fillStyle='#666';
+      ctx.font='10px Inter,monospace';
+    }
     ctx.fillText(T+'\u00B0',xTop,mt-6);
   }
 
-  /* Wind barbs (right side, outside plot) */
+  /* Wind barbs (right side, moved further right to make room for
+     pressure labels + height scale) */
   var barbLevels=[1000,925,850,700,500,400,300,250,200,150,100];
-  var barbX=ml+pw+18;
+  var barbX=ml+pw+62;
   ctx.strokeStyle='#bbb';
   ctx.fillStyle='#bbb';
   ctx.lineWidth=1;
@@ -9185,17 +9285,30 @@ function sndRenderSkewTTo(c,data,stationOverride){
     sndDrawWindBarb(ctx,barbX,y,dir,spd);
   });
 
-  /* LCL label (outside plot, drawn after restore so text isn't clipped) */
+  /* LCL / LFC / EL labels (outside plot, drawn after restore so text
+     isn't clipped). Each label is placed next to its marker dot, with
+     a small offset so it doesn't overlap the curve. */
   if(sfc){
     var Td0b=sndInterpLevel(data.levels,'p','Td',sfc.p);
     if(Td0b!=null){
       var lcl2=sndLiftDryToLCL(sfc.p,sfc.T,Td0b);
       if(lcl2){
+        /* LCL label (yellow) */
         ctx.fillStyle='#ffd60a';
         ctx.font='bold 9px Inter,monospace';
         ctx.textAlign='left';
         ctx.textBaseline='middle';
         ctx.fillText('LCL',tToX(lcl2.T_lcl,lcl2.p_lcl)+6,pToY(lcl2.p_lcl)-4);
+        /* LFC label (green) */
+        if(parcelLFC){
+          ctx.fillStyle='#39d353';
+          ctx.fillText('LFC',tToX(parcelLFC.T,parcelLFC.p)+6,pToY(parcelLFC.p)-4);
+        }
+        /* EL label (red) */
+        if(parcelEL){
+          ctx.fillStyle='#ff5a5a';
+          ctx.fillText('EL',tToX(parcelEL.T,parcelEL.p)+6,pToY(parcelEL.p)-4);
+        }
       }
     }
   }
