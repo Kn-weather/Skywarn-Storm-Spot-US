@@ -8962,13 +8962,14 @@ function sndRenderSkewTTo(c,data,stationOverride){
     var lp=Math.log(p),lpMin=Math.log(pMin),lpMax=Math.log(pMax);
     return mt+ph*(lpMax-lp)/(lpMax-lpMin);
   }
-  /* X-axis range widened from -60..+40 to -80..+40 so cold upper-level
-     temperatures (which legitimately reach -60°C at 100 hPa / 16 km)
-     have breathing room on the left side of the chart instead of
-     touching the left border. The -60°C isotherm now sits ~14% in
-     from the left edge, with -70°C and -80°C available as additional
-     reference lines for very cold upper-level air masses. */
-  var tMin=-80,tMax=40,SKEW=33;
+  /* X-axis range set to -30..+40 to match TwisterData's layout.
+     This centers the temperature trace in the chart (0°C sits near
+     horizontal center) and gives the warm side (+40°C) full visibility.
+     Cold upper-level temperatures (below -30°C at high altitude) will
+     extend past the left edge — same behavior as TwisterData. The
+     actual values are still readable from the params panel.
+     SKEW=33 maintains the standard 45° isotherm slope. */
+  var tMin=-30,tMax=40,SKEW=33;
   function tToX(T,p){
     var lpFrac=(Math.log(pMax)-Math.log(p))/(Math.log(pMax)-Math.log(pMin));
     var totalRange=(tMax-tMin)+SKEW;
