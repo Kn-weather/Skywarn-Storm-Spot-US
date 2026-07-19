@@ -2034,9 +2034,13 @@ body.capturing .hamburger-menu{display:none!important}
             <div style="font-size:11px;color:var(--t2);margin-bottom:10px;line-height:1.5">
               Sign in to create, edit, and delete journal entries.
             </div>
-            <!-- Facebook sign-in (primary — for the Facebook community) -->
+            <!-- Facebook sign-in (for the Facebook community — pending business verification) -->
             <button onclick="authSignInWithFacebook()" style="background:#1877f2;color:#fff;border:none;padding:10px 16px;border-radius:5px;cursor:pointer;font-size:13px;font-weight:600;font-family:inherit;display:flex;align-items:center;justify-content:center;gap:8px;width:100%;margin-bottom:8px;transition:background .15s">
               <i class="fab fa-facebook" style="font-size:16px"></i> Continue with Facebook
+            </button>
+            <!-- Google sign-in (no business verification required) -->
+            <button onclick="authSignInWithGoogle()" style="background:#fff;color:#3c4043;border:1px solid #dadce0;padding:10px 16px;border-radius:5px;cursor:pointer;font-size:13px;font-weight:600;font-family:inherit;display:flex;align-items:center;justify-content:center;gap:8px;width:100%;margin-bottom:8px;transition:background .15s">
+              <svg width="16" height="16" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg> Continue with Google
             </button>
             <!-- Divider -->
             <div style="display:flex;align-items:center;gap:10px;margin:12px 0">
@@ -4502,18 +4506,44 @@ async function hardRefreshApp(){
       }));
     }
   }catch(e){console.warn('[HardRefresh] SW unregister error:',e)}
-  /* Step 3: Clear localStorage caches (but keep alert visibility preferences) */
+  /* Step 3: Clear localStorage caches (but PRESERVE auth + user settings)
+     The previous version called localStorage.clear() which destroyed the
+     Supabase auth session token, forcing users to do the magic link dance
+     again after every app update. Now we selectively clear only the
+     data caches, preserving:
+     - Supabase auth session (sb-*-auth-token)
+     - Alert visibility preferences (us_nws_alert_hidden_types)
+     - Tornado tracker setting (us_nws_tornado_tracker_enabled)
+     - Sounding pin cache + stale state (skywarn_snd_cache_v1, skywarn_snd_stale_v1)
+     We explicitly delete only the cache keys we want to refresh. */
   try{
-    /* Save alert visibility settings so they survive the hard refresh */
-    var savedHidden=localStorage.getItem('us_nws_alert_hidden_types');
-    var savedZoneCache=localStorage.getItem('us_nws_zone_geom_v1');
-    var savedSpcCache=localStorage.getItem('us_nws_spc_geojson_v1');
-    /* Clear everything */
-    localStorage.clear();
-    /* Restore visibility settings (user preferences should survive) */
-    if(savedHidden)localStorage.setItem('us_nws_alert_hidden_types',savedHidden);
-    /* Don't restore zone/spc caches - we want fresh data */
-  }catch(e){console.warn('[HardRefresh] localStorage clear error:',e)}
+    /* List of localStorage keys to DELETE (data caches only) */
+    var keysToDelete=[
+      'us_nws_zone_geom_v1',      /* zone geometry cache (refreshed on next fetch) */
+      'us_nws_spc_geojson_v1',    /* SPC outlook GeoJSON cache (refreshed on next fetch) */
+    ];
+    /* Also delete any keys matching common cache patterns */
+    for(var i=localStorage.length-1;i>=0;i--){
+      var key=localStorage.key(i);
+      if(!key)continue;
+      /* Delete cache keys by pattern */
+      if(key.indexOf('us_nws_zone_geom')===0)keysToDelete.push(key);
+      if(key.indexOf('us_nws_spc_geojson')===0)keysToDelete.push(key);
+      /* Don't delete:
+         - sb-*-auth-token (Supabase auth session)
+         - us_nws_alert_hidden_types (alert visibility prefs)
+         - us_nws_tornado_tracker_enabled (tornado tracker setting)
+         - skywarn_snd_cache_v1 (sounding pin cache)
+         - skywarn_snd_stale_v1 (sounding pin stale state)
+      */
+    }
+    /* De-duplicate */
+    var uniqueKeys={};
+    keysToDelete.forEach(function(k){uniqueKeys[k]=true});
+    Object.keys(uniqueKeys).forEach(function(key){
+      try{localStorage.removeItem(key);console.log('[HardRefresh] Removed localStorage key:',key)}catch(e){}
+    });
+  }catch(e){console.warn('[HardRefresh] localStorage cleanup error:',e)}
   /* Step 4: Reload from server (bypass cache).
      Using location.reload() which in most browsers fetches from server
      when the service worker is unregistered. Adding a cache-busting
@@ -8916,6 +8946,40 @@ var jrnlMiniMapLayer=null;      /* marker layer for mini-map */
 var jrnlInited=false;           /* init has run */
 
 /* ── Init ── */
+/* Initialize Supabase client + auth state listener EARLY (called from
+   boot sequence) so that:
+   1. Magic link / OAuth redirects are detected — the URL contains an
+      auth code after the redirect that Supabase needs to exchange for
+      a session. This exchange must happen on page load, not when the
+      user happens to open the journal tab.
+   2. The auth state listener picks up the saved session from localStorage
+      so the user stays logged in across page reloads and app updates.
+   3. The journal tab can use the auth state immediately when opened,
+      without a flicker of "signed out" state.
+   This function is safe to call before the journal tab is opened — it
+   only sets up the auth client, doesn't touch the DOM. */
+function initJournalAuthEarly(){
+  if(jrnlSupabase)return;  /* Already initialized */
+  if(!SUPABASE_URL||!SUPABASE_ANON_KEY)return;
+  try{
+    jrnlSupabase=window.supabase.createClient(SUPABASE_URL,SUPABASE_ANON_KEY,{
+      auth:{
+        /* Persist session in localStorage (default behavior, but explicit) */
+        persistSession:true,
+        /* Auto-refresh the session token when it's about to expire */
+        autoRefreshToken:true,
+        /* Detect session from URL (needed for magic link + OAuth redirects) */
+        detectSessionInUrl:true
+      }
+    });
+    /* Set up auth state listener */
+    authInit();
+    console.log('[Journal] Auth initialized early');
+  }catch(e){
+    console.error('[Journal] Early auth init failed:',e);
+  }
+}
+
 function initJournalTab(){
   if(jrnlInited)return;
   jrnlInited=true;
@@ -8933,14 +8997,19 @@ function initJournalTab(){
     }
     return;
   }
-  try{
-    jrnlSupabase=window.supabase.createClient(SUPABASE_URL,SUPABASE_ANON_KEY);
-  }catch(e){
-    console.error('[Journal] Failed to init Supabase:',e);
-    return;
+  /* If auth wasn't already initialized early (e.g. user navigated to
+     journal tab directly without a page reload), do it now. */
+  if(!jrnlSupabase){
+    try{
+      jrnlSupabase=window.supabase.createClient(SUPABASE_URL,SUPABASE_ANON_KEY,{
+        auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}
+      });
+      authInit();
+    }catch(e){
+      console.error('[Journal] Failed to init Supabase:',e);
+      return;
+    }
   }
-  /* Initialize auth state listener */
-  authInit();
   /* Initialize mini-map */
   jrnlInitMiniMap();
   /* Load events list */
@@ -9557,6 +9626,29 @@ async function authSignInWithFacebook(){
   }
 }
 
+/* Sign in with Google OAuth. No business verification required — works
+   immediately after setup. Most users have a Google account, making this
+   a good fallback while Facebook verification is pending. */
+async function authSignInWithGoogle(){
+  if(!jrnlSupabase){
+    jrnlToast('Supabase not configured','error');
+    return;
+  }
+  jrnlToast('Redirecting to Google...','info');
+  try{
+    var result=await jrnlSupabase.auth.signInWithOAuth({
+      provider:'google',
+      options:{
+        redirectTo:window.location.origin+window.location.pathname
+      }
+    });
+    if(result.error)throw result.error;
+  }catch(e){
+    console.error('[Auth] Google sign-in failed:',e);
+    jrnlToast('Google sign-in failed: '+(e.message||e)+'. Make sure Google is enabled in Supabase Dashboard → Authentication → Providers.','error');
+  }
+}
+
 async function authSendMagicLink(){
   if(!jrnlSupabase){
     jrnlToast('Supabase not configured','error');
@@ -10028,6 +10120,14 @@ window.addEventListener('DOMContentLoaded',function(){
   /* Restore persisted settings (Tornado Tracker mode, etc.) so they
      survive page reloads. */
   restoreTornadoTrackerSetting();
+  /* Initialize Supabase + auth state listener EARLY so that:
+     1. Magic link / OAuth redirects are detected and exchanged for a
+        session (the URL contains a code parameter after the redirect)
+     2. The auth state listener picks up the saved session from
+        localStorage so the user stays logged in across page reloads
+     3. The journal tab can use the auth state immediately when opened
+     This doesn't load the journal UI — it just sets up the auth client. */
+  initJournalAuthEarly();
   /* Auto-refresh every 5 minutes (NWS API cache TTL is 1 min, but pulling
      all US alerts is heavy - 5 min gives a good balance of freshness
      without hammering the API). */
