@@ -4321,6 +4321,9 @@ function clearAllAlertLayers(){
 function onAlertFilterChange(){
   clearAllAlertLayers();
   fAlertMap();
+  /* If the surface observations layer is active, reload it for the
+     new state so we don't show stale markers from the old state. */
+  obsOnStateChange();
 }
 
 async function fAlertMap(){
@@ -11004,10 +11007,12 @@ function toggleObsLayer(){
 
 async function obsEnable(){
   if(!alertMapInstance)return;
-  /* Load stations if not already loaded */
-  if(!obsStationsLoaded){
-    await obsLoadStations();
-  }
+  /* Get the current state filter value */
+  var stateFilter=document.getElementById('amStateFilter');
+  var state=(stateFilter&&stateFilter.value)?stateFilter.value.toUpperCase():'';
+  /* Load stations for the selected state only (or all if no filter) */
+  obsStationsLoaded=false;  /* Force reload when state changes */
+  await obsLoadStations(state);
   /* Create the layer group */
   if(!obsLayer){
     obsLayer=L.layerGroup().addTo(alertMapInstance);
@@ -11033,29 +11038,47 @@ function obsDisable(){
   if(el)el.textContent='';
 }
 
-/* Fetch all ASOS stations across CONUS */
-async function obsLoadStations(){
-  console.log('[Obs] Loading stations...');
+/* Called when the state filter changes — reloads observations for the
+   new state. This prevents loading thousands of stations nationwide
+   which causes significant lag. */
+function obsOnStateChange(){
+  if(!obsLayer)return;  /* Layer not active, nothing to do */
+  /* Clear existing data and reload for the new state */
+  obsData={};
+  obsStationsLoaded=false;
+  obsEnable();  /* This will reload stations + fetch observations */
+}
+
+/* Fetch ASOS stations for a single state (or all CONUS if no state) */
+async function obsLoadStations(state){
+  console.log('[Obs] Loading stations for '+(state||'all CONUS')+'...');
   obsStations=[];
-  /* Fetch stations for each state in parallel batches */
-  var batchSize=5;
-  for(var i=0;i<OBS_STATES.length;i+=batchSize){
-    var batch=OBS_STATES.slice(i,i+batchSize);
-    var results=await Promise.all(batch.map(function(state){
-      return fetch('https://api.weather.gov/stations?state='+state+'&limit=200')
-        .then(function(r){return r.json()})
-        .then(function(data){
-          return (data.features||[]).map(function(f){
-            var coords=f.geometry.coordinates;
-            return{
-              id:f.properties.stationIdentifier,
-              name:f.properties.name,
-              lat:coords[1],lon:coords[0]
-            };
-          });
-        }).catch(function(){return []});
-    }));
-    results.forEach(function(stations){obsStations=obsStations.concat(stations)});
+  if(state){
+    /* Single state — one API call, fast */
+    try{
+      var data=await fetch('https://api.weather.gov/stations?state='+state+'&limit=200').then(function(r){return r.json()});
+      obsStations=(data.features||[]).map(function(f){
+        var coords=f.geometry.coordinates;
+        return{id:f.properties.stationIdentifier,name:f.properties.name,lat:coords[1],lon:coords[0]};
+      });
+    }catch(e){console.warn('[Obs] Failed to load stations for '+state,e)}
+  }else{
+    /* No state filter — fetch all CONUS states in batches */
+    var batchSize=5;
+    for(var i=0;i<OBS_STATES.length;i+=batchSize){
+      var batch=OBS_STATES.slice(i,i+batchSize);
+      var results=await Promise.all(batch.map(function(s){
+        return fetch('https://api.weather.gov/stations?state='+s+'&limit=200')
+          .then(function(r){return r.json()})
+          .then(function(data){
+            return (data.features||[]).map(function(f){
+              var coords=f.geometry.coordinates;
+              return{id:f.properties.stationIdentifier,name:f.properties.name,lat:coords[1],lon:coords[0]};
+            });
+          }).catch(function(){return []});
+      }));
+      results.forEach(function(stations){obsStations=obsStations.concat(stations)});
+    }
   }
   /* Deduplicate by station ID */
   var seen={};
@@ -11065,7 +11088,7 @@ async function obsLoadStations(){
     return true;
   });
   obsStationsLoaded=true;
-  console.log('[Obs] Loaded '+obsStations.length+' stations');
+  console.log('[Obs] Loaded '+obsStations.length+' stations for '+(state||'all'));
 }
 
 /* Fetch observations for all stations (batched to avoid rate limiting) */
