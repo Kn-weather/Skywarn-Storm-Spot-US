@@ -915,6 +915,42 @@ body{
   box-shadow:0 0 6px rgba(140,140,140,.5),0 3px 5px rgba(0,0,0,.5);
   filter:saturate(0.3);
 }
+
+/* ── Surface observation markers ── */
+.obs-marker{
+  display:flex;align-items:center;justify-content:center;
+  min-width:28px;height:20px;
+  background:rgba(10,10,10,.85);
+  border:1px solid rgba(255,255,255,.15);
+  border-radius:3px;
+  color:#fff;
+  font-size:9px;font-weight:700;
+  font-family:'Inter',sans-serif;
+  padding:0 4px;
+  white-space:nowrap;
+  cursor:pointer;
+  transition:transform .1s,background .1s;
+}
+.obs-marker:hover{
+  transform:scale(1.15);
+  background:rgba(255,115,0,.85);
+  color:#0a0a0a;
+  z-index:1000;
+}
+.obs-marker.wind{
+  background:rgba(10,10,10,.7);
+  border:none;
+}
+.obs-popup .leaflet-popup-content-wrapper{
+  background:#0a0a0a;
+  border:1px solid var(--acc);
+  border-radius:6px;
+  color:var(--t1);
+  box-shadow:0 4px 16px rgba(0,0,0,.6);
+}
+.obs-popup .leaflet-popup-content{margin:8px 12px;font-size:11px;font-family:'Inter',sans-serif}
+.obs-popup .leaflet-popup-tip{background:var(--acc)}
+
 .snd-pin-popup .leaflet-popup-content-wrapper{
   background:#0a0a0a;
   border:1px solid var(--acc);
@@ -1970,6 +2006,28 @@ body.capturing .hamburger-menu{display:none!important}
         <label style="margin:1px 0"><input type="checkbox" id="amSndEnable" onchange="toggleSndLayer()"> Show RAOB Stations</label>
         <div style="font-size:9px;color:var(--t3);line-height:1.4;margin-top:3px">
           68 NWS upper-air sites. Click a pin to view the latest skew-T.
+        </div>
+      </div>
+
+      <div class="divider">
+        <div class="section-label">Surface Observations</div>
+        <label style="margin:1px 0"><input type="checkbox" id="amObsEnable" onchange="toggleObsLayer()"> Show Surface Obs</label>
+        <div style="font-size:8px;color:var(--t3);text-transform:uppercase;letter-spacing:.04em;margin-top:4px;margin-bottom:2px">Variable</div>
+        <select id="amObsVar" onchange="onObsVarChange()" style="width:100%;background:var(--bg);border:1px solid var(--bdr);color:var(--t1);font-family:inherit;font-size:9px;padding:4px 6px;border-radius:4px;cursor:pointer;outline:none">
+          <option value="temperature">Temperature (°F)</option>
+          <option value="dewpoint">Dewpoint (°F)</option>
+          <option value="windSpeed">Wind Speed (mph)</option>
+          <option value="windGust">Wind Gust (mph)</option>
+          <option value="windDirection">Wind Direction</option>
+          <option value="pressure">Pressure (hPa)</option>
+          <option value="visibility">Visibility (mi)</option>
+          <option value="relativeHumidity">Relative Humidity (%)</option>
+          <option value="precipitation">Precip 1hr (in)</option>
+        </select>
+        <div style="display:flex;align-items:center;gap:6px;margin-top:4px">
+          <label style="font-size:9px;color:var(--t3)">Refresh</label>
+          <button class="radar-anim-btn" onclick="obsRefresh()" title="Refresh observations" style="padding:3px 8px;font-size:10px"><i class="fas fa-rotate"></i></button>
+          <span id="obsLastUpdate" style="font-size:8px;color:var(--t3);margin-left:auto"></span>
         </div>
       </div>
 
@@ -10866,6 +10924,276 @@ function jrnlToast(msg,type){
   t.textContent=msg;
   document.body.appendChild(t);
   setTimeout(function(){document.body.removeChild(t)},3000);
+}
+
+/* ════════════════════════════════════════════════════════════════════════
+   Surface Observations Layer
+   Fetches ASOS/AWOS stations from NWS API, gets latest observation for
+   each station, and renders color-coded markers on the polygon map.
+   User can select which weather variable to display.
+   ════════════════════════════════════════════════════════════════════════ */
+
+var obsLayer=null;              /* Leaflet layerGroup for observation markers */
+var obsStations=[];             /* Cached list of ASOS stations {id,name,lat,lon} */
+var obsStationsLoaded=false;    /* Have stations been fetched? */
+var obsData={};                 /* stationId -> {obs: {...}, timestamp} */
+var obsCurrentVar='temperature';
+var obsRefreshTimer=null;
+
+/* CONUS state codes for fetching stations */
+var OBS_STATES=['AL','AZ','AR','CA','CO','CT','DE','FL','GA','ID','IL','IN','IA','KS','KY','LA','ME','MD','MA','MI','MN','MS','MO','MT','NE','NV','NH','NJ','NM','NY','NC','ND','OH','OK','OR','PA','RI','SC','SD','TN','TX','UT','VT','VA','WA','WV','WI','WY','DC'];
+
+/* Variable display config: label, unit, color function, format function */
+var OBS_VAR_CONFIG={
+  temperature:{label:'Temp',unit:'°F',color:obsColorTemp,format:obsFormatTemp},
+  dewpoint:{label:'Dewpt',unit:'°F',color:obsColorDewpoint,format:obsFormatTemp},
+  windSpeed:{label:'Wind',unit:'mph',color:obsColorWind,format:obsFormatMPH},
+  windGust:{label:'Gust',unit:'mph',color:obsColorGust,format:obsFormatMPH},
+  windDirection:{label:'Dir',unit:'°',color:obsColorDir,format:obsFormatDir},
+  pressure:{label:'Pres',unit:'hPa',color:obsColorPressure,format:obsFormatPressure},
+  visibility:{label:'Vis',unit:'mi',color:obsColorVis,format:obsFormatVis},
+  relativeHumidity:{label:'RH',unit:'%',color:obsColorRH,format:obsFormatRH},
+  precipitation:{label:'Precip',unit:'in',color:obsColorPrecip,format:obsFormatPrecip}
+};
+
+/* Color functions — return hex color based on value */
+function obsColorTemp(f){if(f==null)return '#666';if(f<0)return '#5b8cff';if(f<20)return '#5aff7a';if(f<40)return '#ffd60a';if(f<60)return '#ffb340';if(f<80)return '#ff5a5a';return '#ff00ff'}
+function obsColorDewpoint(f){if(f==null)return '#666';if(f<10)return '#5b8cff';if(f<30)return '#5aff7a';if(f<50)return '#ffd60a';if(f<65)return '#ffb340';if(f<75)return '#ff5a5a';return '#ff00ff'}
+function obsColorWind(mph){if(mph==null)return '#666';if(mph<5)return '#5aff7a';if(mph<15)return '#ffd60a';if(mph<25)return '#ffb340';if(mph<35)return '#ff5a5a';return '#ff00ff'}
+function obsColorGust(mph){if(mph==null)return '#666';if(mph<10)return '#5aff7a';if(mph<20)return '#ffd60a';if(mph<30)return '#ffb340';if(mph<45)return '#ff5a5a';if(mph<58)return '#ff00ff';return '#cc00ff'}
+function obsColorDir(d){if(d==null)return '#666';return '#bbb'}
+function obsColorPressure(hpa){if(hpa==null)return '#666';if(hpa<1000)return '#5b8cff';if(hpa<1013)return '#5aff7a';if(hpa<1020)return '#ffd60a';return '#ff5a5a'}
+function obsColorVis(mi){if(mi==null)return '#666';if(mi<1)return '#ff5a5a';if(mi<3)return '#ffb340';if(mi<5)return '#ffd60a';if(mi<10)return '#5aff7a';return '#39d353'}
+function obsColorRH(rh){if(rh==null)return '#666';if(rh<30)return '#ff5a5a';if(rh<50)return '#ffb340';if(rh<70)return '#ffd60a';if(rh<85)return '#5aff7a';return '#5b8cff'}
+function obsColorPrecip(inches){if(inches==null||inches===0)return '#39d353';if(inches<0.1)return '#5aff7a';if(inches<0.25)return '#ffd60a';if(inches<0.5)return '#ffb340';if(inches<1)return '#ff5a5a';return '#ff00ff'}
+
+/* Format functions — convert raw API values to display strings */
+function obsFormatTemp(c){if(c==null)return '—';return Math.round(c*9/5+32)}
+function obsFormatMPH(kmh){if(kmh==null)return '—';return Math.round(kmh*0.621371)}
+function obsFormatDir(d){if(d==null)return '—';return Math.round(d)}
+function obsFormatPressure(pa){if(pa==null)return '—';return Math.round(pa/100)}
+function obsFormatVis(m){if(m==null)return '—';return (m/1609.34).toFixed(1)}
+function obsFormatRH(rh){if(rh==null)return '—';return Math.round(rh)}
+function obsFormatPrecip(mm){if(mm==null)return '0';return (mm/25.4).toFixed(2)}
+
+/* Get raw value from observation for a given variable */
+function obsGetRaw(obs,varKey){
+  if(!obs)return null;
+  if(varKey==='temperature')return obs.temperature?obs.temperature.value:null;
+  if(varKey==='dewpoint')return obs.dewpoint?obs.dewpoint.value:null;
+  if(varKey==='windSpeed')return obs.windSpeed?obs.windSpeed.value:null;
+  if(varKey==='windGust')return obs.windGust?obs.windGust.value:null;
+  if(varKey==='windDirection')return obs.windDirection?obs.windDirection.value:null;
+  if(varKey==='pressure')return obs.seaLevelPressure?obs.seaLevelPressure.value:(obs.barometricPressure?obs.barometricPressure.value:null);
+  if(varKey==='visibility')return obs.visibility?obs.visibility.value:null;
+  if(varKey==='relativeHumidity')return obs.relativeHumidity?obs.relativeHumidity.value:null;
+  if(varKey==='precipitation')return obs.precipitationLastHour?obs.precipitationLastHour.value:null;
+  return null;
+}
+
+/* Toggle the observation layer on/off */
+function toggleObsLayer(){
+  var cb=document.getElementById('amObsEnable');
+  if(!cb)return;
+  if(cb.checked){
+    obsEnable();
+  }else{
+    obsDisable();
+  }
+}
+
+async function obsEnable(){
+  if(!alertMapInstance)return;
+  /* Load stations if not already loaded */
+  if(!obsStationsLoaded){
+    await obsLoadStations();
+  }
+  /* Create the layer group */
+  if(!obsLayer){
+    obsLayer=L.layerGroup().addTo(alertMapInstance);
+  }
+  /* Fetch observations and render */
+  await obsFetchAll();
+  /* Auto-refresh every 5 minutes */
+  if(!obsRefreshTimer){
+    obsRefreshTimer=setInterval(obsFetchAll,5*60*1000);
+  }
+}
+
+function obsDisable(){
+  if(obsLayer&&alertMapInstance){
+    alertMapInstance.removeLayer(obsLayer);
+    obsLayer=null;
+  }
+  if(obsRefreshTimer){
+    clearInterval(obsRefreshTimer);
+    obsRefreshTimer=null;
+  }
+  var el=document.getElementById('obsLastUpdate');
+  if(el)el.textContent='';
+}
+
+/* Fetch all ASOS stations across CONUS */
+async function obsLoadStations(){
+  console.log('[Obs] Loading stations...');
+  obsStations=[];
+  /* Fetch stations for each state in parallel batches */
+  var batchSize=5;
+  for(var i=0;i<OBS_STATES.length;i+=batchSize){
+    var batch=OBS_STATES.slice(i,i+batchSize);
+    var results=await Promise.all(batch.map(function(state){
+      return fetch('https://api.weather.gov/stations?state='+state+'&limit=200')
+        .then(function(r){return r.json()})
+        .then(function(data){
+          return (data.features||[]).map(function(f){
+            var coords=f.geometry.coordinates;
+            return{
+              id:f.properties.stationIdentifier,
+              name:f.properties.name,
+              lat:coords[1],lon:coords[0]
+            };
+          });
+        }).catch(function(){return []});
+    }));
+    results.forEach(function(stations){obsStations=obsStations.concat(stations)});
+  }
+  /* Deduplicate by station ID */
+  var seen={};
+  obsStations=obsStations.filter(function(s){
+    if(seen[s.id])return false;
+    seen[s.id]=true;
+    return true;
+  });
+  obsStationsLoaded=true;
+  console.log('[Obs] Loaded '+obsStations.length+' stations');
+}
+
+/* Fetch observations for all stations (batched to avoid rate limiting) */
+async function obsFetchAll(){
+  if(!obsLayer||!obsStations.length)return;
+  var varSel=document.getElementById('amObsVar');
+  obsCurrentVar=varSel?varSel.value:'temperature';
+  console.log('[Obs] Fetching observations for '+obsStations.length+' stations, var='+obsCurrentVar);
+
+  /* Show loading indicator */
+  var el=document.getElementById('obsLastUpdate');
+  if(el)el.innerHTML='<i class="fas fa-spinner fa-spin"></i> Loading...';
+
+  /* Fetch in batches of 10 to avoid overwhelming the NWS API */
+  var batchSize=10;
+  var fetched=0;
+  for(var i=0;i<obsStations.length;i+=batchSize){
+    var batch=obsStations.slice(i,i+batchSize);
+    await Promise.all(batch.map(function(st){
+      return fetch('https://api.weather.gov/stations/'+st.id+'/observations/latest')
+        .then(function(r){return r.json()})
+        .then(function(data){
+          if(data&&data.properties){
+            obsData[st.id]={obs:data.properties,timestamp:Date.now()};
+          }
+        }).catch(function(){/* skip failed stations */});
+    }));
+    fetched+=batch.length;
+    /* Render incrementally every 5 batches */
+    if(fetched%(batchSize*5)===0){
+      obsRender();
+    }
+  }
+  /* Final render */
+  obsRender();
+  /* Update timestamp */
+  if(el){
+    var now=new Date();
+    el.textContent='Updated '+now.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',hour12:true});
+  }
+  console.log('[Obs] Done. Rendered markers.');
+}
+
+/* Render observation markers on the map */
+function obsRender(){
+  if(!obsLayer||!obsStations.length)return;
+  obsLayer.clearLayers();
+  var config=OBS_VAR_CONFIG[obsCurrentVar]||OBS_VAR_CONFIG.temperature;
+
+  obsStations.forEach(function(st){
+    var data=obsData[st.id];
+    if(!data||!data.obs)return;
+    var rawVal=obsGetRaw(data.obs,obsCurrentVar);
+    var displayVal=config.format(rawVal);
+    var color=config.color(rawVal);
+
+    /* For wind direction, show a small wind barb instead of a number */
+    var html;
+    if(obsCurrentVar==='windDirection'||obsCurrentVar==='windSpeed'||obsCurrentVar==='windGust'){
+      /* Show wind speed with direction arrow */
+      var dir=data.obs.windDirection?data.obs.windDirection.value:null;
+      var spd=data.obs.windSpeed?data.obs.windSpeed.value:null;
+      var gust=data.obs.windGust?data.obs.windGust.value:null;
+      var displaySpd=obsCurrentVar==='windGust'?(gust?obsFormatMPH(gust):obsFormatMPH(spd)):obsFormatMPH(spd);
+      var arrowHtml=dir!=null?'<i class="fas fa-arrow-up" style="transform:rotate('+(dir+180)+'deg);font-size:8px;margin-right:2px"></i>':'';
+      html='<div class="obs-marker wind" style="color:'+color+';border:1px solid '+color+'40">'+arrowHtml+displaySpd+'</div>';
+    }else{
+      html='<div class="obs-marker" style="color:'+color+';border:1px solid '+color+'60">'+displayVal+'</div>';
+    }
+
+    var icon=L.divIcon({
+      className:'obs-marker-wrap',
+      html:html,
+      iconSize:[null,20],
+      iconAnchor:[14,10]
+    });
+
+    var marker=L.marker([st.lat,st.lon],{icon:icon});
+    marker.bindPopup(obsBuildPopup(st,data),{className:'obs-popup',maxWidth:240});
+    obsLayer.addLayer(marker);
+  });
+}
+
+/* Build popup HTML for an observation station */
+function obsBuildPopup(st,data){
+  var o=data.obs;
+  var tempF=o.temperature&&o.temperature.value!=null?Math.round(o.temperature.value*9/5+32):'—';
+  var dewF=o.dewpoint&&o.dewpoint.value!=null?Math.round(o.dewpoint.value*9/5+32):'—';
+  var windDir=o.windDirection&&o.windDirection.value!=null?Math.round(o.windDirection.value):'—';
+  var windSpd=o.windSpeed&&o.windSpeed.value!=null?Math.round(o.windSpeed.value*0.621371):'—';
+  var windGust=o.windGust&&o.windGust.value!=null?Math.round(o.windGust.value*0.621371):'—';
+  var pressure=o.seaLevelPressure&&o.seaLevelPressure.value!=null?Math.round(o.seaLevelPressure.value/100):(o.barometricPressure&&o.barometricPressure.value!=null?Math.round(o.barometricPressure.value/100):'—');
+  var vis=o.visibility&&o.visibility.value!=null?(o.visibility.value/1609.34).toFixed(1):'—';
+  var rh=o.relativeHumidity&&o.relativeHumidity.value!=null?Math.round(o.relativeHumidity.value):'—';
+  var precip=o.precipitationLastHour&&o.precipitationLastHour.value!=null?(o.precipitationLastHour.value/25.4).toFixed(2):'0.00';
+  var desc=o.textDescription||'';
+  var obsTime=o.timestamp?new Date(o.timestamp).toLocaleString('en-US',{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit',hour12:true}):'—';
+
+  var html='<div style="font-family:Inter,sans-serif;min-width:200px">';
+  html+='<div style="color:#ff7300;font-weight:700;font-size:12px;margin-bottom:2px">'+st.id+' — '+st.name+'</div>';
+  html+='<div style="color:#666;font-size:9px;margin-bottom:8px">'+obsTime+'</div>';
+  if(desc)html+='<div style="color:#ffd60a;font-size:10px;margin-bottom:6px">'+desc+'</div>';
+  html+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:3px 12px;font-size:10px">';
+  html+='<div><span style="color:#888">Temp:</span> <b style="color:#ff5a5a">'+tempF+'°F</b></div>';
+  html+='<div><span style="color:#888">Dewpt:</span> <b style="color:#5aff7a">'+dewF+'°F</b></div>';
+  html+='<div><span style="color:#888">Wind:</span> <b>'+windDir+'° @ '+windSpd+'mph</b></div>';
+  html+='<div><span style="color:#888">Gust:</span> <b style="color:#ffb340">'+windGust+'mph</b></div>';
+  html+='<div><span style="color:#888">Pres:</span> <b>'+pressure+'hPa</b></div>';
+  html+='<div><span style="color:#888">Vis:</span> <b>'+vis+'mi</b></div>';
+  html+='<div><span style="color:#888">RH:</span> <b>'+rh+'%</b></div>';
+  html+='<div><span style="color:#888">Precip:</span> <b style="color:#5b8cff">'+precip+'in</b></div>';
+  html+='</div>';
+  html+='</div>';
+  return html;
+}
+
+/* Called when user changes the variable dropdown */
+function onObsVarChange(){
+  if(obsLayer){
+    obsRender();
+  }
+}
+
+/* Manual refresh button */
+function obsRefresh(){
+  if(obsLayer){
+    obsFetchAll();
+  }
 }
 
 /* ── Boot sequence ──────────────────────────────────────────────────────── */
