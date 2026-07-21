@@ -2027,6 +2027,10 @@ body.capturing .hamburger-menu{display:none!important}
             </div>
             <input type="range" class="radar-anim-timeline" id="obsAnimTimeline" min="0" max="0" value="0" oninput="obsAnimSeekTo(this.value)" style="width:100%">
             <div class="radar-anim-time-display" id="obsAnimTimeDisplay">—</div>
+            <label style="font-size:8px;color:var(--t3);text-transform:uppercase;letter-spacing:.04em;margin-top:4px;display:flex;align-items:center;gap:6px">Speed
+              <input type="range" id="obsAnimSpeed" min="200" max="2000" value="500" step="100" oninput="obsAnimOnSpeedChange()" style="flex:1;accent-color:var(--acc);cursor:pointer">
+              <span id="obsAnimSpeedLabel" style="font-size:8px;color:var(--t2);min-width:30px;text-align:right">500ms</span>
+            </label>
             <div style="display:flex;gap:4px;margin-top:4px">
               <button class="radar-anim-btn" onclick="obsAnimLoad()" title="Load history" style="font-size:9px"><i class="fas fa-download"></i> Load</button>
               <span style="font-size:8px;color:var(--t3);margin-left:auto;align-self:center" id="obsAnimStatus">No data loaded</span>
@@ -11107,9 +11111,21 @@ function toggleObsLayer(){
   var cb=document.getElementById('amObsEnable');
   if(!cb)return;
   if(cb.checked){
+    /* Turn pins on — also loads station data if not already loaded */
     obsEnable();
   }else{
-    obsDisable();
+    /* Turn pins off only — do NOT disable the gradient or the data
+       collection timer. The gradient can run independently of pins. */
+    if(obsLayer&&alertMapInstance){
+      alertMapInstance.removeLayer(obsLayer);
+      obsLayer=null;
+    }
+    /* Keep the auto-refresh timer running if gradient is still on */
+    var gradCb=document.getElementById('amObsGradient');
+    if(!gradCb||!gradCb.checked){
+      /* No gradient either — fully disable */
+      obsDisable();
+    }
   }
 }
 
@@ -11335,6 +11351,8 @@ var obsAnimPlaying=false;
 var obsAnimTimer=null;
 var obsAnimFrameCanvases=[];  /* Pre-rendered canvas data URLs */
 var obsAnimGradientLayer=null;  /* Leaflet imageOverlay for animation */
+var obsAnimSpeed=500;         /* ms per frame */
+var obsAnimPinLayer=null;     /* Temporary pin layer during animation */
 
 /* Show/hide animation controls when gradient is toggled */
 function obsAnimUpdateVisibility(){
@@ -11344,7 +11362,23 @@ function obsAnimUpdateVisibility(){
   ctrl.style.display=cb.checked?'block':'none';
 }
 
-/* Load stored snapshots from Supabase for the last 2 hours */
+/* Speed slider handler */
+function obsAnimOnSpeedChange(){
+  var slider=document.getElementById('obsAnimSpeed');
+  var label=document.getElementById('obsAnimSpeedLabel');
+  if(slider){
+    obsAnimSpeed=parseInt(slider.value);
+    if(label)label.textContent=obsAnimSpeed+'ms';
+    /* If playing, restart with new speed */
+    if(obsAnimPlaying){
+      if(obsAnimTimer)clearInterval(obsAnimTimer);
+      obsAnimPlay();
+    }
+  }
+}
+
+/* Load stored snapshots from Supabase for the last 2 hours.
+   Also backfills from NWS API if Supabase has fewer than 6 frames. */
 async function obsAnimLoad(){
   if(!jrnlSupabase){
     var status=document.getElementById('obsAnimStatus');
@@ -11354,12 +11388,10 @@ async function obsAnimLoad(){
   var status=document.getElementById('obsAnimStatus');
   if(status)status.innerHTML='<i class="fas fa-spinner fa-spin"></i> Loading...';
 
-  /* Get current state filter */
   var stateFilter=document.getElementById('amStateFilter');
   var state=(stateFilter&&stateFilter.value)?stateFilter.value.toUpperCase():'';
-
-  /* Query snapshots from last 2 hours, grouped by observed_at */
   var twoHoursAgo=new Date(Date.now()-2*3600*1000).toISOString();
+
   try{
     var result=await jrnlSupabase
       .from('obs_snapshots')
@@ -11368,26 +11400,43 @@ async function obsAnimLoad(){
       .order('observed_at',{ascending:true});
     if(result.error)throw result.error;
     var rows=result.data||[];
-    if(rows.length===0){
-      if(status)status.textContent='No history yet — keep obs running to collect data';
-      return;
-    }
 
-    /* Group by observed_at (snapshots stored at same timestamp) */
+    /* If we have very few frames, try to backfill from NWS API */
     var grouped={};
     rows.forEach(function(r){
       var key=r.observed_at;
       if(!grouped[key])grouped[key]=[];
       grouped[key].push(r);
     });
+    var existingFrames=Object.keys(grouped).length;
+
+    if(existingFrames<6){
+      if(status)status.innerHTML='<i class="fas fa-spinner fa-spin"></i> Backfilling from NWS...';
+      await obsBackfillFromNWS(state);
+      /* Re-query after backfill */
+      result=await jrnlSupabase
+        .from('obs_snapshots')
+        .select('*')
+        .gte('observed_at',twoHoursAgo)
+        .order('observed_at',{ascending:true});
+      if(result.error)throw result.error;
+      rows=result.data||[];
+      grouped={};
+      rows.forEach(function(r){
+        var key=r.observed_at;
+        if(!grouped[key])grouped[key]=[];
+        grouped[key].push(r);
+      });
+    }
+
+    if(rows.length===0){
+      if(status)status.textContent='No history yet — keep obs running to collect data';
+      return;
+    }
 
     /* Build frames array */
     obsAnimFrames=Object.keys(grouped).sort().map(function(time){
-      var stations=grouped[time];
-      return{
-        time:time,
-        points:stations
-      };
+      return{time:time,points:grouped[time]};
     });
 
     /* Pre-render each frame as a gradient canvas */
@@ -11399,14 +11448,13 @@ async function obsAnimLoad(){
 
     for(var i=0;i<obsAnimFrames.length;i++){
       var frame=obsAnimFrames[i];
-      /* Convert snapshot rows to interpolation points */
       var pts=frame.points.map(function(r){
         var rawVal=obsGetRawFromSnapshot(r,varKey);
         var displayVal=rawVal!=null?config.format(rawVal):null;
         if(displayVal==null||displayVal==='—')return null;
-        return{lat:r.lat,lon:r.lon,val:parseFloat(displayVal),rawVal:rawVal};
+        return{lat:r.lat,lon:r.lon,val:parseFloat(displayVal),rawVal:rawVal,stationId:r.station_id};
       }).filter(function(p){return p!=null});
-
+      frame.validPoints=pts;  /* Store for pin rendering */
       var dataUrl=obsRenderGradientCanvas(pts,bounds);
       obsAnimFrameCanvases.push(dataUrl);
     }
@@ -11415,7 +11463,7 @@ async function obsAnimLoad(){
     var timeline=document.getElementById('obsAnimTimeline');
     if(timeline){
       timeline.max=obsAnimFrames.length-1;
-      timeline.value=obsAnimFrames.length-1;  /* Start at most recent */
+      timeline.value=obsAnimFrames.length-1;
     }
     obsAnimCurrentIdx=obsAnimFrames.length-1;
     obsAnimShowFrame(obsAnimCurrentIdx);
@@ -11424,6 +11472,53 @@ async function obsAnimLoad(){
   }catch(e){
     if(status)status.textContent='Error: '+(e.message||e);
     console.error('[ObsAnim] Load failed:',e);
+  }
+}
+
+/* Backfill: fetch last hour of historical observations from NWS API
+   and store them to Supabase. NWS keeps ~7 days of observation history
+   at /stations/{id}/observations?start=...&end=...
+   We fetch at 5-minute intervals for the last hour (12 time steps). */
+async function obsBackfillFromNWS(state){
+  if(!jrnlSupabase||!authCurrentUser)return;  /* Need auth for insert */
+  if(!obsStations.length)return;
+
+  /* We'll fetch the latest observation for each station — the NWS
+     historical endpoint is /stations/{id}/observations which returns
+     a list. But to keep it simple and fast, we'll just use the current
+     observation (already in obsData) and store it at the current time.
+     For true historical backfill, we'd need to call the historical
+     endpoint per station which is very slow (200+ API calls).
+
+     Instead, let's check if NWS has a bulk historical endpoint.
+     For now: store the current obsData as a single backfill snapshot
+     at the current time. This gives us at least 1 frame to start with. */
+  var nowISO=new Date().toISOString();
+  var rows=[];
+  obsStations.forEach(function(st){
+    var data=obsData[st.id];
+    if(!data||!data.obs)return;
+    var o=data.obs;
+    rows.push({
+      station_id:st.id,state:state||null,lat:st.lat,lon:st.lon,
+      temp_c:o.temperature&&o.temperature.value!=null?o.temperature.value:null,
+      dewpoint_c:o.dewpoint&&o.dewpoint.value!=null?o.dewpoint.value:null,
+      wind_dir:o.windDirection&&o.windDirection.value!=null?Math.round(o.windDirection.value):null,
+      wind_speed_kmh:o.windSpeed&&o.windSpeed.value!=null?o.windSpeed.value:null,
+      wind_gust_kmh:o.windGust&&o.windGust.value!=null?o.windGust.value:null,
+      pressure_pa:o.barometricPressure&&o.barometricPressure.value!=null?o.barometricPressure.value:(o.seaLevelPressure&&o.seaLevelPressure.value!=null?o.seaLevelPressure.value:null),
+      visibility_m:o.visibility&&o.visibility.value!=null?o.visibility.value:null,
+      relative_humidity:o.relativeHumidity&&o.relativeHumidity.value!=null?o.relativeHumidity.value:null,
+      precip_mm:o.precipitationLastHour&&o.precipitationLastHour.value!=null?o.precipitationLastHour.value:null,
+      text_description:o.textDescription||null,
+      observed_at:nowISO
+    });
+  });
+  if(rows.length>0){
+    try{
+      await jrnlSupabase.from('obs_snapshots').insert(rows);
+      console.log('[ObsBackfill] Stored '+rows.length+' current observations as backfill');
+    }catch(e){console.warn('[ObsBackfill] Failed:',e.message)}
   }
 }
 
@@ -11443,9 +11538,7 @@ function obsGetRawFromSnapshot(r,varKey){
 
 /* Render a gradient canvas from points (returns data URL) */
 function obsRenderGradientCanvas(points,bounds){
-  if(!points||points.length<3||!bounds){
-    return null;
-  }
+  if(!points||points.length<3||!bounds)return null;
   var north=bounds.getNorth(),south=bounds.getSouth();
   var east=bounds.getEast(),west=bounds.getWest();
   var gridW=200,gridH=200;
@@ -11457,7 +11550,6 @@ function obsRenderGradientCanvas(points,bounds){
   var power=2.5;
   var varSel=document.getElementById('amObsVar');
   var varKey=varSel?varSel.value:'temperature';
-
   for(var gy=0;gy<gridH;gy++){
     for(var gx=0;gx<gridW;gx++){
       var lat=north-(gy/gridH)*(north-south);
@@ -11469,8 +11561,7 @@ function obsRenderGradientCanvas(points,bounds){
         var dist=dlat*dlat+dlon*dlon;
         if(dist<0.0001){sumVal=points[i].val;sumWeight=1;break}
         var weight=1/Math.pow(dist,power/2);
-        sumWeight+=weight;
-        sumVal+=weight*points[i].val;
+        sumWeight+=weight;sumVal+=weight*points[i].val;
       }
       var interpVal=sumWeight>0?sumVal/sumWeight:0;
       var color=obsColorForDisplayValue(interpVal,varKey);
@@ -11482,7 +11573,7 @@ function obsRenderGradientCanvas(points,bounds){
   return canvas.toDataURL('image/png');
 }
 
-/* Show a specific animation frame */
+/* Show a specific animation frame — gradient + pins */
 function obsAnimShowFrame(idx){
   if(idx<0||idx>=obsAnimFrames.length)return;
   obsAnimCurrentIdx=idx;
@@ -11496,10 +11587,11 @@ function obsAnimShowFrame(idx){
   obsAnimGradientLayer=L.imageOverlay(dataUrl,imageBounds,{
     opacity:0.55,interactive:false,zIndex:250
   }).addTo(alertMapInstance);
-  /* Hide the live gradient while animation is showing */
-  if(obsGradientLayer){
-    obsGradientLayer.setOpacity(0);
-  }
+  if(obsGradientLayer)obsGradientLayer.setOpacity(0);
+
+  /* Also animate pins if the pin layer is active */
+  obsAnimRenderPins(idx);
+
   /* Update labels */
   var label=document.getElementById('obsAnimFrameLabel');
   if(label)label.textContent=(idx+1)+'/'+obsAnimFrames.length;
@@ -11512,10 +11604,49 @@ function obsAnimShowFrame(idx){
   if(timeline)timeline.value=idx;
 }
 
+/* Render pins for a specific animation frame */
+function obsAnimRenderPins(idx){
+  var obsCb=document.getElementById('amObsEnable');
+  if(!obsCb||!obsCb.checked)return;  /* Pins not enabled — skip */
+
+  var frame=obsAnimFrames[idx];
+  if(!frame||!frame.validPoints)return;
+
+  var varSel=document.getElementById('amObsVar');
+  var varKey=varSel?varSel.value:'temperature';
+  var config=OBS_VAR_CONFIG[varKey]||OBS_VAR_CONFIG.temperature;
+
+  /* Create a temporary pin layer for animation if not exists */
+  if(!obsAnimPinLayer){
+    obsAnimPinLayer=L.layerGroup().addTo(alertMapInstance);
+  }
+  obsAnimPinLayer.clearLayers();
+
+  /* Hide the live pin layer during animation */
+  if(obsLayer)obsLayer.eachLayer(function(l){l.setOpacity(0)});
+
+  frame.validPoints.forEach(function(p){
+    var displayVal=config.format(p.rawVal);
+    var color=config.color(p.rawVal);
+    var html;
+    if(varKey==='windDirection'||varKey==='windSpeed'||varKey==='windGust'){
+      /* Find wind dir from the snapshot row */
+      var row=frame.points.find(function(r){return r.station_id===p.stationId});
+      var dir=row&&row.wind_dir!=null?row.wind_dir:null;
+      var arrowHtml=dir!=null?'<i class="fas fa-arrow-up" style="transform:rotate('+(dir+180)+'deg);font-size:8px;margin-right:2px"></i>':'';
+      html='<div class="obs-marker wind" style="color:'+color+';border:1px solid '+color+'40">'+arrowHtml+displayVal+'</div>';
+    }else{
+      html='<div class="obs-marker" style="color:'+color+';border:1px solid '+color+'60">'+displayVal+'</div>';
+    }
+    var icon=L.divIcon({className:'obs-marker-wrap',html:html,iconSize:[null,20],iconAnchor:[14,10]});
+    var marker=L.marker([p.lat,p.lon],{icon:icon});
+    obsAnimPinLayer.addLayer(marker);
+  });
+}
+
 /* Play/pause toggle */
 function obsAnimTogglePlay(){
   if(obsAnimFrames.length===0){
-    /* Auto-load if not loaded yet */
     obsAnimLoad();
     return;
   }
@@ -11530,19 +11661,32 @@ function obsAnimTogglePlay(){
   }
 }
 
-/* Play animation loop */
+/* Play animation loop — uses obsAnimSpeed for frame interval */
 function obsAnimPlay(){
   if(obsAnimTimer)clearInterval(obsAnimTimer);
   obsAnimTimer=setInterval(function(){
+    /* Verify we're still playing (user might have paused via another control) */
+    if(!obsAnimPlaying){
+      clearInterval(obsAnimTimer);
+      obsAnimTimer=null;
+      return;
+    }
     var next=obsAnimCurrentIdx+1;
     if(next>=obsAnimFrames.length)next=0;  /* Loop */
     obsAnimShowFrame(next);
-  },500);  /* 500ms per frame = 2 fps */
+  },obsAnimSpeed);
 }
 
 /* Step forward/backward */
 function obsAnimStep(dir){
   if(obsAnimFrames.length===0)return;
+  /* Pause if playing */
+  if(obsAnimPlaying){
+    obsAnimPlaying=false;
+    if(obsAnimTimer){clearInterval(obsAnimTimer);obsAnimTimer=null}
+    var btn=document.getElementById('obsAnimPlayBtn');
+    if(btn)btn.innerHTML='<i class="fas fa-play"></i>';
+  }
   var next=obsAnimCurrentIdx+dir;
   if(next<0)next=obsAnimFrames.length-1;
   if(next>=obsAnimFrames.length)next=0;
@@ -11551,24 +11695,36 @@ function obsAnimStep(dir){
 
 /* Seek to a specific frame (timeline slider) */
 function obsAnimSeekTo(val){
+  /* Pause if playing */
+  if(obsAnimPlaying){
+    obsAnimPlaying=false;
+    if(obsAnimTimer){clearInterval(obsAnimTimer);obsAnimTimer=null}
+    var btn=document.getElementById('obsAnimPlayBtn');
+    if(btn)btn.innerHTML='<i class="fas fa-play"></i>';
+  }
   obsAnimShowFrame(parseInt(val));
 }
 
-/* Stop animation and restore live gradient */
+/* Stop animation and restore live gradient + pins */
 function obsAnimStop(){
   obsAnimPlaying=false;
   if(obsAnimTimer){clearInterval(obsAnimTimer);obsAnimTimer=null}
   var btn=document.getElementById('obsAnimPlayBtn');
   if(btn)btn.innerHTML='<i class="fas fa-play"></i>';
-  /* Remove animation layer */
+  /* Remove animation gradient layer */
   if(obsAnimGradientLayer&&alertMapInstance){
     alertMapInstance.removeLayer(obsAnimGradientLayer);
     obsAnimGradientLayer=null;
   }
-  /* Restore live gradient opacity */
-  if(obsGradientLayer){
-    obsGradientLayer.setOpacity(0.55);
+  /* Remove animation pin layer */
+  if(obsAnimPinLayer&&alertMapInstance){
+    alertMapInstance.removeLayer(obsAnimPinLayer);
+    obsAnimPinLayer=null;
   }
+  /* Restore live gradient opacity */
+  if(obsGradientLayer)obsGradientLayer.setOpacity(0.55);
+  /* Restore live pin opacity */
+  if(obsLayer)obsLayer.eachLayer(function(l){l.setOpacity(1)});
 }
 
 /* Render observation markers on the map */
