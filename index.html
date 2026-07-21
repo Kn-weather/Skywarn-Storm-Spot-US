@@ -330,6 +330,51 @@ body{
 .alert-map-legend-item input[type="checkbox"]{
   width:11px;height:11px;cursor:pointer;margin:0;flex-shrink:0;
 }
+/* Collapsible alert legend categories */
+.legend-cat-section{
+  margin-bottom:2px;
+}
+.legend-cat-header{
+  display:flex;align-items:center;gap:5px;
+  padding:5px 6px;
+  background:rgba(255,115,0,.05);
+  border:1px solid var(--bdr);
+  border-radius:3px;
+  cursor:pointer;
+  user-select:none;
+  font-size:9px;font-weight:700;
+  color:var(--t2);
+  text-transform:uppercase;letter-spacing:.03em;
+  transition:background .15s;
+  margin-bottom:2px;
+}
+.legend-cat-header:hover{background:rgba(255,115,0,.1);color:var(--t1)}
+.legend-cat-chevron{
+  font-size:7px;color:var(--t3);
+  transition:transform .2s;
+  flex-shrink:0;
+}
+.legend-cat-section.expanded .legend-cat-chevron{
+  transform:rotate(90deg);
+}
+.legend-cat-header span{
+  flex:1;
+}
+.legend-cat-count{
+  flex:0 0 auto!important;
+  background:rgba(255,115,0,.15);
+  color:var(--acc);
+  font-size:9px;font-weight:700;
+  padding:1px 6px;
+  border-radius:8px;
+}
+.legend-cat-body{
+  display:none;
+  padding:2px 4px 4px 12px;
+}
+.legend-cat-section.expanded .legend-cat-body{
+  display:block;
+}
 /* Loading overlay */
 .loading-overlay{
   position:absolute;inset:0;z-index:1500;
@@ -3110,12 +3155,16 @@ function toggleAlertType(eventName){
 }
 
 /* ── Build the dynamic legend with per-type visibility checkboxes ──────── */
+/* Category display config for the legend */
+var LEGEND_CAT_CONFIG={
+  warnings:{label:'Warnings',color:'#ff5a5a',icon:'fas fa-triangle-exclamation'},
+  watches:{label:'Watches',color:'#ffd60a',icon:'fas fa-eye'},
+  advisories:{label:'Advisories & Statements',color:'#5aff7a',icon:'fas fa-info-circle'}
+};
+
 function buildAlertLegend(presentTypes){
   var body=document.getElementById('alertMapLegendBody');
   if(!body)return;
-  /* Show the Show All / Hide All action row whenever there are alerts
-     present. Both buttons stay visible so the user can always toggle
-     the whole set on or off in one click. */
   var actionsRow=document.getElementById('alertMapLegendActions');
   var hasAlerts=presentTypes&&presentTypes.length>0;
   if(actionsRow)actionsRow.style.display=hasAlerts?'flex':'none';
@@ -3123,37 +3172,61 @@ function buildAlertLegend(presentTypes){
     body.innerHTML='<div style="font-size:10px;color:var(--t3);padding:6px 0">No active alerts</div>';
     return;
   }
-  /* Sort alphabetically by event name (case-insensitive) for easy scanning.
-     This puts all related alert types together (e.g. "Flood Advisory",
-     "Flood Statement", "Flood Watch", "Flood Warning" cluster under F)
-     regardless of their severity category. */
-  presentTypes.sort(function(a,b){
-    return a.event.toLowerCase().localeCompare(b.event.toLowerCase());
-  });
-  var html='';
+
+  /* Group alert types by category */
+  var byCat={warnings:[],watches:[],advisories:[]};
   presentTypes.forEach(function(t){
-    /* Determine if this alert type is currently visible on the map.
-       Visibility depends on BOTH the category toggle AND per-type hide.
-       Critical alerts bypass the category toggle (always visible unless
-       explicitly hidden via the legend). */
-    var catCbId=t.cat==='advisories'?'amLayerAdvisories':(t.cat==='warnings'?'amLayerWarnings':'amLayerWatches');
-    var catCb=document.getElementById(catCbId);
-    var catOn=catCb&&catCb.checked;
-    var isCritical=!!CRITICAL_ALWAYS_ON[t.event];
-    var perTypeHidden=!!ALERT_TYPE_HIDDEN[t.event];
-    /* For critical alerts, category state doesn't gate visibility. */
-    var effectivelyVisible=isCritical?!perTypeHidden:(catOn&&!perTypeHidden);
-    var isHidden=!effectivelyVisible;
-    var isCategoryOff=!isCritical&&!catOn;
-    html+='<label class="alert-map-legend-item" style="opacity:'+(isHidden?'.4':'1')+';cursor:pointer"'+(isCategoryOff?' title="Click to enable '+t.cat+'"':'')+'>'+
-      '<input type="checkbox" '+(effectivelyVisible?'checked':'')+' onchange="toggleAlertType(\''+t.event.replace(/'/g,"\\'")+'\')" style="accent-color:'+t.color+'">'+
-      '<div class="alert-map-legend-dot" style="background:'+t.color+'"></div>'+
-      '<span>'+t.event+'</span>'+
-      (t.count>1?'<span style="margin-left:auto;font-size:9px;color:var(--t3);font-weight:700">'+t.count+'</span>':'')+
-      (isCritical?'<i class="fas fa-star" style="color:var(--acc);font-size:8px;margin-left:3px" title="Critical alert - always shown"></i>':'')+
-      '</label>';
+    if(byCat[t.cat])byCat[t.cat].push(t);
+  });
+
+  /* Sort each category alphabetically */
+  Object.keys(byCat).forEach(function(cat){
+    byCat[cat].sort(function(a,b){
+      return a.event.toLowerCase().localeCompare(b.event.toLowerCase());
+    });
+  });
+
+  var html='';
+  /* Render each category as a collapsible section */
+  ['warnings','watches','advisories'].forEach(function(cat){
+    var items=byCat[cat];
+    if(!items||items.length===0)return;  /* skip empty categories */
+    var config=LEGEND_CAT_CONFIG[cat]||LEGEND_CAT_CONFIG.advisories;
+    var sectionId='legend-cat-'+cat;
+
+    /* Category header (clickable to expand/collapse) */
+    html+='<div class="legend-cat-section" data-cat="'+cat+'">';
+    html+='<div class="legend-cat-header" onclick="toggleLegendCategory(this)">';
+    html+='<i class="fas fa-chevron-right legend-cat-chevron"></i>';
+    html+='<i class="'+config.icon+'" style="color:'+config.color+';font-size:9px"></i>';
+    html+='<span>'+config.label+'</span>';
+    html+='<span class="legend-cat-count">'+items.length+'</span>';
+    html+='</div>';
+    html+='<div class="legend-cat-body">';
+    items.forEach(function(t){
+      var catCbId=cat==='advisories'?'amLayerAdvisories':(cat==='warnings'?'amLayerWarnings':'amLayerWatches');
+      var catCb=document.getElementById(catCbId);
+      var catOn=catCb&&catCb.checked;
+      var isCritical=!!CRITICAL_ALWAYS_ON[t.event];
+      var perTypeHidden=!!ALERT_TYPE_HIDDEN[t.event];
+      var effectivelyVisible=isCritical?!perTypeHidden:(catOn&&!perTypeHidden);
+      var isHidden=!effectivelyVisible;
+      var isCategoryOff=!isCritical&&!catOn;
+      html+='<label class="alert-map-legend-item" style="opacity:'+(isHidden?'.4':'1')+';cursor:pointer"'+(isCategoryOff?' title="Click to enable '+cat+'"':'')+'>'+
+        '<input type="checkbox" '+(effectivelyVisible?'checked':'')+' onchange="toggleAlertType(\''+t.event.replace(/'/g,"\\'")+'\')" style="accent-color:'+t.color+'">'+
+        '<div class="alert-map-legend-dot" style="background:'+t.color+'"></div>'+
+        '<span>'+t.event+'</span>'+
+        (t.count>1?'<span style="margin-left:auto;font-size:9px;color:var(--t3);font-weight:700">'+t.count+'</span>':'')+
+        (isCritical?'<i class="fas fa-star" style="color:var(--acc);font-size:8px;margin-left:3px" title="Critical alert - always shown"></i>':'')+
+        '</label>';
+    });
+    html+='</div>';  /* close legend-cat-body */
+    html+='</div>';  /* close legend-cat-section */
   });
   body.innerHTML=html;
+
+  /* Restore expanded/collapsed state from localStorage */
+  restoreLegendCategoryStates();
 }
 
 /* ── Point-in-polygon tests for popup overlap detection ────────────────── */
@@ -11278,6 +11351,55 @@ function restoreSectionStates(){
     var states=JSON.parse(raw);
     document.querySelectorAll('.collapsible-section').forEach(function(s){
       var key=s.getAttribute('data-section');
+      if(key&&states[key]){
+        s.classList.add('expanded');
+      }else{
+        s.classList.remove('expanded');
+      }
+    });
+  }catch(e){}
+}
+
+/* ── Collapsible alert legend categories ──
+   The active alerts legend groups alerts by category (Warnings, Watches,
+   Advisories). Each category header is collapsible. State is persisted
+   in localStorage so the user's expand/collapse preferences survive
+   page reloads. Categories start expanded by default so the user can
+   see all active alerts immediately. */
+var LEGEND_CAT_KEY='skywarn_legend_cats_v1';
+
+function toggleLegendCategory(headerEl){
+  var section=headerEl.parentElement;
+  if(!section)return;
+  section.classList.toggle('expanded');
+  saveLegendCategoryStates();
+}
+
+function saveLegendCategoryStates(){
+  try{
+    var states={};
+    document.querySelectorAll('.legend-cat-section').forEach(function(s){
+      var key=s.getAttribute('data-cat');
+      if(key)states[key]=s.classList.contains('expanded');
+    });
+    localStorage.setItem(LEGEND_CAT_KEY,JSON.stringify(states));
+  }catch(e){}
+}
+
+function restoreLegendCategoryStates(){
+  try{
+    var raw=localStorage.getItem(LEGEND_CAT_KEY);
+    if(!raw){
+      /* First visit — expand all categories by default so the user
+         sees all active alerts immediately */
+      document.querySelectorAll('.legend-cat-section').forEach(function(s){
+        s.classList.add('expanded');
+      });
+      return;
+    }
+    var states=JSON.parse(raw);
+    document.querySelectorAll('.legend-cat-section').forEach(function(s){
+      var key=s.getAttribute('data-cat');
       if(key&&states[key]){
         s.classList.add('expanded');
       }else{
