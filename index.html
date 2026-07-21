@@ -1958,6 +1958,31 @@ body.capturing .hamburger-menu{display:none!important}
       </div>
 
       <div class="divider">
+        <div class="section-label">Surface Observations</div>
+        <label style="margin:1px 0"><input type="checkbox" id="amObsEnable" onchange="toggleObsLayer()"> Show Surface Obs</label>
+        <div style="font-size:9px;color:var(--t3);line-height:1.4;margin-top:3px">
+          Uses the state filter above. Select a state first for faster loading.
+        </div>
+        <div style="font-size:8px;color:var(--t3);text-transform:uppercase;letter-spacing:.04em;margin-top:4px;margin-bottom:2px">Variable</div>
+        <select id="amObsVar" onchange="onObsVarChange()" style="width:100%;background:var(--bg);border:1px solid var(--bdr);color:var(--t1);font-family:inherit;font-size:9px;padding:4px 6px;border-radius:4px;cursor:pointer;outline:none">
+          <option value="temperature">Temperature (°F)</option>
+          <option value="dewpoint">Dewpoint (°F)</option>
+          <option value="windSpeed">Wind Speed (mph)</option>
+          <option value="windGust">Wind Gust (mph)</option>
+          <option value="windDirection">Wind Direction</option>
+          <option value="pressure">Pressure (hPa)</option>
+          <option value="visibility">Visibility (mi)</option>
+          <option value="relativeHumidity">Relative Humidity (%)</option>
+          <option value="precipitation">Precip 1hr (in)</option>
+        </select>
+        <div style="display:flex;align-items:center;gap:6px;margin-top:4px">
+          <label style="font-size:9px;color:var(--t3)">Refresh</label>
+          <button class="radar-anim-btn" onclick="obsRefresh()" title="Refresh observations" style="padding:3px 8px;font-size:10px"><i class="fas fa-rotate"></i></button>
+          <span id="obsLastUpdate" style="font-size:8px;color:var(--t3);margin-left:auto"></span>
+        </div>
+      </div>
+
+      <div class="divider">
         <div class="section-label">SPC Convective Outlook</div>
         <select id="amSpcDay" onchange="toggleSpcOverlay()">
           <option value="">Off</option>
@@ -2006,28 +2031,6 @@ body.capturing .hamburger-menu{display:none!important}
         <label style="margin:1px 0"><input type="checkbox" id="amSndEnable" onchange="toggleSndLayer()"> Show RAOB Stations</label>
         <div style="font-size:9px;color:var(--t3);line-height:1.4;margin-top:3px">
           68 NWS upper-air sites. Click a pin to view the latest skew-T.
-        </div>
-      </div>
-
-      <div class="divider">
-        <div class="section-label">Surface Observations</div>
-        <label style="margin:1px 0"><input type="checkbox" id="amObsEnable" onchange="toggleObsLayer()"> Show Surface Obs</label>
-        <div style="font-size:8px;color:var(--t3);text-transform:uppercase;letter-spacing:.04em;margin-top:4px;margin-bottom:2px">Variable</div>
-        <select id="amObsVar" onchange="onObsVarChange()" style="width:100%;background:var(--bg);border:1px solid var(--bdr);color:var(--t1);font-family:inherit;font-size:9px;padding:4px 6px;border-radius:4px;cursor:pointer;outline:none">
-          <option value="temperature">Temperature (°F)</option>
-          <option value="dewpoint">Dewpoint (°F)</option>
-          <option value="windSpeed">Wind Speed (mph)</option>
-          <option value="windGust">Wind Gust (mph)</option>
-          <option value="windDirection">Wind Direction</option>
-          <option value="pressure">Pressure (hPa)</option>
-          <option value="visibility">Visibility (mi)</option>
-          <option value="relativeHumidity">Relative Humidity (%)</option>
-          <option value="precipitation">Precip 1hr (in)</option>
-        </select>
-        <div style="display:flex;align-items:center;gap:6px;margin-top:4px">
-          <label style="font-size:9px;color:var(--t3)">Refresh</label>
-          <button class="radar-anim-btn" onclick="obsRefresh()" title="Refresh observations" style="padding:3px 8px;font-size:10px"><i class="fas fa-rotate"></i></button>
-          <span id="obsLastUpdate" style="font-size:8px;color:var(--t3);margin-left:auto"></span>
         </div>
       </div>
 
@@ -11137,18 +11140,25 @@ function obsRender(){
   if(!obsLayer||!obsStations.length)return;
   obsLayer.clearLayers();
   var config=OBS_VAR_CONFIG[obsCurrentVar]||OBS_VAR_CONFIG.temperature;
+  var renderedCount=0;
 
   obsStations.forEach(function(st){
     var data=obsData[st.id];
     if(!data||!data.obs)return;
     var rawVal=obsGetRaw(data.obs,obsCurrentVar);
+
+    /* Hide stations that have no value (null) for the selected variable.
+       This keeps the map clean and reduces the number of DOM elements,
+       which improves performance significantly. Only stations with actual
+       data for the selected variable are shown. */
+    if(rawVal==null)return;
+
     var displayVal=config.format(rawVal);
     var color=config.color(rawVal);
 
-    /* For wind direction, show a small wind barb instead of a number */
+    /* For wind variables, show wind speed with direction arrow */
     var html;
     if(obsCurrentVar==='windDirection'||obsCurrentVar==='windSpeed'||obsCurrentVar==='windGust'){
-      /* Show wind speed with direction arrow */
       var dir=data.obs.windDirection?data.obs.windDirection.value:null;
       var spd=data.obs.windSpeed?data.obs.windSpeed.value:null;
       var gust=data.obs.windGust?data.obs.windGust.value:null;
@@ -11169,7 +11179,9 @@ function obsRender(){
     var marker=L.marker([st.lat,st.lon],{icon:icon});
     marker.bindPopup(obsBuildPopup(st,data),{className:'obs-popup',maxWidth:240});
     obsLayer.addLayer(marker);
+    renderedCount++;
   });
+  console.log('[Obs] Rendered '+renderedCount+' markers (hidden stations with null values)');
 }
 
 /* Build popup HTML for an observation station */
