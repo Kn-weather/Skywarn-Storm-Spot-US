@@ -11098,19 +11098,22 @@ function toggleObsLayer(){
   }
 }
 
-async function obsEnable(){
+async function obsEnable(forcedState){
   if(!alertMapInstance)return;
-  /* Get the current state filter value */
+  /* Get the current state filter value (or use forcedState from caller) */
   var stateFilter=document.getElementById('amStateFilter');
-  var state=(stateFilter&&stateFilter.value)?stateFilter.value.toUpperCase():'';
+  var state=forcedState||((stateFilter&&stateFilter.value)?stateFilter.value.toUpperCase():'');
   /* Load stations for the selected state only (or all if no filter) */
   obsStationsLoaded=false;  /* Force reload when state changes */
   await obsLoadStations(state);
-  /* Create the layer group */
-  if(!obsLayer){
-    obsLayer=L.layerGroup().addTo(alertMapInstance);
+  /* Create the layer group for pin markers (only if pins are enabled) */
+  var obsCb=document.getElementById('amObsEnable');
+  if(obsCb&&obsCb.checked){
+    if(!obsLayer){
+      obsLayer=L.layerGroup().addTo(alertMapInstance);
+    }
   }
-  /* Fetch observations and render */
+  /* Fetch observations (needed for both pins and gradient) */
   await obsFetchAll();
   /* Auto-refresh every 5 minutes */
   if(!obsRefreshTimer){
@@ -11127,6 +11130,14 @@ function obsDisable(){
   if(obsGradientLayer&&alertMapInstance){
     alertMapInstance.removeLayer(obsGradientLayer);
     obsGradientLayer=null;
+  }
+  /* Remove map move/zoom listener */
+  if(alertMapInstance){
+    alertMapInstance.off('moveend zoomend',obsGradientOnMapMove);
+  }
+  if(obsGradientMoveTimer){
+    clearTimeout(obsGradientMoveTimer);
+    obsGradientMoveTimer=null;
   }
   /* Uncheck the gradient checkbox */
   var gradCb=document.getElementById('amObsGradient');
@@ -11326,23 +11337,58 @@ function obsBuildPopup(st,data){
 
 var obsGradientLayer=null;   /* Leaflet imageOverlay layer */
 var obsGradientCanvas=null;  /* Offscreen canvas for rendering */
+var obsGradientMoveTimer=null;  /* Debounce timer for map move/zoom */
 
 function toggleObsGradient(){
   var cb=document.getElementById('amObsGradient');
   if(!cb)return;
   if(cb.checked){
-    /* Ensure obs data is loaded first */
-    if(!obsLayer){
-      var obsCb=document.getElementById('amObsEnable');
-      if(obsCb){obsCb.checked=true;toggleObsLayer()}
+    /* Ensure obs data is loaded (but don't force pins on — gradient
+       can work independently of the pin markers) */
+    if(!obsStationsLoaded){
+      /* Need to load stations + fetch data first */
+      var stateFilter=document.getElementById('amStateFilter');
+      var state=(stateFilter&&stateFilter.value)?stateFilter.value.toUpperCase():'';
+      obsEnable(state);
+    }else if(Object.keys(obsData).length===0){
+      /* Stations loaded but no observation data yet — fetch it */
+      obsFetchAll();
+    }else{
+      /* Data already available — just render the gradient */
+      obsRenderGradient();
     }
-    obsRenderGradient();
+    /* Attach map move/zoom listener for auto-refresh */
+    if(!obsGradientMoveTimer&&alertMapInstance){
+      alertMapInstance.on('moveend zoomend',obsGradientOnMapMove);
+    }
   }else{
     if(obsGradientLayer&&alertMapInstance){
       alertMapInstance.removeLayer(obsGradientLayer);
       obsGradientLayer=null;
     }
+    /* Remove map move/zoom listener */
+    if(alertMapInstance){
+      alertMapInstance.off('moveend zoomend',obsGradientOnMapMove);
+    }
+    if(obsGradientMoveTimer){
+      clearTimeout(obsGradientMoveTimer);
+      obsGradientMoveTimer=null;
+    }
   }
+}
+
+/* Debounced map move/zoom handler — re-renders the gradient after the
+   user stops moving/zooming for 500ms. Without this, the gradient only
+   covers the original map bounds and shows blank when you pan/zoom past
+   the edge. */
+function obsGradientOnMapMove(){
+  var cb=document.getElementById('amObsGradient');
+  if(!cb||!cb.checked)return;
+  if(obsGradientMoveTimer)clearTimeout(obsGradientMoveTimer);
+  obsGradientMoveTimer=setTimeout(function(){
+    obsRenderGradient();
+    obsGradientMoveTimer=null;
+  },500);
 }
 
 /* Render the gradient overlay using IDW interpolation */
@@ -11663,9 +11709,12 @@ function onObsVarChange(){
   }
 }
 
-/* Manual refresh button */
+/* Manual refresh button — refreshes both pins and gradient */
 function obsRefresh(){
-  if(obsLayer){
+  /* Refresh if either pins or gradient is active */
+  var gradCb=document.getElementById('amObsGradient');
+  var obsCb=document.getElementById('amObsEnable');
+  if((obsCb&&obsCb.checked)||(gradCb&&gradCb.checked)){
     obsFetchAll();
   }
 }
