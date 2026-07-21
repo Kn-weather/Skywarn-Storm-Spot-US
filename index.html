@@ -2016,6 +2016,7 @@ body.capturing .hamburger-menu{display:none!important}
           </select>
           <div class="section-label" style="margin-top:8px">Surface Observations</div>
           <label style="margin:1px 0"><input type="checkbox" id="amObsEnable" onchange="toggleObsLayer()"> Show Surface Obs</label>
+          <label style="margin:1px 0;font-size:9px;color:var(--t2)"><input type="checkbox" id="amObsGradient" onchange="toggleObsGradient()" style="accent-color:var(--acc)"> Color Gradient Overlay</label>
           <div style="font-size:9px;color:var(--t3);line-height:1.4;margin-top:3px">Uses the state filter above. Select a state first for faster loading.</div>
           <div style="font-size:8px;color:var(--t3);text-transform:uppercase;letter-spacing:.04em;margin-top:4px;margin-bottom:2px">Variable</div>
           <select id="amObsVar" onchange="onObsVarChange()" style="width:100%;background:var(--bg);border:1px solid var(--bdr);color:var(--t1);font-family:inherit;font-size:9px;padding:4px 6px;border-radius:4px;cursor:pointer;outline:none">
@@ -11122,6 +11123,14 @@ function obsDisable(){
     alertMapInstance.removeLayer(obsLayer);
     obsLayer=null;
   }
+  /* Also remove the gradient overlay if active */
+  if(obsGradientLayer&&alertMapInstance){
+    alertMapInstance.removeLayer(obsGradientLayer);
+    obsGradientLayer=null;
+  }
+  /* Uncheck the gradient checkbox */
+  var gradCb=document.getElementById('amObsGradient');
+  if(gradCb)gradCb.checked=false;
   if(obsRefreshTimer){
     clearInterval(obsRefreshTimer);
     obsRefreshTimer=null;
@@ -11216,6 +11225,8 @@ async function obsFetchAll(){
   }
   /* Final render */
   obsRender();
+  /* Also re-render gradient if active */
+  obsRenderGradient();
   /* Update timestamp */
   if(el){
     var now=new Date();
@@ -11306,10 +11317,245 @@ function obsBuildPopup(st,data){
   return html;
 }
 
+/* ════════════════════════════════════════════════════════════════════════
+   Surface Observation Color Gradient Overlay
+   Renders a smooth color gradient on the map using inverse distance
+   weighting (IDW) interpolation between station values. Similar to the
+   heatmap in Windy.com or the NWS hazards map.
+   ════════════════════════════════════════════════════════════════════════ */
+
+var obsGradientLayer=null;   /* Leaflet imageOverlay layer */
+var obsGradientCanvas=null;  /* Offscreen canvas for rendering */
+
+function toggleObsGradient(){
+  var cb=document.getElementById('amObsGradient');
+  if(!cb)return;
+  if(cb.checked){
+    /* Ensure obs data is loaded first */
+    if(!obsLayer){
+      var obsCb=document.getElementById('amObsEnable');
+      if(obsCb){obsCb.checked=true;toggleObsLayer()}
+    }
+    obsRenderGradient();
+  }else{
+    if(obsGradientLayer&&alertMapInstance){
+      alertMapInstance.removeLayer(obsGradientLayer);
+      obsGradientLayer=null;
+    }
+  }
+}
+
+/* Render the gradient overlay using IDW interpolation */
+function obsRenderGradient(){
+  if(!alertMapInstance)return;
+  var cb=document.getElementById('amObsGradient');
+  if(!cb||!cb.checked)return;
+  if(!obsStations.length||!obsStationsLoaded)return;
+
+  var varSel=document.getElementById('amObsVar');
+  obsCurrentVar=varSel?varSel.value:'temperature';
+  var config=OBS_VAR_CONFIG[obsCurrentVar]||OBS_VAR_CONFIG.temperature;
+
+  /* Collect stations with valid data for this variable */
+  var points=[];
+  obsStations.forEach(function(st){
+    var data=obsData[st.id];
+    if(!data||!data.obs)return;
+    var rawVal=obsGetRaw(data.obs,obsCurrentVar);
+    if(rawVal==null)return;
+    var displayVal=config.format(rawVal);
+    /* Skip '—' values */
+    if(displayVal==='—')return;
+    /* Parse the display value to a number for interpolation */
+    var numVal=parseFloat(displayVal);
+    if(isNaN(numVal))return;
+    points.push({lat:st.lat,lon:st.lon,val:numVal,rawVal:rawVal});
+  });
+
+  if(points.length<3){
+    console.log('[ObsGradient] Not enough data points ('+points.length+') for gradient');
+    return;
+  }
+
+  /* Get the current map bounds */
+  var bounds=alertMapInstance.getBounds();
+  var north=bounds.getNorth(),south=bounds.getSouth();
+  var east=bounds.getEast(),west=bounds.getWest();
+
+  /* Canvas resolution — lower = faster but blurrier.
+     Use 200x200 for a balance of speed and quality. */
+  var gridW=200,gridH=200;
+  var canvas=document.createElement('canvas');
+  canvas.width=gridW;
+  canvas.height=gridH;
+  var ctx=canvas.getContext('2d');
+  var imageData=ctx.createImageData(gridW,gridH);
+  var data=imageData.data;
+
+  /* IDW interpolation power — higher = more localized (sharper) */
+  var power=2.5;
+
+  /* For each grid cell, compute the interpolated value using IDW */
+  for(var gy=0;gy<gridH;gy++){
+    for(var gx=0;gx<gridW;gx++){
+      /* Map grid cell to lat/lon */
+      var lat=north-(gy/gridH)*(north-south);
+      var lon=west+(gx/gridW)*(east-west);
+
+      /* IDW: weighted average of nearby stations */
+      var sumWeight=0,sumVal=0;
+      var foundNearby=false;
+      for(var i=0;i<points.length;i++){
+        var dlat=points[i].lat-lat;
+        var dlon=points[i].lon-lon;
+        var dist=dlat*dlat+dlon*dlon;  /* squared distance (good enough for weighting) */
+        if(dist<0.0001){
+          /* Exact location — use this station's value directly */
+          sumVal=points[i].val;
+          sumWeight=1;
+          foundNearby=true;
+          break;
+        }
+        var weight=1/Math.pow(dist,power/2);
+        sumWeight+=weight;
+        sumVal+=weight*points[i].val;
+      }
+
+      var interpVal=sumWeight>0?sumVal/sumWeight:0;
+
+      /* Get color for this interpolated value */
+      /* We need to convert the display value back to a raw value for
+         the color function, OR just use the color function directly
+         with the interpolated display value. Since our color functions
+         take the raw API value (Celsius, km/h, etc.), we need to
+         convert back. For simplicity, let's create a color function
+         that works with the display value (F, mph, etc.) */
+      var color=obsColorForDisplayValue(interpVal,obsCurrentVar);
+
+      var idx=(gy*gridW+gx)*4;
+      data[idx]=color.r;
+      data[idx+1]=color.g;
+      data[idx+2]=color.b;
+      data[idx+3]=color.a;
+    }
+  }
+
+  ctx.putImageData(imageData,0,0);
+
+  /* Convert canvas to data URL and create/update the image overlay */
+  var dataUrl=canvas.toDataURL('image/png');
+  var imageBounds=[[south,west],[north,east]];
+
+  if(obsGradientLayer){
+    alertMapInstance.removeLayer(obsGradientLayer);
+  }
+  obsGradientLayer=L.imageOverlay(dataUrl,imageBounds,{
+    opacity:0.55,
+    interactive:false,
+    zIndex:200
+  }).addTo(alertMapInstance);
+
+  console.log('[ObsGradient] Rendered gradient for '+obsCurrentVar+' with '+points.length+' points');
+}
+
+/* Color function that works with DISPLAY values (°F, mph, etc.)
+   Returns {r,g,b,a} for the canvas imageData */
+function obsColorForDisplayValue(val,varKey){
+  /* Convert display value back to a color using the same thresholds
+     as the marker color functions, but operating on display values */
+  var r,g,b,a=140;
+
+  if(varKey==='temperature'||varKey==='dewpoint'){
+    /* val is in °F */
+    if(val<0){r=91;g=140;b=255}
+    else if(val<20){r=90;g=255;b=122}
+    else if(val<40){r=255;g=214;b=10}
+    else if(val<60){r=255;g=179;b=64}
+    else if(val<80){r=255;g=90;b=90}
+    else{r=255;g=0;b=255}
+  }else if(varKey==='windSpeed'||varKey==='windGust'){
+    /* val is in mph */
+    if(val<5){r=90;g=255;b=122}
+    else if(val<15){r=255;g=214;b=10}
+    else if(val<25){r=255;g=179;b=64}
+    else if(val<35){r=255;g=90;b=90}
+    else{r=255;g=0;b=255}
+  }else if(varKey==='pressure'){
+    /* val is in hPa */
+    if(val<1000){r=91;g=140;b=255}
+    else if(val<1013){r=90;g=255;b=122}
+    else if(val<1020){r=255;g=214;b=10}
+    else{r=255;g=90;b=90}
+  }else if(varKey==='visibility'){
+    /* val is in miles */
+    if(val<1){r=255;g=90;b=90}
+    else if(val<3){r=255;g=179;b=64}
+    else if(val<5){r=255;g=214;b=10}
+    else if(val<10){r=90;g=255;b=122}
+    else{r=57;g=211;b=83}
+  }else if(varKey==='relativeHumidity'){
+    /* val is in % */
+    if(val<30){r=255;g=90;b=90}
+    else if(val<50){r=255;g=179;b=64}
+    else if(val<70){r=255;g=214;b=10}
+    else if(val<85){r=90;g=255;b=122}
+    else{r=91;g=140;b=255}
+  }else if(varKey==='precipitation'){
+    /* val is in inches */
+    if(val<0.01){r=57;g=211;b=83}
+    else if(val<0.1){r=90;g=255;b=122}
+    else if(val<0.25){r=255;g=214;b=10}
+    else if(val<0.5){r=255;g=179;b=64}
+    else if(val<1){r=255;g=90;b=90}
+    else{r=255;g=0;b=255}
+  }else if(varKey==='windDirection'){
+    /* Direction — use a rainbow based on degrees */
+    var hue=(val/360)*360;
+    var rgb=obsHslToRgb(hue/360,0.7,0.5);
+    r=rgb[0];g=rgb[1];b=rgb[2];
+  }else{
+    r=100;g=100;b=100;
+  }
+
+  return{r:r,g:g,b:b,a:a};
+}
+
+/* HSL to RGB conversion for wind direction coloring */
+function obsHslToRgb(h,s,l){
+  var r,g,b;
+  if(s===0){r=g=b=l}
+  else{
+    var hue2rgb=function(p,q,t){
+      if(t<0)t+=1;if(t>1)t-=1;
+      if(t<1/6)return p+(q-p)*6*t;
+      if(t<1/2)return q;
+      if(t<2/3)return p+(q-p)*(2/3-t)*6;
+      return p;
+    };
+    var q=l<0.5?l*(1+s):l+s-l*s;
+    var p=2*l-q;
+    r=hue2rgb(p,q,h+1/3);
+    g=hue2rgb(p,q,h);
+    b=hue2rgb(p,q,h-1/3);
+  }
+  return[Math.round(r*255),Math.round(g*255),Math.round(b*255)];
+}
+
 /* Called when user changes the variable dropdown */
 function onObsVarChange(){
+  /* Read the new variable from the dropdown and update immediately.
+     No refresh needed — we already have the observation data cached,
+     we just need to re-render with the new variable. */
+  var varSel=document.getElementById('amObsVar');
+  if(varSel){
+    obsCurrentVar=varSel.value;
+  }
   if(obsLayer){
     obsRender();
+  }
+  /* Also update the gradient layer if it's active */
+  if(obsGradientLayer){
+    obsRenderGradient();
   }
 }
 
