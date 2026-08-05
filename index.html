@@ -997,6 +997,30 @@ body{
   filter:saturate(0.3);
 }
 
+/* ── Storm motion vectors ── */
+.storm-motion-arrow{
+  stroke-width:3;
+  stroke-linecap:round;
+  filter:drop-shadow(0 0 4px rgba(0,0,0,.6));
+}
+.storm-motion-label{
+  background:rgba(10,10,10,.9);
+  border:1px solid var(--acc);
+  border-radius:4px;
+  padding:2px 6px;
+  font-size:9px;font-weight:700;
+  font-family:'Inter',sans-serif;
+  color:var(--acc);
+  white-space:nowrap;
+  box-shadow:0 2px 6px rgba(0,0,0,.4);
+}
+.storm-motion-eta-popup .leaflet-popup-content-wrapper{
+  background:#0a0a0a;border:1px solid var(--acc);border-radius:6px;
+  color:var(--t1);box-shadow:0 4px 16px rgba(0,0,0,.6);
+}
+.storm-motion-eta-popup .leaflet-popup-content{margin:8px 12px;font-size:11px;font-family:'Inter',sans-serif}
+.storm-motion-eta-popup .leaflet-popup-tip{background:var(--acc)}
+
 /* ── Surface observation markers ── */
 .obs-marker{
   display:flex;align-items:center;justify-content:center;
@@ -2112,6 +2136,22 @@ body.capturing .hamburger-menu{display:none!important}
         <div class="collapsible-body">
           <label style="margin:1px 0"><input type="checkbox" id="amSndEnable" onchange="toggleSndLayer()"> Show RAOB Stations</label>
           <div style="font-size:9px;color:var(--t3);line-height:1.4;margin-top:3px">68 NWS upper-air sites. Click a pin to view the latest skew-T.</div>
+        </div>
+      </div>
+
+      <div class="collapsible-section" data-section="stormmotion">
+        <div class="collapsible-header" onclick="toggleSection(this)">
+          <span>Storm Motion Vectors</span><i class="fas fa-chevron-right"></i>
+        </div>
+        <div class="collapsible-body">
+          <label style="margin:1px 0"><input type="checkbox" id="amStormMotion" onchange="toggleStormMotion()"> Show Storm Motion Arrows</label>
+          <div style="font-size:9px;color:var(--t3);line-height:1.4;margin-top:3px">Tracks warned storms and draws motion arrows. Click the map to estimate storm ETA.</div>
+          <label style="margin:1px 0;font-size:9px;color:var(--t2)">Arrow length: <select id="amStormMotionHorizon" onchange="stormMotionRender()" style="background:var(--bg);border:1px solid var(--bdr);color:var(--t1);font-family:inherit;font-size:9px;padding:2px 4px;border-radius:3px">
+            <option value="15">15 min</option>
+            <option value="30" selected>30 min</option>
+            <option value="60">60 min</option>
+          </select></label>
+          <div id="stormMotionStatus" style="font-size:8px;color:var(--t3);margin-top:4px"></div>
         </div>
       </div>
 
@@ -4672,6 +4712,11 @@ async function fAlertMap(){
     if(isDeltaUpdate)hideLoading();
     /* Check for new critical alerts and play sound if needed */
     checkForNewCriticalAlerts(isDeltaUpdate?Object.fromEntries(Object.keys(alertLayerCache).map(function(k){return[k,true]})):null);
+    /* Update storm motion tracks and re-render arrows if enabled */
+    if(stormMotionEnabled){
+      stormMotionUpdateTracks();
+      stormMotionRender();
+    }
     /* Log the update to the console */
     if(isDeltaUpdate){
       var deltaMsg='Refreshed: '+drawnAlerts.length+' alerts';
@@ -12312,6 +12357,422 @@ function restoreLegendCategoryStates(){
       }
     });
   }catch(e){}
+}
+
+/* ════════════════════════════════════════════════════════════════════════
+   Storm Motion Vectors
+   Tracks warned storm polygons over time, computes motion vectors
+   (direction + speed), draws arrows on the map, and provides an ETA
+   tool when the user clicks the map.
+
+   Step 1: Storm track storage (in-memory, keyed by alert ID)
+   Step 2: Centroid tracking + motion computation (haversine)
+   Step 3: Arrow rendering (Leaflet polyline + divIcon labels)
+   Step 4: ETA tool (click map → distance/speed → minutes)
+   Step 5: Integration with alert update loop
+   Step 6: NWS motion text parsing ("MOV NE AT 35 MPH")
+   ════════════════════════════════════════════════════════════════════════ */
+
+var stormMotionLayer=null;          /* Leaflet layerGroup for arrows */
+var stormTracks={};                  /* alertId -> {centroids:[{lat,lon,time}], event, color} */
+var stormMotionClickHandler=null;    /* Map click handler for ETA tool */
+var stormMotionEnabled=false;
+
+/* Toggle the storm motion layer on/off */
+function toggleStormMotion(){
+  var cb=document.getElementById('amStormMotion');
+  if(!cb)return;
+  stormMotionEnabled=cb.checked;
+  if(cb.checked){
+    if(!stormMotionLayer&&alertMapInstance){
+      stormMotionLayer=L.layerGroup().addTo(alertMapInstance);
+    }
+    /* Update tracks from current drawnAlerts */
+    stormMotionUpdateTracks();
+    stormMotionRender();
+    /* Add map click handler for ETA */
+    if(!stormMotionClickHandler&&alertMapInstance){
+      stormMotionClickHandler=function(e){
+        if(!stormMotionEnabled)return;
+        if(currentTab!=='polygonmap')return;
+        stormMotionETA(e.latlng);
+      };
+      alertMapInstance.on('click',stormMotionClickHandler);
+    }
+    var status=document.getElementById('stormMotionStatus');
+    if(status)status.textContent='Active — tracking '+Object.keys(stormTracks).length+' storms';
+  }else{
+    if(stormMotionLayer&&alertMapInstance){
+      alertMapInstance.removeLayer(stormMotionLayer);
+      stormMotionLayer=null;
+    }
+    if(stormMotionClickHandler&&alertMapInstance){
+      alertMapInstance.off('click',stormMotionClickHandler);
+    }
+    var status2=document.getElementById('stormMotionStatus');
+    if(status2)status2.textContent='';
+  }
+}
+
+/* Step 1-2: Update storm tracks from current drawnAlerts.
+   Called after each alert fetch cycle. Maintains a history of
+   centroids for each alert ID so motion can be computed. */
+function stormMotionUpdateTracks(){
+  if(!drawnAlerts||drawnAlerts.length===0)return;
+  var now=Date.now();
+  var seenIds={};
+
+  drawnAlerts.forEach(function(a){
+    var id=a.id||'';
+    if(!id)return;
+    seenIds[id]=true;
+
+    /* Compute centroid from the alert's geometries */
+    var centroid=stormMotionComputeCentroid(a.geoms);
+    if(!centroid)return;
+
+    /* Initialize track if new */
+    if(!stormTracks[id]){
+      stormTracks[id]={
+        centroids:[],
+        event:a.event||'Unknown',
+        color:a.color||'#ff7300',
+        motionText:stormMotionParseNWSMotion(a.description||''),
+        motion:null  /* Will be computed */
+      };
+      /* If NWS motion text was parsed, use it as initial motion */
+      if(stormTracks[id].motionText){
+        stormTracks[id].motion=stormTracks[id].motionText;
+      }
+    }
+
+    /* Append centroid with timestamp (avoid duplicates within 60s) */
+    var track=stormTracks[id];
+    var lastCentroid=track.centroids[track.centroids.length-1];
+    if(!lastCentroid||(now-lastCentroid.time)>60000){
+      track.centroids.push({lat:centroid.lat,lon:centroid.lon,time:now});
+    }else{
+      /* Update the last centroid position (polygon may have moved) */
+      lastCentroid.lat=centroid.lat;
+      lastCentroid.lon=centroid.lon;
+      lastCentroid.time=now;
+    }
+
+    /* Update event + color in case they changed */
+    track.event=a.event||track.event;
+    track.color=a.color||track.color;
+
+    /* Re-parse motion text (alert description may have been updated) */
+    var parsedMotion=stormMotionParseNWSMotion(a.description||'');
+    if(parsedMotion){
+      track.motionText=parsedMotion;
+    }
+
+    /* Compute motion from centroid history (if 2+ points) */
+    if(track.centroids.length>=2&&!parsedMotion){
+      track.motion=stormMotionComputeVector(track.centroids);
+    }else if(parsedMotion){
+      track.motion=parsedMotion;
+    }else if(track.centroids.length>=2){
+      /* Even if we have NWS motion text, also compute from centroids
+         as a refinement (average the two) */
+      var computed=stormMotionComputeVector(track.centroids);
+      if(computed&&track.motion){
+        /* Average the NWS motion and computed motion */
+        track.motion={
+          speedKt:(track.motion.speedKt+computed.speedKt)/2,
+          bearing:(track.motion.bearing+computed.bearing)/2,
+          source:'merged'
+        };
+      }
+    }
+  });
+
+  /* Remove tracks for alerts that are no longer active */
+  Object.keys(stormTracks).forEach(function(id){
+    if(!seenIds[id]){
+      delete stormTracks[id];
+    }
+  });
+}
+
+/* Compute centroid of a set of GeoJSON geometries */
+function stormMotionComputeCentroid(geoms){
+  if(!geoms||geoms.length===0)return null;
+  var bounds=L.latLngBounds([]);
+  geoms.forEach(function(g){
+    try{
+      var layer=L.geoJSON(g);
+      if(layer.getBounds&&layer.getBounds().isValid()){
+        bounds.extend(layer.getBounds());
+      }
+      layer.remove();
+    }catch(e){}
+  });
+  if(!bounds.isValid())return null;
+  var center=bounds.getCenter();
+  return{lat:center.lat,lon:center.lng};
+}
+
+/* Step 2: Compute motion vector from centroid history.
+   Uses haversine for distance, atan2 for bearing. */
+function stormMotionComputeVector(centroids){
+  if(!centroids||centroids.length<2)return null;
+  /* Use last 2-3 centroids within a 30-minute window */
+  var now=centroids[centroids.length-1].time;
+  var windowMs=30*60*1000;
+  var recent=centroids.filter(function(c){return now-c.time<=windowMs});
+  if(recent.length<2)recent=centroids.slice(-2);
+
+  var first=recent[0];
+  var last=recent[recent.length-1];
+  var dt=(last.time-first.time)/1000;  /* seconds */
+  if(dt<60)return null;  /* Need at least 1 minute of data */
+
+  /* Haversine distance in meters */
+  var dist=stormMotionHaversine(first.lat,first.lon,last.lat,last.lon);
+  var speedMs=dist/dt;
+  var speedKt=speedMs*1.94384;  /* m/s to knots */
+
+  /* Bearing from first to last */
+  var bearing=stormMotionBearing(first.lat,first.lon,last.lat,last.lon);
+
+  /* Smooth: if we have 3+ points, average the bearing over consecutive pairs */
+  if(recent.length>=3){
+    var bearings=[];
+    for(var i=1;i<recent.length;i++){
+      bearings.push(stormMotionBearing(recent[i-1].lat,recent[i-1].lon,recent[i].lat,recent[i].lon));
+    }
+    bearing=stormMotionAverageBearing(bearings);
+  }
+
+  /* If speed is very low, treat as stationary */
+  if(speedKt<3)speedKt=0;
+
+  return{speedKt:speedKt,bearing:bearing,source:'computed'};
+}
+
+/* Haversine distance in meters */
+function stormMotionHaversine(lat1,lon1,lat2,lon2){
+  var R=6371000;
+  var dLat=(lat2-lat1)*Math.PI/180;
+  var dLon=(lon2-lon1)*Math.PI/180;
+  var a=Math.sin(dLat/2)*Math.sin(dLat/2)+Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLon/2)*Math.sin(dLon/2);
+  return R*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));
+}
+
+/* Bearing from point 1 to point 2 (degrees, 0=N, 90=E) */
+function stormMotionBearing(lat1,lon1,lat2,lon2){
+  var dLon=(lon2-lon1)*Math.PI/180;
+  var y=Math.sin(dLon)*Math.cos(lat2*Math.PI/180);
+  var x=Math.cos(lat1*Math.PI/180)*Math.sin(lat2*Math.PI/180)-Math.sin(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.cos(dLon);
+  var bearing=Math.atan2(y,x)*180/Math.PI;
+  return (bearing+360)%360;
+}
+
+/* Average multiple bearings (handles wraparound at 0/360) */
+function stormMotionAverageBearing(bearings){
+  var sumX=0,sumY=0;
+  bearings.forEach(function(b){
+    var rad=b*Math.PI/180;
+    sumX+=Math.cos(rad);
+    sumY+=Math.sin(rad);
+  });
+  var avg=Math.atan2(sumY,sumX)*180/Math.PI;
+  return (avg+360)%360;
+}
+
+/* Step 6: Parse NWS motion text from alert description.
+   Looks for patterns like "MOV NE AT 35 MPH" or "MOVING EAST AT 25 MPH" */
+function stormMotionParseNWSMotion(description){
+  if(!description)return null;
+  /* Common NWS motion patterns:
+     "MOV NE AT 35 MPH"
+     "MOVING EAST AT 25 MPH"
+     "MOV E AT 30 MPH" */
+  var dirMap={
+    'N':0,'NNE':22.5,'NE':45,'ENE':67.5,'E':90,'ESE':112.5,'SE':135,'SSE':157.5,
+    'S':180,'SSW':202.5,'SW':225,'WSW':247.5,'W':270,'WNW':292.5,'NW':315,'NNW':337.5,
+    'NORTH':0,'NORTHEAST':45,'EAST':90,'SOUTHEAST':135,'SOUTH':180,'SOUTHWEST':225,'WEST':270,'NORTHWEST':315
+  };
+  var regex=/MOV(?:ING)?\s+([A-Z]+)\s+AT\s+(\d+)\s*(?:MPH|KT|KTS)/i;
+  var match=description.match(regex);
+  if(!match)return null;
+  var dirStr=match[1].toUpperCase();
+  var speed=parseInt(match[2]);
+  var bearing=dirMap[dirStr];
+  if(bearing==null)return null;
+  /* Assume MPH if no unit specified (NWS default) */
+  var speedKt=speed*0.868976;  /* mph to kt */
+  return{speedKt:speedKt,bearing:bearing,source:'nws'};
+}
+
+/* Convert bearing to compass direction abbreviation */
+function stormMotionBearingToDir(bearing){
+  var dirs=['N','NNE','NE','ENE','E','ESE','SE','SSE','S','SSW','SW','WSW','W','WNW','NW','NNW'];
+  return dirs[Math.round(bearing/22.5)%16];
+}
+
+/* Step 3: Render motion vector arrows on the map */
+function stormMotionRender(){
+  if(!stormMotionLayer||!stormMotionEnabled)return;
+  stormMotionLayer.clearLayers();
+
+  var horizonSel=document.getElementById('amStormMotionHorizon');
+  var horizonMin=horizonSel?parseInt(horizonSel.value):30;
+
+  var count=0;
+  Object.keys(stormTracks).forEach(function(id){
+    var track=stormTracks[id];
+    if(!track.motion||track.motion.speedKt<1)return;
+    if(track.centroids.length===0)return;
+
+    var origin=track.centroids[track.centroids.length-1];
+    var speedKt=track.motion.speedKt;
+    var bearing=track.motion.bearing;
+
+    /* Project endpoint: distance = speed * time */
+    var speedMs=speedKt*0.51444;  /* kt to m/s */
+    var distanceM=speedMs*horizonMin*60;  /* meters over horizon */
+    var endpoint=stormMotionDestinationPoint(origin.lat,origin.lon,distanceM,bearing);
+
+    /* Color by event type */
+    var color=track.color;
+    if(track.event&&track.event.toLowerCase().includes('tornado')){
+      color='#ff0000';
+    }else if(track.event&&track.event.toLowerCase().includes('severe')){
+      color='#ff7300';
+    }
+
+    /* Draw arrow shaft */
+    var arrow=L.polyline([[origin.lat,origin.lon],[endpoint.lat,endpoint.lon]],{
+      color:color,
+      weight:3,
+      opacity:0.85,
+      className:'storm-motion-arrow',
+      dashArray:''
+    });
+    stormMotionLayer.addLayer(arrow);
+
+    /* Draw arrowhead (two short lines at the endpoint) */
+    var headLen=distanceM*0.08;  /* 8% of total length */
+    var headAngle=25;  /* degrees on each side */
+    var leftEnd=stormMotionDestinationPoint(endpoint.lat,endpoint.lon,headLen,bearing+180-headAngle);
+    var rightEnd=stormMotionDestinationPoint(endpoint.lat,endpoint.lon,headLen,bearing+180+headAngle);
+    var head1=L.polyline([[endpoint.lat,endpoint.lon],[leftEnd.lat,leftEnd.lon]],{
+      color:color,weight:3,opacity:0.85,className:'storm-motion-arrow'
+    });
+    var head2=L.polyline([[endpoint.lat,endpoint.lon],[rightEnd.lat,rightEnd.lon]],{
+      color:color,weight:3,opacity:0.85,className:'storm-motion-arrow'
+    });
+    stormMotionLayer.addLayer(head1);
+    stormMotionLayer.addLayer(head2);
+
+    /* Label near the midpoint of the arrow */
+    var midLat=(origin.lat+endpoint.lat)/2;
+    var midLon=(origin.lon+endpoint.lon)/2;
+    var speedMph=Math.round(speedKt*1.15078);
+    var dirStr=stormMotionBearingToDir(bearing);
+    var labelText=dirStr+' @ '+speedMph+'mph';
+    var labelIcon=L.divIcon({
+      className:'',
+      html:'<div class="storm-motion-label" style="border-color:'+color+';color:'+color+'">'+labelText+'</div>',
+      iconSize:[80,16],
+      iconAnchor:[40,8]
+    });
+    var label=L.marker([midLat,midLon],{icon:labelIcon});
+    stormMotionLayer.addLayer(label);
+
+    count++;
+  });
+
+  var status=document.getElementById('stormMotionStatus');
+  if(status){
+    status.textContent=count+' storm'+(count===1?'':'s')+' tracked';
+  }
+}
+
+/* Destination point given origin, distance (m), and bearing (degrees) */
+function stormMotionDestinationPoint(lat,lon,distanceM,bearing){
+  var R=6371000;
+  var br=bearing*Math.PI/180;
+  var lat1=lat*Math.PI/180;
+  var lon1=lon*Math.PI/180;
+  var lat2=Math.asin(Math.sin(lat1)*Math.cos(distanceM/R)+Math.cos(lat1)*Math.sin(distanceM/R)*Math.cos(br));
+  var lon2=lon1+Math.atan2(Math.sin(br)*Math.sin(distanceM/R)*Math.cos(lat1),Math.cos(distanceM/R)-Math.sin(lat1)*Math.sin(lat2));
+  return{lat:lat2*180/Math.PI,lon:lon2*180/Math.PI};
+}
+
+/* Step 4: Storm ETA tool — user clicks map, compute ETA from nearest storm */
+function stormMotionETA(targetLatlng){
+  if(!targetLatlng)return;
+  var targetLat=targetLatlng.lat,targetLon=targetLatlng.lng;
+  var nearestStorm=null,nearestDist=Infinity;
+
+  Object.keys(stormTracks).forEach(function(id){
+    var track=stormTracks[id];
+    if(!track.motion||track.motion.speedKt<5)return;
+    if(track.centroids.length===0)return;
+    var origin=track.centroids[track.centroids.length-1];
+    var dist=stormMotionHaversine(origin.lat,origin.lon,targetLat,targetLon);
+    if(dist<nearestDist){
+      nearestDist=dist;
+      nearestStorm=track;
+    }
+  });
+
+  if(!nearestStorm){
+    /* No tracked storms with motion — show message */
+    L.popup({className:'storm-motion-eta-popup',maxWidth:260})
+      .setLatLng(targetLatlng)
+      .setContent('<div style="font-family:Inter,sans-serif"><div style="color:#ff7300;font-weight:700;font-size:12px;margin-bottom:4px"><i class="fas fa-wind"></i> Storm ETA</div><div style="color:var(--t3);font-size:10px">No tracked storms with motion data. Enable Storm Motion Vectors and wait for storm tracking data to accumulate.</div></div>')
+      .openOn(alertMapInstance);
+    return;
+  }
+
+  var speedMs=nearestStorm.motion.speedKt*0.51444;
+  var distKm=nearestDist/1000;
+  var etaMin=speedMs>0?(nearestDist/speedMs)/60:Infinity;
+  var origin=nearestStorm.centroids[nearestStorm.centroids.length-1];
+  var bearing=stormMotionBearing(origin.lat,origin.lon,targetLat,targetLon);
+  var dirStr=stormMotionBearingToDir(bearing);
+  var stormDirStr=stormMotionBearingToDir(nearestStorm.motion.bearing);
+  var speedMph=Math.round(nearestStorm.motion.speedKt*1.15078);
+
+  /* Check if storm is moving toward the target (within 90 degrees) */
+  var bearingDiff=Math.abs(((bearing-nearestStorm.motion.bearing+540)%360)-180);
+  var movingToward=bearingDiff<90;
+
+  var html='<div style="font-family:Inter,sans-serif;min-width:220px">';
+  html+='<div style="color:#ff7300;font-weight:700;font-size:12px;margin-bottom:6px"><i class="fas fa-wind"></i> Storm ETA</div>';
+  html+='<div style="font-size:10px;color:var(--t2);margin-bottom:4px"><b style="color:var(--t1)">'+nearestStorm.event+'</b></div>';
+  html+='<div style="font-size:10px;color:var(--t2);line-height:1.6">';
+  html+='Storm motion: <b style="color:var(--acc)">'+stormDirStr+' @ '+speedMph+'mph</b><br>';
+  html+='Distance: <b>'+distKm.toFixed(1)+' km ('+(distKm*0.621371).toFixed(1)+' mi)</b><br>';
+  html+='Direction from storm: <b>'+dirStr+' ('+Math.round(bearing)+'°)</b><br>';
+  if(etaMin===Infinity||!movingToward){
+    html+='ETA: <b style="color:#ff5a5a">Storm not approaching this point</b>';
+  }else if(etaMin<1){
+    html+='ETA: <b style="color:#ff5a5a">IMMINENT (<1 min)</b>';
+  }else if(etaMin<15){
+    html+='ETA: <b style="color:#ff5a5a">~'+Math.round(etaMin)+' minutes</b>';
+  }else if(etaMin<30){
+    html+='ETA: <b style="color:#ffb340">~'+Math.round(etaMin)+' minutes</b>';
+  }else if(etaMin<60){
+    html+='ETA: <b style="color:#ffd60a">~'+Math.round(etaMin)+' minutes</b>';
+  }else if(etaMin<120){
+    html+='ETA: <b style="color:#39d353">~'+Math.round(etaMin)+' minutes ('+(etaMin/60).toFixed(1)+' hrs)</b>';
+  }else{
+    html+='ETA: <b>~'+(etaMin/60).toFixed(1)+' hours</b>';
+  }
+  html+='</div>';
+  html+='<div style="font-size:8px;color:var(--t3);margin-top:6px;font-style:italic">ETA assumes current storm motion remains constant.</div>';
+  html+='</div>';
+
+  L.popup({className:'storm-motion-eta-popup',maxWidth:260})
+    .setLatLng(targetLatlng)
+    .setContent(html)
+    .openOn(alertMapInstance);
 }
 
 /* ── Boot sequence ──────────────────────────────────────────────────────── */
