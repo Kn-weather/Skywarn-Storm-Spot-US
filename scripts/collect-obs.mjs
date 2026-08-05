@@ -96,7 +96,10 @@ async function main() {
   console.log('=== NWS Observation Collection Started ===');
   const startTime = Date.now();
   
-  const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
+  const supabase = createClient(SUPABASE_URL, SUPABASE_KEY, {
+    db: { schema: 'public' },
+    realtime: { enabled: false },
+  });
   
   // Step 1: Fetch all stations
   const stations = await fetchAllStations();

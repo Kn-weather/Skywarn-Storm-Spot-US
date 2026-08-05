@@ -111,7 +111,10 @@ async function fetchObservation(
 Deno.serve(async (_req: Request) => {
   console.log("[collect-obs] Starting observation collection...");
 
-  const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+  const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
+    db: { schema: 'public' },
+    realtime: { enabled: false },
+  });
 
   // Step 1: Fetch all stations
   console.log("[collect-obs] Fetching station list...");
