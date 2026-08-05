@@ -11434,30 +11434,27 @@ async function obsAnimLoad(){
       return;
     }
 
-    /* Build frames array */
+    /* Build frames array — store raw points, render gradient on-the-fly
+       during playback so the variable + bounds are always current */
     obsAnimFrames=Object.keys(grouped).sort().map(function(time){
-      return{time:time,points:grouped[time]};
-    });
-
-    /* Pre-render each frame as a gradient canvas */
-    obsAnimFrameCanvases=[];
-    var varSel=document.getElementById('amObsVar');
-    var varKey=varSel?varSel.value:'temperature';
-    var config=OBS_VAR_CONFIG[varKey]||OBS_VAR_CONFIG.temperature;
-    var bounds=alertMapInstance?alertMapInstance.getBounds():null;
-
-    for(var i=0;i<obsAnimFrames.length;i++){
-      var frame=obsAnimFrames[i];
-      var pts=frame.points.map(function(r){
-        var rawVal=obsGetRawFromSnapshot(r,varKey);
-        var displayVal=rawVal!=null?config.format(rawVal):null;
+      var stations=grouped[time];
+      /* Pre-compute valid points for all variables so switching variables
+         during playback is instant */
+      var varSel2=document.getElementById('amObsVar');
+      var varKey2=varSel2?varSel2.value:'temperature';
+      var config2=OBS_VAR_CONFIG[varKey2]||OBS_VAR_CONFIG.temperature;
+      var pts=stations.map(function(r){
+        var rawVal=obsGetRawFromSnapshot(r,varKey2);
+        var displayVal=rawVal!=null?config2.format(rawVal):null;
         if(displayVal==null||displayVal==='—')return null;
         return{lat:r.lat,lon:r.lon,val:parseFloat(displayVal),rawVal:rawVal,stationId:r.station_id};
       }).filter(function(p){return p!=null});
-      frame.validPoints=pts;  /* Store for pin rendering */
-      var dataUrl=obsRenderGradientCanvas(pts,bounds);
-      obsAnimFrameCanvases.push(dataUrl);
-    }
+      return{time:time,points:stations,validPoints:pts};
+    });
+
+    /* Don't pre-render gradient canvases — render on-the-fly in
+       obsAnimShowFrame() so the current variable + bounds are always used. */
+    obsAnimFrameCanvases=[];
 
     /* Update UI */
     var timeline=document.getElementById('obsAnimTimeline');
@@ -11573,21 +11570,42 @@ function obsRenderGradientCanvas(points,bounds){
   return canvas.toDataURL('image/png');
 }
 
-/* Show a specific animation frame — gradient + pins */
+/* Show a specific animation frame — gradient + pins
+   Re-renders the gradient AND validPoints on-the-fly using the CURRENT
+   variable from the dropdown, so switching variables during playback
+   works correctly without needing to reload. Also uses CURRENT map
+   bounds so panning/zooming during playback works. */
 function obsAnimShowFrame(idx){
   if(idx<0||idx>=obsAnimFrames.length)return;
   obsAnimCurrentIdx=idx;
-  var dataUrl=obsAnimFrameCanvases[idx];
-  if(!dataUrl)return;
-  var bounds=alertMapInstance.getBounds();
-  var imageBounds=[[bounds.getSouth(),bounds.getWest()],[bounds.getNorth(),bounds.getEast()]];
-  if(obsAnimGradientLayer){
-    alertMapInstance.removeLayer(obsAnimGradientLayer);
+  var frame=obsAnimFrames[idx];
+  if(!frame)return;
+
+  /* Re-compute validPoints for the CURRENT variable (in case user
+     switched variables after loading) */
+  var varSel=document.getElementById('amObsVar');
+  var varKey=varSel?varSel.value:'temperature';
+  var config=OBS_VAR_CONFIG[varKey]||OBS_VAR_CONFIG.temperature;
+  frame.validPoints=frame.points.map(function(r){
+    var rawVal=obsGetRawFromSnapshot(r,varKey);
+    var displayVal=rawVal!=null?config.format(rawVal):null;
+    if(displayVal==null||displayVal==='—')return null;
+    return{lat:r.lat,lon:r.lon,val:parseFloat(displayVal),rawVal:rawVal,stationId:r.station_id};
+  }).filter(function(p){return p!=null});
+
+  /* Render gradient on-the-fly with current variable + current bounds */
+  var bounds=alertMapInstance?alertMapInstance.getBounds():null;
+  var dataUrl=obsRenderGradientCanvas(frame.validPoints,bounds);
+  if(dataUrl){
+    var imageBounds=[[bounds.getSouth(),bounds.getWest()],[bounds.getNorth(),bounds.getEast()]];
+    if(obsAnimGradientLayer){
+      alertMapInstance.removeLayer(obsAnimGradientLayer);
+    }
+    obsAnimGradientLayer=L.imageOverlay(dataUrl,imageBounds,{
+      opacity:0.55,interactive:false,zIndex:250
+    }).addTo(alertMapInstance);
+    if(obsGradientLayer)obsGradientLayer.setOpacity(0);
   }
-  obsAnimGradientLayer=L.imageOverlay(dataUrl,imageBounds,{
-    opacity:0.55,interactive:false,zIndex:250
-  }).addTo(alertMapInstance);
-  if(obsGradientLayer)obsGradientLayer.setOpacity(0);
 
   /* Also animate pins if the pin layer is active */
   obsAnimRenderPins(idx);
@@ -11597,7 +11615,7 @@ function obsAnimShowFrame(idx){
   if(label)label.textContent=(idx+1)+'/'+obsAnimFrames.length;
   var timeDisplay=document.getElementById('obsAnimTimeDisplay');
   if(timeDisplay){
-    var t=new Date(obsAnimFrames[idx].time);
+    var t=new Date(frame.time);
     timeDisplay.textContent=t.toLocaleString('en-US',{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit',hour12:true});
   }
   var timeline=document.getElementById('obsAnimTimeline');
@@ -12180,9 +12198,6 @@ function obsHslToRgb(h,s,l){
 
 /* Called when user changes the variable dropdown */
 function onObsVarChange(){
-  /* Read the new variable from the dropdown and update immediately.
-     No refresh needed — we already have the observation data cached,
-     we just need to re-render with the new variable. */
   var varSel=document.getElementById('amObsVar');
   if(varSel){
     obsCurrentVar=varSel.value;
@@ -12190,9 +12205,13 @@ function onObsVarChange(){
   if(obsLayer){
     obsRender();
   }
-  /* Also update the gradient layer if it's active */
   if(obsGradientLayer){
     obsRenderGradient();
+  }
+  /* If animation is loaded, refresh the current frame so the gradient
+     and pins update to match the new variable immediately. */
+  if(obsAnimFrames.length>0){
+    obsAnimShowFrame(obsAnimCurrentIdx);
   }
 }
 
