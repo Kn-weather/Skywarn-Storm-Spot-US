@@ -7,6 +7,7 @@
 // ═══════════════════════════════════════════════════════════════════════
 
 import { createClient } from '@supabase/supabase-js';
+import ws from 'ws';
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_KEY;
@@ -97,8 +98,7 @@ async function main() {
   const startTime = Date.now();
   
   const supabase = createClient(SUPABASE_URL, SUPABASE_KEY, {
-    db: { schema: 'public' },
-    realtime: { enabled: false },
+    realtime: { transport: ws }
   });
   
   // Step 1: Fetch all stations
