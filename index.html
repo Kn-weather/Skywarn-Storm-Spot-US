@@ -2062,13 +2062,16 @@ body.capturing .sat-legend{display:none!important}
           <label style="margin:1px 0"><input type="checkbox" id="amLayerWatches" checked onchange="onAlertFilterChange()"> Watches</label>
           <label style="margin:1px 0"><input type="checkbox" id="amLayerAdvisories" onchange="onAlertFilterChange()"> Advisories &amp; Statements</label>
           <label style="margin:1px 0"><input type="checkbox" id="amLayerLabels" checked onchange="onAlertFilterChange()"> Zone Labels</label>
+          <div style="height:1px;background:var(--bdr);margin:8px 0"></div>
+          <label style="margin:1px 0"><input type="checkbox" id="amAlertAttrs" onchange="toggleAlertAttrs()"> Show Alert Attributes</label>
+          <div style="font-size:9px;color:var(--t3);line-height:1.4;margin-top:3px">Hail size, tornado detection, max wind markers on warning polygons.</div>
         </div>
       </div>
 
-      <!-- State Filter + Surface Observations -->
+      <!-- Surface Observations (state-filtered) -->
       <div class="collapsible-section" data-section="obs">
         <div class="collapsible-header" onclick="toggleSection(this)">
-          <span>State Filter / Surface Obs</span><i class="fas fa-chevron-right"></i>
+          <span>Surface Obs</span><i class="fas fa-chevron-right"></i>
         </div>
         <div class="collapsible-body">
           <div class="section-label">State Filter</div>
@@ -2093,52 +2096,50 @@ body.capturing .sat-legend{display:none!important}
             <option value="WI">Wisconsin</option><option value="WY">Wyoming</option><option value="DC">District of Columbia</option>
             <option value="PR">Puerto Rico</option><option value="GU">Guam</option>
           </select>
-          <div class="section-label" style="margin-top:8px">Surface Observations</div>
-          <div id="obsStateHint" style="font-size:9px;color:var(--acc);background:var(--acc-g);border:1px solid var(--bdr-a);border-radius:4px;padding:4px 6px;margin:4px 0;line-height:1.4">
-            <i class="fas fa-circle-info" style="margin-right:4px"></i>Select a state above first to enable surface obs. Loading all US stations is too slow.
-          </div>
-          <label style="margin:1px 0" id="amObsEnableLabel"><input type="checkbox" id="amObsEnable" onchange="toggleObsLayer()" disabled> Show Surface Obs</label>
-          <label style="margin:1px 0;font-size:9px;color:var(--t2)" id="amObsGradientLabel"><input type="checkbox" id="amObsGradient" onchange="toggleObsGradient()" style="accent-color:var(--acc)" disabled> Color Gradient Overlay</label>
-          <div id="obsAnimControls" style="display:none;margin-top:6px;padding:6px;background:var(--bg);border:1px solid var(--bdr);border-radius:4px">
-            <div style="font-size:8px;color:var(--t3);text-transform:uppercase;letter-spacing:.04em;margin-bottom:4px">Animation (stored history)</div>
-            <div class="radar-anim-controls">
-              <button class="radar-anim-btn" onclick="obsAnimStep(-1)" title="Previous frame"><i class="fas fa-backward-step"></i></button>
-              <button class="radar-anim-btn play-btn" id="obsAnimPlayBtn" onclick="obsAnimTogglePlay()" title="Play/Pause"><i class="fas fa-play"></i></button>
-              <button class="radar-anim-btn" onclick="obsAnimStep(1)" title="Next frame"><i class="fas fa-forward-step"></i></button>
-              <span class="radar-anim-frame-label" id="obsAnimFrameLabel">—</span>
+          <div id="obsControls" style="display:none">
+            <div class="section-label" style="margin-top:8px">Surface Observations</div>
+            <label style="margin:1px 0" id="amObsEnableLabel"><input type="checkbox" id="amObsEnable" onchange="toggleObsLayer()"> Show Surface Obs</label>
+            <label style="margin:1px 0;font-size:9px;color:var(--t2)" id="amObsGradientLabel"><input type="checkbox" id="amObsGradient" onchange="toggleObsGradient()" style="accent-color:var(--acc)"> Color Gradient Overlay</label>
+            <div id="obsAnimControls" style="display:none;margin-top:6px;padding:6px;background:var(--bg);border:1px solid var(--bdr);border-radius:4px">
+              <div style="font-size:8px;color:var(--t3);text-transform:uppercase;letter-spacing:.04em;margin-bottom:4px">Animation (stored history)</div>
+              <div class="radar-anim-controls">
+                <button class="radar-anim-btn" onclick="obsAnimStep(-1)" title="Previous frame"><i class="fas fa-backward-step"></i></button>
+                <button class="radar-anim-btn play-btn" id="obsAnimPlayBtn" onclick="obsAnimTogglePlay()" title="Play/Pause"><i class="fas fa-play"></i></button>
+                <button class="radar-anim-btn" onclick="obsAnimStep(1)" title="Next frame"><i class="fas fa-forward-step"></i></button>
+                <span class="radar-anim-frame-label" id="obsAnimFrameLabel">—</span>
+              </div>
+              <input type="range" class="radar-anim-timeline" id="obsAnimTimeline" min="0" max="0" value="0" oninput="obsAnimSeekTo(this.value)" style="width:100%">
+              <div class="radar-anim-time-display" id="obsAnimTimeDisplay">—</div>
+              <label style="font-size:8px;color:var(--t3);text-transform:uppercase;letter-spacing:.04em;margin-top:4px;display:flex;align-items:center;gap:6px">Speed
+                <input type="range" id="obsAnimSpeed" min="200" max="2000" value="500" step="100" oninput="obsAnimOnSpeedChange()" style="flex:1;accent-color:var(--acc);cursor:pointer">
+                <span id="obsAnimSpeedLabel" style="font-size:8px;color:var(--t2);min-width:30px;text-align:right">500ms</span>
+              </label>
+              <div style="display:flex;gap:4px;margin-top:4px">
+                <button class="radar-anim-btn" onclick="obsAnimLoad()" title="Load history" style="font-size:9px"><i class="fas fa-download"></i> Load</button>
+                <span style="font-size:8px;color:var(--t3);margin-left:auto;align-self:center" id="obsAnimStatus">No data loaded</span>
+              </div>
             </div>
-            <input type="range" class="radar-anim-timeline" id="obsAnimTimeline" min="0" max="0" value="0" oninput="obsAnimSeekTo(this.value)" style="width:100%">
-            <div class="radar-anim-time-display" id="obsAnimTimeDisplay">—</div>
-            <label style="font-size:8px;color:var(--t3);text-transform:uppercase;letter-spacing:.04em;margin-top:4px;display:flex;align-items:center;gap:6px">Speed
-              <input type="range" id="obsAnimSpeed" min="200" max="2000" value="500" step="100" oninput="obsAnimOnSpeedChange()" style="flex:1;accent-color:var(--acc);cursor:pointer">
-              <span id="obsAnimSpeedLabel" style="font-size:8px;color:var(--t2);min-width:30px;text-align:right">500ms</span>
-            </label>
-            <div style="display:flex;gap:4px;margin-top:4px">
-              <button class="radar-anim-btn" onclick="obsAnimLoad()" title="Load history" style="font-size:9px"><i class="fas fa-download"></i> Load</button>
-              <span style="font-size:8px;color:var(--t3);margin-left:auto;align-self:center" id="obsAnimStatus">No data loaded</span>
+            <div style="font-size:8px;color:var(--t3);text-transform:uppercase;letter-spacing:.04em;margin-top:4px;margin-bottom:2px">Variable</div>
+            <select id="amObsVar" onchange="onObsVarChange()" style="width:100%;background:var(--bg);border:1px solid var(--bdr);color:var(--t1);font-family:inherit;font-size:9px;padding:4px 6px;border-radius:4px;cursor:pointer;outline:none">
+              <option value="temperature">Temperature (°F)</option><option value="dewpoint">Dewpoint (°F)</option>
+              <option value="windSpeed">Wind Speed (mph)</option><option value="windGust">Wind Gust (mph)</option>
+              <option value="windDirection">Wind Direction</option><option value="pressure">Pressure (hPa)</option>
+              <option value="visibility">Visibility (mi)</option><option value="relativeHumidity">Relative Humidity (%)</option>
+              <option value="precipitation">Precip 1hr (in)</option>
+            </select>
+            <div style="display:flex;align-items:center;gap:6px;margin-top:4px">
+              <label style="font-size:9px;color:var(--t3)">Refresh</label>
+              <button class="radar-anim-btn" onclick="obsRefresh()" title="Refresh observations" style="padding:3px 8px;font-size:10px"><i class="fas fa-rotate"></i></button>
+              <span id="obsLastUpdate" style="font-size:8px;color:var(--t3);margin-left:auto"></span>
             </div>
-          </div>
-          <div style="font-size:9px;color:var(--t3);line-height:1.4;margin-top:3px">Uses the state filter above. Select a state first for faster loading.</div>
-          <div style="font-size:8px;color:var(--t3);text-transform:uppercase;letter-spacing:.04em;margin-top:4px;margin-bottom:2px">Variable</div>
-          <select id="amObsVar" onchange="onObsVarChange()" style="width:100%;background:var(--bg);border:1px solid var(--bdr);color:var(--t1);font-family:inherit;font-size:9px;padding:4px 6px;border-radius:4px;cursor:pointer;outline:none">
-            <option value="temperature">Temperature (°F)</option><option value="dewpoint">Dewpoint (°F)</option>
-            <option value="windSpeed">Wind Speed (mph)</option><option value="windGust">Wind Gust (mph)</option>
-            <option value="windDirection">Wind Direction</option><option value="pressure">Pressure (hPa)</option>
-            <option value="visibility">Visibility (mi)</option><option value="relativeHumidity">Relative Humidity (%)</option>
-            <option value="precipitation">Precip 1hr (in)</option>
-          </select>
-          <div style="display:flex;align-items:center;gap:6px;margin-top:4px">
-            <label style="font-size:9px;color:var(--t3)">Refresh</label>
-            <button class="radar-anim-btn" onclick="obsRefresh()" title="Refresh observations" style="padding:3px 8px;font-size:10px"><i class="fas fa-rotate"></i></button>
-            <span id="obsLastUpdate" style="font-size:8px;color:var(--t3);margin-left:auto"></span>
           </div>
         </div>
       </div>
 
-      <!-- SPC Convective Outlook -->
+      <!-- SPC Information (Convective Outlook + Mesoscale Discussions) -->
       <div class="collapsible-section" data-section="spc">
         <div class="collapsible-header" onclick="toggleSection(this)">
-          <span>SPC Convective Outlook</span><i class="fas fa-chevron-right"></i>
+          <span>SPC Information</span><i class="fas fa-chevron-right"></i>
         </div>
         <div class="collapsible-body">
           <select id="amSpcDay" onchange="toggleSpcOverlay()">
@@ -2159,6 +2160,10 @@ body.capturing .sat-legend{display:none!important}
             <label style="font-size:9px"><input type="checkbox" id="amSpcHail" onchange="toggleSpcOverlay()"> Hail</label>
             <label style="font-size:9px"><input type="checkbox" id="amSpcWind" onchange="toggleSpcOverlay()"> Wind</label>
           </div>
+          <div style="height:1px;background:var(--bdr);margin:8px 0"></div>
+          <label style="margin:1px 0"><input type="checkbox" id="amMDLayer" onchange="toggleMDLayer()"> Show Mesoscale Discussions</label>
+          <div style="font-size:9px;color:var(--t3);line-height:1.4;margin-top:3px">SPC mesoscale discussion polygons. Auto-refreshes every 5 min.</div>
+          <div style="font-size:8px;color:var(--t3);margin-top:4px" id="mdStatus"></div>
         </div>
       </div>
 
@@ -2194,17 +2199,21 @@ body.capturing .sat-legend{display:none!important}
         <div class="collapsible-body">
           <div style="font-size:9px;color:var(--t3);line-height:1.4;margin-bottom:4px">NASA GIBS GOES-East/West ABI imagery (10-min updates)</div>
 
-          <div style="font-size:9px;color:var(--t3);text-transform:uppercase;letter-spacing:.04em;margin-bottom:2px">GOES-East</div>
-          <label style="margin:1px 0"><input type="checkbox" id="amSatGEO" onchange="toggleSatelliteLayer('geo','east')"> GeoColor <span style="color:var(--t3);font-size:8px">(true-color, day/night)</span></label>
-          <label style="margin:1px 0"><input type="checkbox" id="amSatIR" onchange="toggleSatelliteLayer('ir','east')"> Infrared (Band 13) <span style="color:var(--t3);font-size:8px">(10.3&micro;m)</span></label>
-          <label style="margin:1px 0"><input type="checkbox" id="amSatVIS" onchange="toggleSatelliteLayer('vis','east')"> Visible (Band 2) <span style="color:var(--t3);font-size:8px">(0.64&micro;m, day)</span></label>
-          <label style="margin:1px 0"><input type="checkbox" id="amSatAM" onchange="toggleSatelliteLayer('airmass','east')"> Air Mass</label>
-          <label style="margin:1px 0"><input type="checkbox" id="amSatDUST" onchange="toggleSatelliteLayer('dust','east')"> Dust</label>
+          <div style="font-size:8px;color:var(--t3);text-transform:uppercase;letter-spacing:.04em;margin-top:4px;margin-bottom:2px">Satellite</div>
+          <select id="amSatSource" onchange="onSatSourceChange()" style="width:100%;background:var(--bg);border:1px solid var(--bdr);color:var(--t1);font-family:inherit;font-size:9px;padding:4px 6px;border-radius:4px;cursor:pointer;outline:none">
+            <option value="off">Off</option>
+            <option value="east">GOES-East</option>
+            <option value="west">GOES-West</option>
+          </select>
 
-          <div style="font-size:9px;color:var(--t3);text-transform:uppercase;letter-spacing:.04em;margin:6px 0 2px">GOES-West</div>
-          <label style="margin:1px 0"><input type="checkbox" id="amSatWGEO" onchange="toggleSatelliteLayer('geo','west')"> GeoColor</label>
-          <label style="margin:1px 0"><input type="checkbox" id="amSatWIR" onchange="toggleSatelliteLayer('ir','west')"> Infrared (Band 13)</label>
-          <label style="margin:1px 0"><input type="checkbox" id="amSatWVIS" onchange="toggleSatelliteLayer('vis','west')"> Visible (Band 2)</label>
+          <div style="font-size:8px;color:var(--t3);text-transform:uppercase;letter-spacing:.04em;margin-top:4px;margin-bottom:2px">View Type</div>
+          <select id="amSatView" onchange="onSatViewChange()" style="width:100%;background:var(--bg);border:1px solid var(--bdr);color:var(--t1);font-family:inherit;font-size:9px;padding:4px 6px;border-radius:4px;cursor:pointer;outline:none">
+            <option value="geo">GeoColor (true-color, day/night)</option>
+            <option value="ir">Infrared (Band 13, 10.3&micro;m)</option>
+            <option value="vis">Visible (Band 2, 0.64&micro;m, day)</option>
+            <option value="airmass">Air Mass</option>
+            <option value="dust">Dust</option>
+          </select>
 
           <label style="margin:2px 0;font-size:9px">Opacity:
             <input type="range" id="amSatOpacity" min="20" max="100" value="75" oninput="updateSatOpacity()" style="width:100%;accent-color:var(--acc);cursor:pointer">
@@ -2240,7 +2249,7 @@ body.capturing .sat-legend{display:none!important}
 
       <div class="collapsible-section" data-section="stormmotion">
         <div class="collapsible-header" onclick="toggleSection(this)">
-          <span>Storm Motion / MD / Attributes</span><i class="fas fa-chevron-right"></i>
+          <span>Storm Motion</span><i class="fas fa-chevron-right"></i>
         </div>
         <div class="collapsible-body">
           <label style="margin:1px 0"><input type="checkbox" id="amStormMotion" onchange="toggleStormMotion()"> Show Storm Motion Arrows</label>
@@ -2251,13 +2260,6 @@ body.capturing .sat-legend{display:none!important}
             <option value="60">60 min</option>
           </select></label>
           <div style="font-size:8px;color:var(--t3);margin-top:4px" id="stormMotionStatus"></div>
-          <div style="height:1px;background:var(--bdr);margin:8px 0"></div>
-          <label style="margin:1px 0"><input type="checkbox" id="amMDLayer" onchange="toggleMDLayer()"> Show Mesoscale Discussions</label>
-          <div style="font-size:9px;color:var(--t3);line-height:1.4;margin-top:3px">SPC mesoscale discussion polygons. Auto-refreshes every 5 min.</div>
-          <div style="font-size:8px;color:var(--t3);margin-top:4px" id="mdStatus"></div>
-          <div style="height:1px;background:var(--bdr);margin:8px 0"></div>
-          <label style="margin:1px 0"><input type="checkbox" id="amAlertAttrs" onchange="toggleAlertAttrs()"> Show Alert Attributes</label>
-          <div style="font-size:9px;color:var(--t3);line-height:1.4;margin-top:3px">Hail size, tornado detection, max wind markers on warning polygons.</div>
         </div>
       </div>
 
@@ -5791,8 +5793,17 @@ function satResolveKey(type,sat){
   return type+'_'+sat;  /* e.g. 'ir_east', 'geo_west' */
 }
 
-var satLayerCurrent=null;      /* the active L.tileLayer (single layer, no buffer needed - GIBS tiles load fast) */
-var satLayerPrev=null;         /* previous frame, kept visible until new frame's tiles load (smooth transitions) */
+/* 3-LAYER ROLLING BUFFER (mirrors the radar's smooth animation strategy):
+   - satLayerPrev    : the frame before current (for smooth backward stepping)
+   - satLayerCurrent : the currently displayed frame
+   - satLayerNext    : the frame after current (preloaded for smooth forward play)
+   When advancing: prev→remove, current→prev, next→current, create new next.
+   This limits concurrent tile requests and makes animation smooth by
+   preloading adjacent frames so they swap instantly via opacity changes
+   instead of waiting for tile loads during playback. */
+var satLayerPrev=null;
+var satLayerCurrent=null;
+var satLayerNext=null;
 var satActiveKey=null;         /* currently-active SAT_LAYERS key, or null if off */
 var satFrames=[];              /* array of Date objects, oldest first */
 var satCurrentFrame=0;         /* index into satFrames */
@@ -5800,6 +5811,10 @@ var satPlaying=false;
 var satAnimTimer=null;
 var satRefreshTimer=null;
 var satBaseOpacity=0.75;
+/* When the user changes the satellite or view-type dropdown while animation
+   is running, we rebuild the layer stack. Track the previous key so we can
+   tear down the old stack before activating the new one. */
+var satPrevKey=null;
 
 /* Generate the 24-frame timeline (last ~4 hours at 10-min intervals).
    The latest frame is "now - 90 min" rounded DOWN to the nearest 10-min
@@ -5838,12 +5853,7 @@ function satBuildUrl(key){
 /* Create a Leaflet tile layer for the given key and time index.
    - maxNativeZoom = TMS level (6 or 7) - GIBS only serves tiles up to this level.
    - maxZoom = 18 so the satellite stays visible when zoomed in (upscaled).
-   - errorTileUrl: transparent 1x1 PNG so 404s (gaps in scan cadence, or
-     GOES-West temporarily offline) don't show as broken-image icons.
-     Different GOES products have different scan schedules — some 10-min
-     intervals may not have a scan available, which would cause individual
-     tiles to 404. The transparent fallback lets the rest of the image
-     load normally. */
+   - errorTileUrl: transparent 1x1 PNG so 404s don't show as broken-image icons. */
 function satCreateLayer(key,timeIdx){
   var cfg=SAT_LAYERS[key];
   if(!cfg||!satFrames[timeIdx])return null;
@@ -5852,7 +5862,7 @@ function satCreateLayer(key,timeIdx){
     '/default/'+time+'/GoogleMapsCompatible_Level'+cfg.tms+'/{z}/{y}/{x}.jpg';
   /* 1x1 transparent PNG (base64) - used when a tile 404s */
   var transparentPng='data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
-  var layer=L.tileLayer(url,{
+  return L.tileLayer(url,{
     opacity:0,
     maxZoom:18,
     maxNativeZoom:cfg.tms,
@@ -5860,18 +5870,16 @@ function satCreateLayer(key,timeIdx){
     crossOrigin:true,
     errorTileUrl:transparentPng
   });
-  /* Track tile errors so we can show a status hint if a frame is mostly missing */
-  layer._satErrorCount=0;
-  layer._satTotalCount=0;
-  layer.on('tileerror',function(){
-    if(layer._satErrorCount!==undefined)layer._satErrorCount++;
-  });
-  return layer;
 }
 
-/* Show the satellite frame at the given index with double-buffered tile
-   loading (old frame stays visible until new frame's tiles are loaded,
-   preventing flashing). */
+/* Show the satellite frame at the given index using the 3-layer rolling buffer.
+   - If target is the current frame, just ensure visible.
+   - If target is the preloaded next frame, rotate buffer forward (instant swap).
+   - If target is the preloaded prev frame, rotate buffer backward (instant swap).
+   - If target is far away, rebuild the 3-layer buffer around it.
+   This is identical to the radar's radarShowFrame() strategy — preloading
+   adjacent frames means playback can swap opacities instantly without
+   waiting for tiles to load, eliminating the choppy flashing. */
 function satShowFrame(idx){
   if(satFrames.length===0)return;
   if(idx<0)idx=0;
@@ -5883,38 +5891,81 @@ function satShowFrame(idx){
     return;
   }
   var oldIdx=satCurrentFrame;
-  var newLayer=satCreateLayer(satActiveKey,idx);
-  if(!newLayer)return;
-  newLayer.addTo(alertMapInstance);
-  /* Wait for new layer's tiles to load, then swap opacity */
+  /* If target is the preloaded next frame, just rotate the buffer forward */
+  if(idx===oldIdx+1&&satLayerNext){
+    if(satLayerPrev){
+      try{alertMapInstance.removeLayer(satLayerPrev)}catch(e){}
+    }
+    satLayerPrev=satLayerCurrent;
+    satLayerCurrent=satLayerNext;
+    satLayerNext=null;
+    /* Show current immediately (it was preloaded), hide prev */
+    if(satLayerCurrent)satLayerCurrent.setOpacity(satBaseOpacity);
+    if(satLayerPrev)satLayerPrev.setOpacity(0);
+    /* Preload the new next frame */
+    var nextIdx=idx+1;
+    if(nextIdx<satFrames.length){
+      satLayerNext=satCreateLayer(satActiveKey,nextIdx);
+      if(satLayerNext)satLayerNext.addTo(alertMapInstance);
+    }
+    satCurrentFrame=idx;
+    return;
+  }
+  /* If target is the preloaded prev frame, rotate backward */
+  if(idx===oldIdx-1&&satLayerPrev){
+    if(satLayerNext){
+      try{alertMapInstance.removeLayer(satLayerNext)}catch(e){}
+    }
+    satLayerNext=satLayerCurrent;
+    satLayerCurrent=satLayerPrev;
+    satLayerPrev=null;
+    if(satLayerCurrent)satLayerCurrent.setOpacity(satBaseOpacity);
+    if(satLayerNext)satLayerNext.setOpacity(0);
+    var prevIdx=idx-1;
+    if(prevIdx>=0){
+      satLayerPrev=satCreateLayer(satActiveKey,prevIdx);
+      if(satLayerPrev)satLayerPrev.addTo(alertMapInstance);
+    }
+    satCurrentFrame=idx;
+    return;
+  }
+  /* Target is far from current — rebuild the 3-layer buffer.
+     Keep old current visible until new current's tiles load (prevents flashing). */
+  var newCurrent=satCreateLayer(satActiveKey,idx);
+  if(!newCurrent)return;
+  newCurrent.addTo(alertMapInstance);
   var swapped=false;
   function doSwap(){
     if(swapped)return;swapped=true;
-    if(satLayerCurrent){
-      satLayerCurrent.setOpacity(0);
-      /* remove old layer after a brief delay to let the new layer's tiles render */
-      setTimeout(function(){
-        if(satLayerCurrent&&satLayerCurrent!==newLayer){
-          try{alertMapInstance.removeLayer(satLayerCurrent)}catch(e){}
-        }
-        satLayerPrev=satLayerCurrent;
-        satLayerCurrent=newLayer;
-        satLayerCurrent.setOpacity(satBaseOpacity);
-      },300);
-    }else{
-      satLayerCurrent=newLayer;
-      satLayerCurrent.setOpacity(satBaseOpacity);
+    /* Hide all old layers, show new current */
+    if(satLayerCurrent)satLayerCurrent.setOpacity(0);
+    newCurrent.setOpacity(satBaseOpacity);
+    /* Remove old layers after the swap */
+    if(satLayerPrev){try{alertMapInstance.removeLayer(satLayerPrev)}catch(e){}satLayerPrev=null}
+    if(satLayerNext){try{alertMapInstance.removeLayer(satLayerNext)}catch(e){}satLayerNext=null}
+    if(satLayerCurrent&&satLayerCurrent!==newCurrent){
+      try{alertMapInstance.removeLayer(satLayerCurrent)}catch(e){}
     }
+    satLayerPrev=null;
+    satLayerCurrent=newCurrent;
+    /* Preload next and prev */
+    if(idx+1<satFrames.length){
+      satLayerNext=satCreateLayer(satActiveKey,idx+1);
+      if(satLayerNext)satLayerNext.addTo(alertMapInstance);
+    }
+    if(idx-1>=0){
+      satLayerPrev=satCreateLayer(satActiveKey,idx-1);
+      if(satLayerPrev)satLayerPrev.addTo(alertMapInstance);
+    }
+    satCurrentFrame=idx;
   }
-  newLayer.once('load',doSwap);
-  /* Fallback: if 'load' hasn't fired within 3.5 sec, swap anyway so we
-     don't get stuck on a blank frame (network issues, partial tile cache). */
+  newCurrent.once('load',doSwap);
+  /* Fallback: if 'load' hasn't fired within 3.5 sec, swap anyway */
   setTimeout(function(){
     if(!swapped){console.warn('[Sat] Frame',idx,'load timeout - swapping anyway');doSwap();}
   },3500);
   /* If tiles are already cached, 'load' may fire synchronously - force it */
-  if(newLayer._loaded){doSwap();}
-  satCurrentFrame=idx;
+  if(newCurrent._loaded){doSwap();}
 }
 
 /* Update the animation UI elements (frame label, timeline, time display). */
@@ -5954,8 +6005,9 @@ function satJumpLatest(){
   satShowFrame(satFrames.length-1);
 }
 
-/* Toggle play/pause of satellite animation. 600ms per frame (slightly
-   slower than radar so the user can see cloud motion clearly). */
+/* Toggle play/pause of satellite animation. 500ms per frame (matches radar
+   cadence — smoother perceived motion since frames swap instantly via the
+   3-layer buffer rather than waiting for tile loads). */
 function satTogglePlay(){
   satPlaying=!satPlaying;
   var btn=document.getElementById('amSatPlayBtn');
@@ -5967,7 +6019,7 @@ function satTogglePlay(){
       if(n===0)return;
       var newIdx=(satCurrentFrame+1)%n;
       satShowFrame(newIdx);
-    },600);
+    },500);
   }else{
     if(btn)btn.innerHTML='<i class="fas fa-play"></i>';
     if(satAnimTimer){clearInterval(satAnimTimer);satAnimTimer=null}
@@ -6004,72 +6056,104 @@ function satUpdateLegend(){
   }
 }
 
-/* Clear all satellite checkbox UI states EXCEPT the one matching keepId.
-   This enforces mutual exclusion - only one satellite layer at a time.
-   (Showing multiple GOES-East products simultaneously doesn't make sense
-   since they all cover the same area; the topmost would just hide the others.) */
-function satClearOtherCheckboxes(keepId){
-  var allIds=['amSatGEO','amSatIR','amSatVIS','amSatAM','amSatDUST',
-              'amSatWGEO','amSatWIR','amSatWVIS'];
-  allIds.forEach(function(id){
-    if(id!==keepId){
-      var el=document.getElementById(id);
-      if(el&&el.checked)el.checked=false;
-    }
-  });
+/* ── Dropdown handlers ──
+   The old 8-checkbox UI (one per GOES-East/West × 4 view types) was too
+   long and made the panel bulky. Replaced with two cascading dropdowns:
+   - #amSatSource: Off / GOES-East / GOES-West
+   - #amSatView  : GeoColor / IR / Visible / Air Mass / Dust
+   The two together select a single layer (mutual exclusion is implicit
+   since dropdowns can only have one value at a time). Not every view type
+   is available for both satellites — GOES-West only offers GeoColor, IR,
+   and Visible. If the user picks an unsupported combination, we silently
+   fall back to GeoColor for that satellite. */
+
+/* Returns true if the given (type, sat) combination is supported by GIBS. */
+function satComboSupported(type,sat){
+  if(sat==='west'){
+    /* GOES-West only has GeoColor, IR, Visible (no Air Mass or Dust) */
+    return type==='geo'||type==='ir'||type==='vis';
+  }
+  /* GOES-East has all 5 view types */
+  return true;
 }
 
-/* Toggle a satellite layer on/off. Called from each checkbox's onchange.
-   type: 'geo'|'ir'|'vis'|'airmass'|'dust'
-   sat:  'east'|'west' */
-function toggleSatelliteLayer(type,sat){
+/* Called when the Satellite dropdown changes (Off / East / West).
+   Reads the current View Type dropdown and activates that combination.
+   If switching to "Off", tears down whatever's active. */
+function onSatSourceChange(){
   if(!alertMapInstance)initAlertMap();
   if(!alertMapInstance)return;
+  var srcEl=document.getElementById('amSatSource');
+  var viewEl=document.getElementById('amSatView');
+  if(!srcEl)return;
+  var sat=srcEl.value;  /* 'off', 'east', or 'west' */
+  if(sat==='off'){
+    /* Tear down whatever's active */
+    satTeardown();
+    /* Reset dropdowns to defaults */
+    if(viewEl)viewEl.value='geo';
+    return;
+  }
+  /* User picked East or West — activate the (view, sat) combo */
+  var type=viewEl?viewEl.value:'geo';
+  /* If the current view type isn't supported on this satellite, fall back to geo */
+  if(!satComboSupported(type,sat)){
+    type='geo';
+    if(viewEl)viewEl.value='geo';
+  }
+  satActivateLayer(type,sat);
+}
+
+/* Called when the View Type dropdown changes (GeoColor / IR / Visible / etc).
+   Reads the current Satellite dropdown and activates that combination.
+   If the satellite dropdown is "Off", this is a no-op. */
+function onSatViewChange(){
+  if(!alertMapInstance)initAlertMap();
+  if(!alertMapInstance)return;
+  var srcEl=document.getElementById('amSatSource');
+  var viewEl=document.getElementById('amSatView');
+  if(!srcEl||!viewEl)return;
+  var sat=srcEl.value;
+  var type=viewEl.value;
+  if(sat==='off'){
+    /* Source is off — don't activate. The user is just pre-selecting a view
+       type for when they later pick a satellite. */
+    return;
+  }
+  /* If this view type isn't supported on the current satellite, fall back to geo */
+  if(!satComboSupported(type,sat)){
+    type='geo';
+    viewEl.value='geo';
+  }
+  satActivateLayer(type,sat);
+}
+
+/* Activate a satellite layer for the given (type, sat) combination.
+   Tears down any previously-active layer first. Builds the 3-layer rolling
+   buffer starting at the latest frame. */
+function satActivateLayer(type,sat){
   var key=satResolveKey(type,sat);
   var cfg=SAT_LAYERS[key];
   if(!cfg){console.warn('[Sat] Unknown layer key:',key);return;}
-  /* Determine which checkbox fired this call */
-  var cbId={
-    'geo_east'    :'amSatGEO',
-    'ir_east'     :'amSatIR',
-    'vis_east'    :'amSatVIS',
-    'airmass_east':'amSatAM',
-    'dust_east'   :'amSatDUST',
-    'geo_west'    :'amSatWGEO',
-    'ir_west'     :'amSatWIR',
-    'vis_west'    :'amSatWVIS'
-  }[key];
-  var cb=document.getElementById(cbId);
-  /* If checkbox is unchecked, tear down whatever's active (if it was this one) */
-  if(cb&&!cb.checked){
-    if(satActiveKey===key){
-      satTeardown();
-    }
-    return;
-  }
-  /* Otherwise, the user is enabling this layer. Enforce mutual exclusion. */
-  satClearOtherCheckboxes(cbId);
-  /* Tear down any previously-active satellite layer first */
+  /* Tear down any previously-active satellite layer */
   if(satActiveKey&&satActiveKey!==key){
-    satTeardown();
+    satTeardownLayersOnly();
   }
-  /* Set up the new layer */
   satActiveKey=key;
   satFrames=satBuildFrames();
   satCurrentFrame=satFrames.length-1;  /* start on the latest frame */
   var opacityEl=document.getElementById('amSatOpacity');
   satBaseOpacity=opacityEl?(parseInt(opacityEl.value,10)/100):0.75;
-  /* Create and add the current layer */
-  var layer=satCreateLayer(key,satCurrentFrame);
-  if(layer){
-    layer.addTo(alertMapInstance);
-    satLayerCurrent=layer;
-    /* Slight delay so 'add' event finishes before we set opacity */
-    setTimeout(function(){
-      if(satLayerCurrent===layer){
-        satLayerCurrent.setOpacity(satBaseOpacity);
-      }
-    },100);
+  /* Create the current layer and show it */
+  satLayerCurrent=satCreateLayer(key,satCurrentFrame);
+  if(satLayerCurrent){
+    satLayerCurrent.addTo(alertMapInstance);
+    satLayerCurrent.setOpacity(satBaseOpacity);
+  }
+  /* Preload prev (if exists) for smooth backward stepping */
+  if(satCurrentFrame-1>=0){
+    satLayerPrev=satCreateLayer(key,satCurrentFrame-1);
+    if(satLayerPrev)satLayerPrev.addTo(alertMapInstance);
   }
   satUpdateUI(satCurrentFrame);
   satUpdateLegend();
@@ -6080,54 +6164,35 @@ function toggleSatelliteLayer(type,sat){
   satRefreshTimer=setInterval(function(){
     if(!satActiveKey)return;
     /* Rebuild frame list with new "latest" time */
-    var wasPlaying=satPlaying;
     var wasAtLatest=(satCurrentFrame===satFrames.length-1);
     satFrames=satBuildFrames();
-    /* If we were at the latest frame, stay on the new latest; otherwise
-       keep the same relative time position by re-deriving index. */
     if(wasAtLatest){
       satCurrentFrame=satFrames.length-1;
-    }else{
-      /* Try to keep the current displayed time (use the new frame list's
-         nearest match). Simplest: just keep the same index. */
-      /* satCurrentFrame unchanged */
     }
-    /* Reload the current frame's tiles with the new layer */
-    var newLayer=satCreateLayer(satActiveKey,satCurrentFrame);
-    if(newLayer){
-      newLayer.addTo(alertMapInstance);
-      var oldLayer=satLayerCurrent;
-      newLayer.once('load',function(){
-        if(oldLayer){
-          oldLayer.setOpacity(0);
-          try{alertMapInstance.removeLayer(oldLayer)}catch(e){}
-        }
-        satLayerCurrent=newLayer;
-        satLayerCurrent.setOpacity(satBaseOpacity);
-      });
-      /* Fallback swap after 4 sec if load event doesn't fire */
-      setTimeout(function(){
-        if(satLayerCurrent!==newLayer){
-          if(oldLayer){
-            oldLayer.setOpacity(0);
-            try{alertMapInstance.removeLayer(oldLayer)}catch(e){}
-          }
-          satLayerCurrent=newLayer;
-          satLayerCurrent.setOpacity(satBaseOpacity);
-        }
-      },4000);
-    }
+    /* Reload the current frame's tiles with the new layer (using rolling buffer) */
+    satShowFrame(satCurrentFrame);
     satUpdateUI(satCurrentFrame);
     console.log('[Sat] Auto-refreshed frames (latest:',satFormatTime(satFrames[satFrames.length-1])+')');
   },10*60*1000);
 }
 
-/* Tear down the active satellite layer and stop animation/refresh. */
+/* Tear down only the Leaflet layers (used when switching between layer
+   types — keeps the refresh timer running since the new layer will reuse it). */
+function satTeardownLayersOnly(){
+  if(satPlaying)satTogglePlay();
+  if(satLayerPrev){try{alertMapInstance.removeLayer(satLayerPrev)}catch(e){}satLayerPrev=null}
+  if(satLayerCurrent){try{alertMapInstance.removeLayer(satLayerCurrent)}catch(e){}satLayerCurrent=null}
+  if(satLayerNext){try{alertMapInstance.removeLayer(satLayerNext)}catch(e){}satLayerNext=null}
+}
+
+/* Full teardown: layers + timers + state + UI reset. Called when user
+   picks "Off" in the satellite dropdown. */
 function satTeardown(){
   if(satPlaying)satTogglePlay();
   if(satRefreshTimer){clearInterval(satRefreshTimer);satRefreshTimer=null}
   if(satLayerPrev){try{alertMapInstance.removeLayer(satLayerPrev)}catch(e){}satLayerPrev=null}
   if(satLayerCurrent){try{alertMapInstance.removeLayer(satLayerCurrent)}catch(e){}satLayerCurrent=null}
+  if(satLayerNext){try{alertMapInstance.removeLayer(satLayerNext)}catch(e){}satLayerNext=null}
   satActiveKey=null;
   satFrames=[];
   satCurrentFrame=0;
@@ -11785,11 +11850,14 @@ function obsOnStateChange(){
 /* ── State Filter Gating ──
    Surface observations can be VERY slow when "All United States" is
    selected — it fetches ~2000+ stations in 10 batches across all 48
-   CONUS states. To prevent the slow all-US fetch:
-   - When state filter = "" (All US): disable both checkboxes, hide the
-     "Show Surface Obs" / "Color Gradient" controls. If the user had
-     them on, tear down the active layers (pins + gradient) and uncheck.
-   - When a state is selected: enable both checkboxes.
+   CONUS states. To prevent the slow all-US fetch AND keep the panel
+   clean, we hide the entire obs-controls block (checkboxes, animation,
+   variable selector, refresh button) until a state is selected. No
+   hint banner needed — the user just sees "State Filter" + dropdown,
+   and the rest appears once they pick a state.
+   - When state filter = "" (All US): hide #obsControls. If the user had
+     layers active, tear them down + uncheck.
+   - When a state is selected: show #obsControls.
    This function is called from onAlertFilterChange() and on page init.
    It runs BEFORE obsOnStateChange() so the latter becomes a no-op when
    no state is selected (obsLayer will be null). */
@@ -11799,17 +11867,9 @@ function obsUpdateStateGate(){
   var hasState=!!state;
   var obsCb=document.getElementById('amObsEnable');
   var gradCb=document.getElementById('amObsGradient');
-  var hintEl=document.getElementById('obsStateHint');
-  var obsLabel=document.getElementById('amObsEnableLabel');
-  var gradLabel=document.getElementById('amObsGradientLabel');
-  /* Enable/disable the checkboxes */
-  if(obsCb)obsCb.disabled=!hasState;
-  if(gradCb)gradCb.disabled=!hasState;
-  /* Show/hide the hint */
-  if(hintEl)hintEl.style.display=hasState?'none':'block';
-  /* Dim the labels when disabled */
-  if(obsLabel)obsLabel.style.opacity=hasState?'1':'0.5';
-  if(gradLabel)gradLabel.style.opacity=hasState?'1':'0.5';
+  var controlsEl=document.getElementById('obsControls');
+  /* Show/hide the entire obs controls block */
+  if(controlsEl)controlsEl.style.display=hasState?'block':'none';
   /* If no state and a layer is currently active, tear it down + uncheck */
   if(!hasState){
     var wasActive=false;
