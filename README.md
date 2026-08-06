@@ -10,6 +10,7 @@ A comprehensive weather monitoring PWA for storm spotters and chasers, featuring
 - **Live NWS Alert Polygons** — Tornado Warnings, Severe Thunderstorm Warnings, Watches, Advisories with delta updates (only adds/removes changed alerts)
 - **SPC Convective Outlooks** — Day 1-3 categorical + tornado/hail/wind probability layers
 - **Radar Overlay** — RainViewer API with 3-layer rolling buffer for smooth animation, play/pause/step controls, dBZ legend
+- **Satellite Layers** — NASA GIBS GOES-East/West ABI imagery (GeoColor, Infrared Band 13, Visible Band 2, Air Mass, Dust) with 24-frame animation (last 4 hours, 10-min intervals), opacity control, brightness-temperature legend for IR/Air Mass, auto-refresh every 10 minutes
 - **Surface Observations** — NWS ASOS station data with 9 weather variables (temp, dewpoint, wind, pressure, visibility, RH, precip), color-coded markers, and IDW gradient heatmap overlay with NWS-standard color ramps
 - **Observation Animation** — Play through stored observation snapshots (Supabase-backed) with speed control, pin + gradient animation
 - **Sounding Station Pins** — 68 NWS upper-air sites with click-to-view skew-T popups
@@ -86,6 +87,7 @@ A comprehensive weather monitoring PWA for storm spotters and chasers, featuring
 | Frontend | Single HTML file (~12,000+ lines), vanilla JavaScript |
 | Map | Leaflet.js 1.9.4 with CARTO Voyager basemap |
 | Radar | RainViewer API with 3-layer rolling buffer |
+| Satellite | NASA GIBS WMTS (GOES-East/West ABI imagery) |
 | Alerts | NWS API (api.weather.gov) with CORS proxy fallback |
 | Soundings | Iowa Environmental Mesonet (Iowa State University) RAOB JSON API |
 | SPC Outlooks | spc.noaa.gov GeoJSON API |
@@ -155,6 +157,7 @@ Just visit the [live site](https://kn-weather.github.io/Skywarn-Storm-Spot-US/).
 - [Iowa Environmental Mesonet](https://mesonet.agron.iastate.edu/) — RAOB soundings
 - [SPC](https://www.spc.noaa.gov/) — Convective outlooks
 - [RainViewer](https://www.rainviewer.com/) — Radar tiles
+- [NASA GIBS](https://earthdata.nasa.gov/gibs) — GOES-East/West satellite imagery (WMTS)
 - [CARTO](https://carto.com/) — Basemap tiles
 - [OpenStreetMap Nominatim](https://nominatim.openstreetmap.org/) — Geocoding
 - [TwisterData](http://www.twisterdata.com/) — Forecast soundings (embedded)

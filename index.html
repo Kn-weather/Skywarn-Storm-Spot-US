@@ -1896,6 +1896,60 @@ body{
   font-size:6px;color:var(--t3);text-align:center;
   margin-top:0;
 }
+/* Satellite IR brightness-temperature legend (bottom-right, shown when IR/AirMass is on).
+   Same look as radar-legend but with a different gradient. */
+.sat-legend{
+  position:absolute;bottom:10px;right:140px;z-index:1000;
+  background:rgba(10,10,10,.88);
+  border:1px solid var(--bdr);
+  border-radius:6px;
+  padding:4px 6px;
+  backdrop-filter:blur(12px);
+  -webkit-backdrop-filter:blur(12px);
+  font-family:Inter,sans-serif;
+  pointer-events:none;
+  max-width:160px;
+  width:160px;
+}
+.sat-legend-title{
+  font-size:8px;font-weight:700;color:var(--acc);
+  text-transform:uppercase;letter-spacing:.04em;
+  text-align:center;margin-bottom:2px;
+}
+.sat-legend-bar{
+  height:8px;border-radius:2px;
+  border:1px solid rgba(255,255,255,.15);
+}
+.sat-legend-bar.ir{
+  background:linear-gradient(to right,
+    #000000 0%,      /* +20°C - black (warm, low clouds/surface) */
+    #4a4a4a 14%,     /* 0°C - dark gray */
+    #888888 28%,     /* -20°C - mid gray */
+    #c0c0c0 42%,     /* -40°C - light gray */
+    #4040ff 56%,     /* -60°C - blue */
+    #00ffff 70%,     /* -70°C - cyan */
+    #ffff00 84%,     /* -80°C - yellow */
+    #ff0000 100%     /* -90°C - red (overshooting tops) */
+  );
+}
+.sat-legend-bar.wv{
+  background:linear-gradient(to right,
+    #000000 0%,
+    #1a1a4a 25%,
+    #4040ff 50%,
+    #8080ff 75%,
+    #ffffff 100%
+  );
+}
+.sat-legend-labels{
+  display:flex;justify-content:space-between;
+  margin-top:1px;font-size:6px;color:var(--t2);
+  font-family:monospace;
+}
+.sat-legend-desc{
+  font-size:6px;color:var(--t3);text-align:center;
+  margin-top:0;
+}
 /* Capturing state - hide UI chrome that shouldn't appear in screenshots.
    NOTE: .leaflet-popup-pane is intentionally NOT hidden so that any open
    alert popup window is included in the screenshot. */
@@ -1905,7 +1959,8 @@ body.capturing .loading-overlay,
 body.capturing .leaflet-control-zoom,
 body.capturing .leaflet-control-attribution,
 body.capturing .hamburger,
-body.capturing .hamburger-menu{display:none!important}
+body.capturing .hamburger-menu,
+body.capturing .sat-legend{display:none!important}
 </style>
 </head>
 <body>
@@ -2039,8 +2094,11 @@ body.capturing .hamburger-menu{display:none!important}
             <option value="PR">Puerto Rico</option><option value="GU">Guam</option>
           </select>
           <div class="section-label" style="margin-top:8px">Surface Observations</div>
-          <label style="margin:1px 0"><input type="checkbox" id="amObsEnable" onchange="toggleObsLayer()"> Show Surface Obs</label>
-          <label style="margin:1px 0;font-size:9px;color:var(--t2)"><input type="checkbox" id="amObsGradient" onchange="toggleObsGradient()" style="accent-color:var(--acc)"> Color Gradient Overlay</label>
+          <div id="obsStateHint" style="font-size:9px;color:var(--acc);background:var(--acc-g);border:1px solid var(--bdr-a);border-radius:4px;padding:4px 6px;margin:4px 0;line-height:1.4">
+            <i class="fas fa-circle-info" style="margin-right:4px"></i>Select a state above first to enable surface obs. Loading all US stations is too slow.
+          </div>
+          <label style="margin:1px 0" id="amObsEnableLabel"><input type="checkbox" id="amObsEnable" onchange="toggleObsLayer()" disabled> Show Surface Obs</label>
+          <label style="margin:1px 0;font-size:9px;color:var(--t2)" id="amObsGradientLabel"><input type="checkbox" id="amObsGradient" onchange="toggleObsGradient()" style="accent-color:var(--acc)" disabled> Color Gradient Overlay</label>
           <div id="obsAnimControls" style="display:none;margin-top:6px;padding:6px;background:var(--bg);border:1px solid var(--bdr);border-radius:4px">
             <div style="font-size:8px;color:var(--t3);text-transform:uppercase;letter-spacing:.04em;margin-bottom:4px">Animation (stored history)</div>
             <div class="radar-anim-controls">
@@ -2128,6 +2186,47 @@ body.capturing .hamburger-menu{display:none!important}
         </div>
       </div>
 
+      <!-- Satellite Layers (NASA GIBS WMTS) -->
+      <div class="collapsible-section" data-section="satellite">
+        <div class="collapsible-header" onclick="toggleSection(this)">
+          <span>Satellite Layers</span><i class="fas fa-chevron-right"></i>
+        </div>
+        <div class="collapsible-body">
+          <div style="font-size:9px;color:var(--t3);line-height:1.4;margin-bottom:4px">NASA GIBS GOES-East/West ABI imagery (10-min updates)</div>
+
+          <div style="font-size:9px;color:var(--t3);text-transform:uppercase;letter-spacing:.04em;margin-bottom:2px">GOES-East</div>
+          <label style="margin:1px 0"><input type="checkbox" id="amSatGEO" onchange="toggleSatelliteLayer('geo','east')"> GeoColor <span style="color:var(--t3);font-size:8px">(true-color, day/night)</span></label>
+          <label style="margin:1px 0"><input type="checkbox" id="amSatIR" onchange="toggleSatelliteLayer('ir','east')"> Infrared (Band 13) <span style="color:var(--t3);font-size:8px">(10.3&micro;m)</span></label>
+          <label style="margin:1px 0"><input type="checkbox" id="amSatVIS" onchange="toggleSatelliteLayer('vis','east')"> Visible (Band 2) <span style="color:var(--t3);font-size:8px">(0.64&micro;m, day)</span></label>
+          <label style="margin:1px 0"><input type="checkbox" id="amSatAM" onchange="toggleSatelliteLayer('airmass','east')"> Air Mass</label>
+          <label style="margin:1px 0"><input type="checkbox" id="amSatDUST" onchange="toggleSatelliteLayer('dust','east')"> Dust</label>
+
+          <div style="font-size:9px;color:var(--t3);text-transform:uppercase;letter-spacing:.04em;margin:6px 0 2px">GOES-West</div>
+          <label style="margin:1px 0"><input type="checkbox" id="amSatWGEO" onchange="toggleSatelliteLayer('geo','west')"> GeoColor</label>
+          <label style="margin:1px 0"><input type="checkbox" id="amSatWIR" onchange="toggleSatelliteLayer('ir','west')"> Infrared (Band 13)</label>
+          <label style="margin:1px 0"><input type="checkbox" id="amSatWVIS" onchange="toggleSatelliteLayer('vis','west')"> Visible (Band 2)</label>
+
+          <label style="margin:2px 0;font-size:9px">Opacity:
+            <input type="range" id="amSatOpacity" min="20" max="100" value="75" oninput="updateSatOpacity()" style="width:100%;accent-color:var(--acc);cursor:pointer">
+          </label>
+
+          <div style="margin-top:2px">
+            <div style="font-size:9px;color:var(--t3);text-transform:uppercase;letter-spacing:.04em;margin-bottom:2px">Time (last 4 hrs)</div>
+            <div class="radar-anim-controls">
+              <button class="radar-anim-btn" onclick="satStep(-1)" title="Previous frame"><i class="fas fa-backward-step"></i></button>
+              <button class="radar-anim-btn play-btn" id="amSatPlayBtn" onclick="satTogglePlay()" title="Play/Pause"><i class="fas fa-play"></i></button>
+              <button class="radar-anim-btn" onclick="satStep(1)" title="Next frame"><i class="fas fa-forward-step"></i></button>
+              <span class="radar-anim-frame-label" id="amSatFrameLabel">—</span>
+            </div>
+            <input type="range" class="radar-anim-timeline" id="amSatTimeline" min="0" max="0" value="0" oninput="satSeekTo(this.value)" style="width:100%">
+            <div class="radar-anim-time-display" id="amSatTimeDisplay">—</div>
+            <div style="font-size:8px;color:var(--t3);margin-top:3px;text-align:center">
+              <a href="javascript:satJumpLatest()" style="color:var(--acc)">« Jump to latest</a>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <!-- Sounding Stations -->
       <div class="collapsible-section" data-section="soundings">
         <div class="collapsible-header" onclick="toggleSection(this)">
@@ -2175,6 +2274,16 @@ body.capturing .hamburger-menu{display:none!important}
       <span>5</span><span>25</span><span>35</span><span>45</span><span>55</span><span>65+</span>
     </div>
     <div class="radar-legend-desc">Light → Heavy</div>
+  </div>
+
+  <!-- Satellite IR/WV legend (bottom-right, shown when IR or AirMass is on) -->
+  <div class="sat-legend" id="satLegend" style="display:none">
+    <div class="sat-legend-title" id="satLegendTitle">Cloud Top &deg;C</div>
+    <div class="sat-legend-bar ir" id="satLegendBar"></div>
+    <div class="sat-legend-labels">
+      <span>+20</span><span>-20</span><span>-40</span><span>-60</span><span>-80</span><span>-90</span>
+    </div>
+    <div class="sat-legend-desc" id="satLegendDesc">Warm → Cold (deep convection)</div>
   </div>
 
   <div class="loading-overlay" id="loadingOverlay"><div class="spinner"></div></div>
@@ -4480,6 +4589,11 @@ function clearAllAlertLayers(){
 function onAlertFilterChange(){
   clearAllAlertLayers();
   fAlertMap();
+  /* Update the surface obs checkbox enable/disable state based on
+     whether a state is selected. This must run BEFORE obsOnStateChange
+     because obsOnStateChange may tear down the obs layer when no state
+     is selected (preventing the slow all-US fetch). */
+  obsUpdateStateGate();
   /* If the surface observations layer is active, reload it for the
      new state so we don't show stale markers from the old state. */
   obsOnStateChange();
@@ -5627,6 +5741,406 @@ function updateRadarOpacity(){
   if(radarLayerCurrent){
     radarLayerCurrent.setOpacity(radarBaseOpacity);
   }
+}
+
+/* ── Satellite Overlay (NASA GIBS WMTS API) ───────────────────────────────
+   Adds GOES-East and GOES-West ABI imagery overlays to the map using
+   NASA GIBS's free WMTS tile API. GIBS serves tiled GOES imagery at
+   10-minute intervals covering the full disk of each satellite, which
+   includes all of CONUS and adjacent oceans.
+
+   URL pattern (confirmed via GetCapabilities):
+   https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/{layer}/default/{time}/{TMS}/{z}/{y}/{x}.jpg
+
+   - {layer}  : e.g. GOES-East_ABI_Band13_Clean_Infrared
+   - {time}   : YYYY-MM-DD  (latest of day)  OR  YYYY-MM-DDThh:mm:ssZ  (specific)
+   - {TMS}    : GoogleMapsCompatible_Level6 (for IR/AirMass) or Level7 (for VIS/GeoColor/Dust)
+   - {z}/{y}/{x} : TileMatrix / TileRow / TileCol  (standard XYZ, top-down)
+
+   Available layers (mutually exclusive - selecting one deselects the others):
+   - GeoColor (East/West)  : true-color visible+IR composite, works day & night
+   - IR Band 13 (East/West): 10.3µm clean infrared, day & night
+   - Visible Band 2 (E/W)  : 0.64µm red visible, daytime only
+   - Air Mass (East)       : multi-band RGB showing air mass boundaries
+   - Dust (East)           : dust-enhancement RGB
+
+   GIBS imagery is approximately real-time (≈60-90 min delay). We generate
+   24 frames at 10-min intervals going back from "now - 90 min, rounded
+   down to 10-min mark". If a specific time is unavailable, GIBS returns
+   the nearest valid scan automatically.
+
+   No API key required. CORS-friendly. Auto-refreshes every 10 minutes.
+
+   References:
+   - https://nasa-gibs.github.io/gibs-api-docs/
+   - https://wiki.earthdata.nasa.gov/display/GIBS/GIBS+API+for+Developers */
+
+/* Layer config: maps our short names to GIBS layer IDs and TileMatrixSet levels. */
+var SAT_LAYERS={
+  'geo_east'    :{id:'GOES-East_ABI_GeoColor',                tms:7,label:'GOES-East GeoColor',           legendType:'none'},
+  'ir_east'     :{id:'GOES-East_ABI_Band13_Clean_Infrared',   tms:6,label:'GOES-East Infrared (Band 13)', legendType:'ir'},
+  'vis_east'    :{id:'GOES-East_ABI_Band2_Red_Visible_1km',   tms:7,label:'GOES-East Visible (Band 2)',   legendType:'none'},
+  'airmass_east':{id:'GOES-East_ABI_Air_Mass',                tms:6,label:'GOES-East Air Mass',           legendType:'ir'},
+  'dust_east'   :{id:'GOES-East_ABI_Dust',                    tms:7,label:'GOES-East Dust',               legendType:'none'},
+  'geo_west'    :{id:'GOES-West_ABI_GeoColor',                tms:7,label:'GOES-West GeoColor',           legendType:'none'},
+  'ir_west'     :{id:'GOES-West_ABI_Band13_Clean_Infrared',   tms:6,label:'GOES-West Infrared (Band 13)', legendType:'ir'},
+  'vis_west'    :{id:'GOES-West_ABI_Band2_Red_Visible_1km',   tms:7,label:'GOES-West Visible (Band 2)',   legendType:'none'}
+};
+/* Maps the (type, sat) parameters from the checkbox onchange to the SAT_LAYERS key. */
+function satResolveKey(type,sat){
+  return type+'_'+sat;  /* e.g. 'ir_east', 'geo_west' */
+}
+
+var satLayerCurrent=null;      /* the active L.tileLayer (single layer, no buffer needed - GIBS tiles load fast) */
+var satLayerPrev=null;         /* previous frame, kept visible until new frame's tiles load (smooth transitions) */
+var satActiveKey=null;         /* currently-active SAT_LAYERS key, or null if off */
+var satFrames=[];              /* array of Date objects, oldest first */
+var satCurrentFrame=0;         /* index into satFrames */
+var satPlaying=false;
+var satAnimTimer=null;
+var satRefreshTimer=null;
+var satBaseOpacity=0.75;
+
+/* Generate the 24-frame timeline (last ~4 hours at 10-min intervals).
+   The latest frame is "now - 90 min" rounded DOWN to the nearest 10-min
+   mark. This buffer accounts for GIBS's processing delay. Frames are
+   generated oldest-first (index 0 = oldest, last index = newest). */
+function satBuildFrames(){
+  var now=new Date();
+  var frameCount=24;             /* 24 × 10 min = 4 hours of history */
+  var intervalMs=10*60*1000;     /* 10 minutes per frame */
+  var bufferMs=90*60*1000;       /* 90 min delay before "latest" available frame */
+  /* Round "now - buffer" down to nearest 10-min mark */
+  var latest=new Date(now.getTime()-bufferMs);
+  latest.setUTCMinutes(Math.floor(latest.getUTCMinutes()/10)*10,0,0);
+  var frames=[];
+  for(var i=frameCount-1;i>=0;i--){
+    frames.push(new Date(latest.getTime()-i*intervalMs));
+  }
+  return frames;
+}
+
+/* Format a Date as GIBS time string: YYYY-MM-DDThh:mm:ssZ */
+function satFormatTime(d){
+  function pad(n){return n<10?'0'+n:''+n}
+  return d.getUTCFullYear()+'-'+pad(d.getUTCMonth()+1)+'-'+pad(d.getUTCDate())+
+    'T'+pad(d.getUTCHours())+':'+pad(d.getUTCMinutes())+':'+pad(d.getUTCSeconds())+'Z';
+}
+
+/* Build the GIBS tile URL template for a given layer key. */
+function satBuildUrl(key){
+  var cfg=SAT_LAYERS[key];
+  if(!cfg)return null;
+  return 'https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/'+cfg.id+
+    '/default/{time}/GoogleMapsCompatible_Level'+cfg.tms+'/{z}/{y}/{x}.jpg';
+}
+
+/* Create a Leaflet tile layer for the given key and time index.
+   - maxNativeZoom = TMS level (6 or 7) - GIBS only serves tiles up to this level.
+   - maxZoom = 18 so the satellite stays visible when zoomed in (upscaled).
+   - errorTileUrl: transparent 1x1 PNG so 404s (gaps in scan cadence, or
+     GOES-West temporarily offline) don't show as broken-image icons.
+     Different GOES products have different scan schedules — some 10-min
+     intervals may not have a scan available, which would cause individual
+     tiles to 404. The transparent fallback lets the rest of the image
+     load normally. */
+function satCreateLayer(key,timeIdx){
+  var cfg=SAT_LAYERS[key];
+  if(!cfg||!satFrames[timeIdx])return null;
+  var time=satFormatTime(satFrames[timeIdx]);
+  var url='https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/'+cfg.id+
+    '/default/'+time+'/GoogleMapsCompatible_Level'+cfg.tms+'/{z}/{y}/{x}.jpg';
+  /* 1x1 transparent PNG (base64) - used when a tile 404s */
+  var transparentPng='data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
+  var layer=L.tileLayer(url,{
+    opacity:0,
+    maxZoom:18,
+    maxNativeZoom:cfg.tms,
+    attribution:'Satellite: <a href="https://earthdata.nasa.gov/gibs">NASA GIBS</a>',
+    crossOrigin:true,
+    errorTileUrl:transparentPng
+  });
+  /* Track tile errors so we can show a status hint if a frame is mostly missing */
+  layer._satErrorCount=0;
+  layer._satTotalCount=0;
+  layer.on('tileerror',function(){
+    if(layer._satErrorCount!==undefined)layer._satErrorCount++;
+  });
+  return layer;
+}
+
+/* Show the satellite frame at the given index with double-buffered tile
+   loading (old frame stays visible until new frame's tiles are loaded,
+   preventing flashing). */
+function satShowFrame(idx){
+  if(satFrames.length===0)return;
+  if(idx<0)idx=0;
+  if(idx>=satFrames.length)idx=satFrames.length-1;
+  satUpdateUI(idx);
+  /* Same frame - just ensure visible */
+  if(idx===satCurrentFrame&&satLayerCurrent){
+    satLayerCurrent.setOpacity(satBaseOpacity);
+    return;
+  }
+  var oldIdx=satCurrentFrame;
+  var newLayer=satCreateLayer(satActiveKey,idx);
+  if(!newLayer)return;
+  newLayer.addTo(alertMapInstance);
+  /* Wait for new layer's tiles to load, then swap opacity */
+  var swapped=false;
+  function doSwap(){
+    if(swapped)return;swapped=true;
+    if(satLayerCurrent){
+      satLayerCurrent.setOpacity(0);
+      /* remove old layer after a brief delay to let the new layer's tiles render */
+      setTimeout(function(){
+        if(satLayerCurrent&&satLayerCurrent!==newLayer){
+          try{alertMapInstance.removeLayer(satLayerCurrent)}catch(e){}
+        }
+        satLayerPrev=satLayerCurrent;
+        satLayerCurrent=newLayer;
+        satLayerCurrent.setOpacity(satBaseOpacity);
+      },300);
+    }else{
+      satLayerCurrent=newLayer;
+      satLayerCurrent.setOpacity(satBaseOpacity);
+    }
+  }
+  newLayer.once('load',doSwap);
+  /* Fallback: if 'load' hasn't fired within 3.5 sec, swap anyway so we
+     don't get stuck on a blank frame (network issues, partial tile cache). */
+  setTimeout(function(){
+    if(!swapped){console.warn('[Sat] Frame',idx,'load timeout - swapping anyway');doSwap();}
+  },3500);
+  /* If tiles are already cached, 'load' may fire synchronously - force it */
+  if(newLayer._loaded){doSwap();}
+  satCurrentFrame=idx;
+}
+
+/* Update the animation UI elements (frame label, timeline, time display). */
+function satUpdateUI(idx){
+  var labelEl=document.getElementById('amSatFrameLabel');
+  if(labelEl)labelEl.textContent=(idx+1)+'/'+satFrames.length;
+  var timelineEl=document.getElementById('amSatTimeline');
+  if(timelineEl){
+    timelineEl.max=satFrames.length-1;
+    timelineEl.value=idx;
+  }
+  var timeEl=document.getElementById('amSatTimeDisplay');
+  if(timeEl&&satFrames[idx]){
+    var d=satFrames[idx];
+    timeEl.textContent=d.toLocaleString('en-US',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit',hour12:true})+' UTC';
+  }
+}
+
+/* Step forward/backward by delta frames. Wraps around at the ends. */
+function satStep(delta){
+  if(satFrames.length===0)return;
+  var n=satFrames.length;
+  var newIdx=satCurrentFrame+delta;
+  if(newIdx<0)newIdx=n-1;
+  if(newIdx>=n)newIdx=0;
+  satShowFrame(newIdx);
+}
+
+/* Seek to a specific frame (called by the timeline slider). */
+function satSeekTo(idx){
+  satShowFrame(parseInt(idx,10));
+}
+
+/* Jump to the latest available frame (the last index). */
+function satJumpLatest(){
+  if(satFrames.length===0)return;
+  satShowFrame(satFrames.length-1);
+}
+
+/* Toggle play/pause of satellite animation. 600ms per frame (slightly
+   slower than radar so the user can see cloud motion clearly). */
+function satTogglePlay(){
+  satPlaying=!satPlaying;
+  var btn=document.getElementById('amSatPlayBtn');
+  if(satPlaying){
+    if(btn)btn.innerHTML='<i class="fas fa-pause"></i>';
+    if(satAnimTimer)clearInterval(satAnimTimer);
+    satAnimTimer=setInterval(function(){
+      var n=satFrames.length;
+      if(n===0)return;
+      var newIdx=(satCurrentFrame+1)%n;
+      satShowFrame(newIdx);
+    },600);
+  }else{
+    if(btn)btn.innerHTML='<i class="fas fa-play"></i>';
+    if(satAnimTimer){clearInterval(satAnimTimer);satAnimTimer=null}
+  }
+}
+
+/* Update the opacity of the current satellite layer. */
+function updateSatOpacity(){
+  var opacityEl=document.getElementById('amSatOpacity');
+  if(!opacityEl)return;
+  satBaseOpacity=parseInt(opacityEl.value,10)/100;
+  if(satLayerCurrent){
+    satLayerCurrent.setOpacity(satBaseOpacity);
+  }
+}
+
+/* Show/hide the appropriate legend for the active layer.
+   - IR / Air Mass → IR brightness-temperature legend
+   - Visible / GeoColor / Dust → no legend (imagery is self-explanatory) */
+function satUpdateLegend(){
+  var legendEl=document.getElementById('satLegend');
+  if(!legendEl)return;
+  if(!satActiveKey){legendEl.style.display='none';return;}
+  var cfg=SAT_LAYERS[satActiveKey];
+  if(!cfg){legendEl.style.display='none';return;}
+  if(cfg.legendType==='ir'){
+    legendEl.style.display='block';
+    var titleEl=document.getElementById('satLegendTitle');
+    var descEl=document.getElementById('satLegendDesc');
+    if(titleEl)titleEl.textContent='Cloud Top °C';
+    if(descEl)descEl.textContent='Warm → Cold (deep convection)';
+  }else{
+    legendEl.style.display='none';
+  }
+}
+
+/* Clear all satellite checkbox UI states EXCEPT the one matching keepId.
+   This enforces mutual exclusion - only one satellite layer at a time.
+   (Showing multiple GOES-East products simultaneously doesn't make sense
+   since they all cover the same area; the topmost would just hide the others.) */
+function satClearOtherCheckboxes(keepId){
+  var allIds=['amSatGEO','amSatIR','amSatVIS','amSatAM','amSatDUST',
+              'amSatWGEO','amSatWIR','amSatWVIS'];
+  allIds.forEach(function(id){
+    if(id!==keepId){
+      var el=document.getElementById(id);
+      if(el&&el.checked)el.checked=false;
+    }
+  });
+}
+
+/* Toggle a satellite layer on/off. Called from each checkbox's onchange.
+   type: 'geo'|'ir'|'vis'|'airmass'|'dust'
+   sat:  'east'|'west' */
+function toggleSatelliteLayer(type,sat){
+  if(!alertMapInstance)initAlertMap();
+  if(!alertMapInstance)return;
+  var key=satResolveKey(type,sat);
+  var cfg=SAT_LAYERS[key];
+  if(!cfg){console.warn('[Sat] Unknown layer key:',key);return;}
+  /* Determine which checkbox fired this call */
+  var cbId={
+    'geo_east'    :'amSatGEO',
+    'ir_east'     :'amSatIR',
+    'vis_east'    :'amSatVIS',
+    'airmass_east':'amSatAM',
+    'dust_east'   :'amSatDUST',
+    'geo_west'    :'amSatWGEO',
+    'ir_west'     :'amSatWIR',
+    'vis_west'    :'amSatWVIS'
+  }[key];
+  var cb=document.getElementById(cbId);
+  /* If checkbox is unchecked, tear down whatever's active (if it was this one) */
+  if(cb&&!cb.checked){
+    if(satActiveKey===key){
+      satTeardown();
+    }
+    return;
+  }
+  /* Otherwise, the user is enabling this layer. Enforce mutual exclusion. */
+  satClearOtherCheckboxes(cbId);
+  /* Tear down any previously-active satellite layer first */
+  if(satActiveKey&&satActiveKey!==key){
+    satTeardown();
+  }
+  /* Set up the new layer */
+  satActiveKey=key;
+  satFrames=satBuildFrames();
+  satCurrentFrame=satFrames.length-1;  /* start on the latest frame */
+  var opacityEl=document.getElementById('amSatOpacity');
+  satBaseOpacity=opacityEl?(parseInt(opacityEl.value,10)/100):0.75;
+  /* Create and add the current layer */
+  var layer=satCreateLayer(key,satCurrentFrame);
+  if(layer){
+    layer.addTo(alertMapInstance);
+    satLayerCurrent=layer;
+    /* Slight delay so 'add' event finishes before we set opacity */
+    setTimeout(function(){
+      if(satLayerCurrent===layer){
+        satLayerCurrent.setOpacity(satBaseOpacity);
+      }
+    },100);
+  }
+  satUpdateUI(satCurrentFrame);
+  satUpdateLegend();
+  console.log('[Sat] Activated',cfg.label,'at frame',satCurrentFrame+1+'/'+satFrames.length,
+    '('+satFormatTime(satFrames[satCurrentFrame])+')');
+  /* Auto-refresh frames every 10 minutes (matches GIBS scan cadence) */
+  if(satRefreshTimer)clearInterval(satRefreshTimer);
+  satRefreshTimer=setInterval(function(){
+    if(!satActiveKey)return;
+    /* Rebuild frame list with new "latest" time */
+    var wasPlaying=satPlaying;
+    var wasAtLatest=(satCurrentFrame===satFrames.length-1);
+    satFrames=satBuildFrames();
+    /* If we were at the latest frame, stay on the new latest; otherwise
+       keep the same relative time position by re-deriving index. */
+    if(wasAtLatest){
+      satCurrentFrame=satFrames.length-1;
+    }else{
+      /* Try to keep the current displayed time (use the new frame list's
+         nearest match). Simplest: just keep the same index. */
+      /* satCurrentFrame unchanged */
+    }
+    /* Reload the current frame's tiles with the new layer */
+    var newLayer=satCreateLayer(satActiveKey,satCurrentFrame);
+    if(newLayer){
+      newLayer.addTo(alertMapInstance);
+      var oldLayer=satLayerCurrent;
+      newLayer.once('load',function(){
+        if(oldLayer){
+          oldLayer.setOpacity(0);
+          try{alertMapInstance.removeLayer(oldLayer)}catch(e){}
+        }
+        satLayerCurrent=newLayer;
+        satLayerCurrent.setOpacity(satBaseOpacity);
+      });
+      /* Fallback swap after 4 sec if load event doesn't fire */
+      setTimeout(function(){
+        if(satLayerCurrent!==newLayer){
+          if(oldLayer){
+            oldLayer.setOpacity(0);
+            try{alertMapInstance.removeLayer(oldLayer)}catch(e){}
+          }
+          satLayerCurrent=newLayer;
+          satLayerCurrent.setOpacity(satBaseOpacity);
+        }
+      },4000);
+    }
+    satUpdateUI(satCurrentFrame);
+    console.log('[Sat] Auto-refreshed frames (latest:',satFormatTime(satFrames[satFrames.length-1])+')');
+  },10*60*1000);
+}
+
+/* Tear down the active satellite layer and stop animation/refresh. */
+function satTeardown(){
+  if(satPlaying)satTogglePlay();
+  if(satRefreshTimer){clearInterval(satRefreshTimer);satRefreshTimer=null}
+  if(satLayerPrev){try{alertMapInstance.removeLayer(satLayerPrev)}catch(e){}satLayerPrev=null}
+  if(satLayerCurrent){try{alertMapInstance.removeLayer(satLayerCurrent)}catch(e){}satLayerCurrent=null}
+  satActiveKey=null;
+  satFrames=[];
+  satCurrentFrame=0;
+  /* Hide the legend */
+  var legendEl=document.getElementById('satLegend');
+  if(legendEl)legendEl.style.display='none';
+  /* Reset the UI */
+  var labelEl=document.getElementById('amSatFrameLabel');
+  if(labelEl)labelEl.textContent='—';
+  var timelineEl=document.getElementById('amSatTimeline');
+  if(timelineEl){timelineEl.max=0;timelineEl.value=0}
+  var timeEl=document.getElementById('amSatTimeDisplay');
+  if(timeEl)timeEl.textContent='—';
 }
 
 /* ── Weather Feeds tab ─────────────────────────────────────────────────────
@@ -11168,6 +11682,16 @@ function toggleObsLayer(){
   var cb=document.getElementById('amObsEnable');
   if(!cb)return;
   if(cb.checked){
+    /* DEFENSE-IN-DEPTH: refuse to enable without a state filter. The
+       checkbox should already be disabled when no state is selected,
+       but this guards against programmatic calls. */
+    var stateFilter=document.getElementById('amStateFilter');
+    var state=(stateFilter&&stateFilter.value)?stateFilter.value.toUpperCase():'';
+    if(!state){
+      cb.checked=false;
+      console.warn('[Obs] Cannot enable surface obs without a state filter');
+      return;
+    }
     /* Turn pins on — also loads station data if not already loaded */
     obsEnable();
   }else{
@@ -11191,7 +11715,16 @@ async function obsEnable(forcedState){
   /* Get the current state filter value (or use forcedState from caller) */
   var stateFilter=document.getElementById('amStateFilter');
   var state=forcedState||((stateFilter&&stateFilter.value)?stateFilter.value.toUpperCase():'');
-  /* Load stations for the selected state only (or all if no filter) */
+  /* DEFENSE-IN-DEPTH: refuse to load all-US observations. Even though
+     obsUpdateStateGate() should prevent the user from enabling obs
+     without a state, this function could be called from other code
+     paths (animation restore, etc.). Refusing here guarantees we never
+     trigger the slow ~2000-station fetch. */
+  if(!state){
+    console.warn('[Obs] obsEnable called without a state filter — refusing to load all US stations');
+    return;
+  }
+  /* Load stations for the selected state only */
   obsStationsLoaded=false;  /* Force reload when state changes */
   await obsLoadStations(state);
   /* Create the layer group for pin markers (only if pins are enabled) */
@@ -11247,6 +11780,79 @@ function obsOnStateChange(){
   obsData={};
   obsStationsLoaded=false;
   obsEnable();  /* This will reload stations + fetch observations */
+}
+
+/* ── State Filter Gating ──
+   Surface observations can be VERY slow when "All United States" is
+   selected — it fetches ~2000+ stations in 10 batches across all 48
+   CONUS states. To prevent the slow all-US fetch:
+   - When state filter = "" (All US): disable both checkboxes, hide the
+     "Show Surface Obs" / "Color Gradient" controls. If the user had
+     them on, tear down the active layers (pins + gradient) and uncheck.
+   - When a state is selected: enable both checkboxes.
+   This function is called from onAlertFilterChange() and on page init.
+   It runs BEFORE obsOnStateChange() so the latter becomes a no-op when
+   no state is selected (obsLayer will be null). */
+function obsUpdateStateGate(){
+  var stateFilter=document.getElementById('amStateFilter');
+  var state=(stateFilter&&stateFilter.value)?stateFilter.value.toUpperCase():'';
+  var hasState=!!state;
+  var obsCb=document.getElementById('amObsEnable');
+  var gradCb=document.getElementById('amObsGradient');
+  var hintEl=document.getElementById('obsStateHint');
+  var obsLabel=document.getElementById('amObsEnableLabel');
+  var gradLabel=document.getElementById('amObsGradientLabel');
+  /* Enable/disable the checkboxes */
+  if(obsCb)obsCb.disabled=!hasState;
+  if(gradCb)gradCb.disabled=!hasState;
+  /* Show/hide the hint */
+  if(hintEl)hintEl.style.display=hasState?'none':'block';
+  /* Dim the labels when disabled */
+  if(obsLabel)obsLabel.style.opacity=hasState?'1':'0.5';
+  if(gradLabel)gradLabel.style.opacity=hasState?'1':'0.5';
+  /* If no state and a layer is currently active, tear it down + uncheck */
+  if(!hasState){
+    var wasActive=false;
+    /* Tear down pin markers if active */
+    if(obsCb&&obsCb.checked){
+      obsCb.checked=false;
+      wasActive=true;
+    }
+    /* Tear down gradient if active */
+    if(gradCb&&gradCb.checked){
+      gradCb.checked=false;
+      wasActive=true;
+    }
+    if(wasActive){
+      console.log('[Obs] State filter cleared — tearing down obs layers to prevent slow all-US fetch');
+      /* Call obsDisable to remove pin layer */
+      if(obsLayer&&alertMapInstance){
+        try{alertMapInstance.removeLayer(obsLayer)}catch(e){}
+        obsLayer=null;
+      }
+      /* Remove gradient layer */
+      if(obsGradientLayer&&alertMapInstance){
+        try{alertMapInstance.removeLayer(obsGradientLayer)}catch(e){}
+        obsGradientLayer=null;
+      }
+      /* Stop auto-refresh timer */
+      if(obsRefreshTimer){clearInterval(obsRefreshTimer);obsRefreshTimer=null}
+      /* Stop animation if running */
+      if(typeof obsAnimStop==='function'){
+        try{obsAnimStop()}catch(e){}
+      }
+      /* Clear data caches so the next state-selected load starts fresh */
+      obsData={};
+      obsStations=[];
+      obsStationsLoaded=false;
+      /* Update status display */
+      var statusEl=document.getElementById('obsLastUpdate');
+      if(statusEl)statusEl.textContent='';
+      /* Hide animation controls if visible */
+      var animEl=document.getElementById('obsAnimControls');
+      if(animEl)animEl.style.display='none';
+    }
+  }
 }
 
 /* Fetch ASOS stations for a single state (or all CONUS if no state) */
@@ -11899,12 +12505,21 @@ function toggleObsGradient(){
   var cb=document.getElementById('amObsGradient');
   if(!cb)return;
   if(cb.checked){
+    /* DEFENSE-IN-DEPTH: refuse to enable gradient without a state.
+       obsEnable() also has this guard, but we check here too so we
+       can give the user immediate visual feedback instead of silently
+       failing. */
+    var stateFilter=document.getElementById('amStateFilter');
+    var state=(stateFilter&&stateFilter.value)?stateFilter.value.toUpperCase():'';
+    if(!state){
+      cb.checked=false;
+      console.warn('[Obs] Cannot enable gradient without a state filter');
+      return;
+    }
     /* Ensure obs data is loaded (but don't force pins on — gradient
        can work independently of the pin markers) */
     if(!obsStationsLoaded){
       /* Need to load stations + fetch data first */
-      var stateFilter=document.getElementById('amStateFilter');
-      var state=(stateFilter&&stateFilter.value)?stateFilter.value.toUpperCase():'';
       obsEnable(state);
     }else if(Object.keys(obsData).length===0){
       /* Stations loaded but no observation data yet — fetch it */
@@ -13116,6 +13731,10 @@ window.addEventListener('DOMContentLoaded',function(){
   restoreTornadoTrackerSetting();
   /* Restore which Layers panel sections were expanded/collapsed */
   restoreSectionStates();
+  /* Initialize the surface obs state-filter gate — disables the obs
+     checkboxes until a state is selected, preventing the slow all-US
+     station fetch on first load. */
+  obsUpdateStateGate();
   /* Initialize Supabase + auth state listener EARLY so that:
      1. Magic link / OAuth redirects are detected and exchanged for a
         session (the URL contains a code parameter after the redirect)
