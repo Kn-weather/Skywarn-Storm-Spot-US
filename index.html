@@ -2141,7 +2141,7 @@ body.capturing .hamburger-menu{display:none!important}
 
       <div class="collapsible-section" data-section="stormmotion">
         <div class="collapsible-header" onclick="toggleSection(this)">
-          <span>Storm Motion Vectors</span><i class="fas fa-chevron-right"></i>
+          <span>Storm Motion / MD / Attributes</span><i class="fas fa-chevron-right"></i>
         </div>
         <div class="collapsible-body">
           <label style="margin:1px 0"><input type="checkbox" id="amStormMotion" onchange="toggleStormMotion()"> Show Storm Motion Arrows</label>
@@ -2151,7 +2151,14 @@ body.capturing .hamburger-menu{display:none!important}
             <option value="30" selected>30 min</option>
             <option value="60">60 min</option>
           </select></label>
-          <div id="stormMotionStatus" style="font-size:8px;color:var(--t3);margin-top:4px"></div>
+          <div style="font-size:8px;color:var(--t3);margin-top:4px" id="stormMotionStatus"></div>
+          <div style="height:1px;background:var(--bdr);margin:8px 0"></div>
+          <label style="margin:1px 0"><input type="checkbox" id="amMDLayer" onchange="toggleMDLayer()"> Show Mesoscale Discussions</label>
+          <div style="font-size:9px;color:var(--t3);line-height:1.4;margin-top:3px">SPC mesoscale discussion polygons. Auto-refreshes every 5 min.</div>
+          <div style="font-size:8px;color:var(--t3);margin-top:4px" id="mdStatus"></div>
+          <div style="height:1px;background:var(--bdr);margin:8px 0"></div>
+          <label style="margin:1px 0"><input type="checkbox" id="amAlertAttrs" onchange="toggleAlertAttrs()"> Show Alert Attributes</label>
+          <div style="font-size:9px;color:var(--t3);line-height:1.4;margin-top:3px">Hail size, tornado detection, max wind markers on warning polygons.</div>
         </div>
       </div>
 
@@ -4716,6 +4723,11 @@ async function fAlertMap(){
     if(stormMotionEnabled){
       stormMotionUpdateTracks();
       stormMotionRender();
+    }
+    /* Update alert attribute markers if enabled */
+    var attrCb=document.getElementById('amAlertAttrs');
+    if(attrCb&&attrCb.checked){
+      alertAttrRender();
     }
     /* Log the update to the console */
     if(isDeltaUpdate){
@@ -12773,6 +12785,325 @@ function stormMotionETA(targetLatlng){
     .setLatLng(targetLatlng)
     .setContent(html)
     .openOn(alertMapInstance);
+}
+
+/* ════════════════════════════════════════════════════════════════════════
+   Mesoscale Discussion (MD) Layer
+   Fetches SPC mesoscale discussions from spc.noaa.gov, parses the
+   LAT...LON polygon from the MD page, and draws them on the map.
+   ════════════════════════════════════════════════════════════════════════ */
+
+var mdLayer=null;
+var mdRefreshTimer=null;
+
+function toggleMDLayer(){
+  var cb=document.getElementById('amMDLayer');
+  if(!cb)return;
+  if(cb.checked){
+    if(!mdLayer&&alertMapInstance){
+      mdLayer=L.layerGroup().addTo(alertMapInstance);
+    }
+    mdFetch();
+    if(!mdRefreshTimer){
+      mdRefreshTimer=setInterval(mdFetch,5*60*1000);
+    }
+  }else{
+    if(mdLayer&&alertMapInstance){
+      alertMapInstance.removeLayer(mdLayer);
+      mdLayer=null;
+    }
+    if(mdRefreshTimer){
+      clearInterval(mdRefreshTimer);
+      mdRefreshTimer=null;
+    }
+    var st=document.getElementById('mdStatus');
+    if(st)st.textContent='';
+  }
+}
+
+async function mdFetch(){
+  if(!mdLayer)return;
+  var st=document.getElementById('mdStatus');
+  if(st)st.innerHTML='<i class="fas fa-spinner fa-spin"></i> Fetching MDs...';
+  try{
+    /* Step 1: Fetch the SPC MD index page to find active MDs */
+    var resp=await fP('https://www.spc.noaa.gov/products/md/');
+    if(!resp){throw new Error('Failed to fetch SPC MD page')}
+    /* Find MD links (only active ones — look for links in the current section) */
+    var mdLinks=[];
+    var linkRegex=/href="\/products\/md\/(md\d+\.html)"/g;
+    var match;
+    while((match=linkRegex.exec(resp))!==null){
+      mdLinks.push(match[1]);
+    }
+    /* Also check if "No Mesoscale Discussions" is in the page */
+    if(resp.indexOf('No Mesoscale Discussions')>=0&&mdLinks.length===0){
+      mdLayer.clearLayers();
+      if(st)st.textContent='No active MDs';
+      return;
+    }
+    if(mdLinks.length===0){
+      mdLayer.clearLayers();
+      if(st)st.textContent='No active MDs';
+      return;
+    }
+    /* Step 2: Fetch each MD page and parse polygon + metadata */
+    mdLayer.clearLayers();
+    var mdCount=0;
+    for(var i=0;i<mdLinks.length;i++){
+      var mdUrl='https://www.spc.noaa.gov/products/md/'+mdLinks[i];
+      var mdResp=await fP(mdUrl);
+      if(!mdResp)continue;
+      var mdData=mdParsePage(mdResp,mdLinks[i]);
+      if(!mdData||!mdData.polygon||mdData.polygon.length<3)continue;
+      /* Draw the polygon */
+      var poly=L.polygon(mdData.polygon,{
+        color:'#ffd60a',
+        weight:2,
+        fillColor:'#ffd60a',
+        fillOpacity:0.15,
+        dashArray:'5,3'
+      });
+      var popupHtml='<div style="font-family:Inter,sans-serif;min-width:220px">'+
+        '<div style="color:#ffd60a;font-weight:700;font-size:12px;margin-bottom:4px">SPC Mesoscale Discussion #'+mdData.number+'</div>'+
+        '<div style="font-size:10px;color:var(--t2);margin-bottom:4px"><b>Areas:</b> '+mdData.areas+'</div>'+
+        '<div style="font-size:10px;color:var(--t2);margin-bottom:4px"><b>Concerning:</b> '+mdData.concerning+'</div>'+
+        '<div style="font-size:10px;color:var(--t2);margin-bottom:4px"><b>Valid:</b> '+mdData.valid+'</div>'+
+        (mdData.probability?'<div style="font-size:10px;color:#ffd60a;margin-bottom:4px"><b>Watch Probability:</b> '+mdData.probability+'</div>':'')+
+        (mdData.summary?'<div style="font-size:10px;color:var(--t1);margin-top:6px;padding:6px 8px;background:var(--bg2);border-radius:4px;border-left:2px solid #ffd60a">'+mdData.summary+'</div>':'')+
+        '<div style="margin-top:6px"><a href="'+mdUrl+'" target="_blank" rel="noopener" style="color:var(--acc);font-size:10px;text-decoration:none">View full discussion →</a></div>'+
+        '</div>';
+      poly.bindPopup(popupHtml,{maxWidth:320});
+      mdLayer.addLayer(poly);
+      /* Add a label marker at the centroid */
+      var bounds=L.latLngBounds(mdData.polygon);
+      var center=bounds.getCenter();
+      var labelIcon=L.divIcon({
+        className:'',
+        html:'<div style="background:rgba(10,10,10,.9);border:1px solid #ffd60a;border-radius:4px;padding:2px 6px;font-size:9px;font-weight:700;font-family:Inter,sans-serif;color:#ffd60a;white-space:nowrap">MD#'+mdData.number+'</div>',
+        iconSize:[50,16],
+        iconAnchor:[25,8]
+      });
+      var label=L.marker(center,{icon:labelIcon});
+      label.bindPopup(popupHtml,{maxWidth:320});
+      mdLayer.addLayer(label);
+      mdCount++;
+    }
+    if(st)st.textContent=mdCount+' active MD'+(mdCount===1?'':'s');
+  }catch(e){
+    if(st)st.textContent='Error: '+(e.message||e);
+    console.error('[MD] Fetch failed:',e);
+  }
+}
+
+/* Parse SPC MD HTML page to extract polygon + metadata */
+function mdParsePage(html,linkName){
+  var text=html.replace(/<[^>]+>/g,'\n').replace(/\n+/g,'\n').replace(/&nbsp;/g,' ').trim();
+  var data={number:'',polygon:[],areas:'',concerning:'',valid:'',probability:'',summary:''};
+  /* Extract MD number from link name (md1840.html → 1840) */
+  var numMatch=linkName.match(/md(\d+)\.html/);
+  if(numMatch)data.number=numMatch[1];
+  /* Parse LAT...LON coordinates */
+  var latLonMatch=text.match(/LAT\.\.\.LON\s+([\d\s]+)/);
+  if(latLonMatch){
+    var coordStr=latLonMatch[1].trim();
+    var parts=coordStr.split(/\s+/);
+    for(var i=0;i<parts.length;i++){
+      var p=parts[i];
+      if(p.length<8)continue;
+      var lat,lon;
+      if(p.length===8){
+        /* 4+4: DDMM DDMM */
+        var latDeg=parseInt(p.substring(0,2));
+        var latMin=parseInt(p.substring(2,4));
+        lat=latDeg+latMin/60;
+        var lonDeg=parseInt(p.substring(4,6))+100;
+        var lonMin=parseInt(p.substring(6,8));
+        lon=lonDeg+lonMin/60;
+      }else if(p.length===9){
+        /* 4+5: DDMM DDDMM */
+        latDeg=parseInt(p.substring(0,2));
+        latMin=parseInt(p.substring(2,4));
+        lat=latDeg+latMin/60;
+        lonDeg=parseInt(p.substring(4,7));
+        lonMin=parseInt(p.substring(7,9));
+        lon=lonDeg+lonMin/60;
+      }else{
+        continue;
+      }
+      data.polygon.push([lat,-lon]);
+    }
+  }
+  /* Parse areas affected */
+  var areasMatch=text.match(/Areas affected\.\.\.(.+?)(?:Concerning|Valid)/s);
+  if(areasMatch)data.areas=areasMatch[1].trim().replace(/\n/g,' ').slice(0,200);
+  /* Parse concerning */
+  var concMatch=text.match(/Concerning\.\.\.(.+?)(?:Valid|Probability)/s);
+  if(concMatch)data.concerning=concMatch[1].trim().replace(/\n/g,' ').slice(0,200);
+  /* Parse valid time */
+  var validMatch=text.match(/Valid\.\.\.(.+?)(?:Probability|Forecast|Discussion)/s);
+  if(validMatch)data.valid=validMatch[1].trim().replace(/\n/g,' ').slice(0,100);
+  /* Parse watch probability */
+  var probMatch=text.match(/Probability of Watch Issuance\.\.\.(.+?)(?:\d{4}|Discussion|Metar)/s);
+  if(probMatch)data.probability=probMatch[1].trim().replace(/\n/g,' ').slice(0,50);
+  /* Parse summary */
+  var summaryMatch=text.match(/SUMMARY\.\.\.(.+?)(?:\d{4}|ATTN|FORECAST)/s);
+  if(summaryMatch)data.summary=summaryMatch[1].trim().replace(/\n/g,' ').slice(0,300);
+  return data;
+}
+
+/* ════════════════════════════════════════════════════════════════════════
+   Alert Attribute Markers (Phase 1)
+   Shows hail size, tornado detection type, and max wind speed as
+   markers on warning polygons. Uses NWS alert properties.parameters
+   structured data — no text parsing needed.
+   ════════════════════════════════════════════════════════════════════════ */
+
+var alertAttrLayer=null;
+
+function toggleAlertAttrs(){
+  var cb=document.getElementById('amAlertAttrs');
+  if(!cb)return;
+  if(cb.checked){
+    if(!alertAttrLayer&&alertMapInstance){
+      alertAttrLayer=L.layerGroup().addTo(alertMapInstance);
+    }
+    alertAttrRender();
+  }else{
+    if(alertAttrLayer&&alertMapInstance){
+      alertMapInstance.removeLayer(alertAttrLayer);
+      alertAttrLayer=null;
+    }
+  }
+}
+
+function alertAttrRender(){
+  if(!alertAttrLayer)return;
+  alertAttrLayer.clearLayers();
+  if(!drawnAlerts||drawnAlerts.length===0)return;
+
+  drawnAlerts.forEach(function(a){
+    /* Only show attributes for warnings (TOR, SVR) */
+    if(!a.event)return;
+    var e=a.event.toLowerCase();
+    if(!e.includes('warning'))return;
+    if(!e.includes('tornado')&&!e.includes('severe thunderstorm')&&!e.includes('flash flood'))return;
+
+    /* Compute centroid from alert geometry */
+    if(!a.geoms||a.geoms.length===0)return;
+    var bounds=L.latLngBounds([]);
+    a.geoms.forEach(function(g){
+      try{
+        var layer=L.geoJSON(g);
+        if(layer.getBounds&&layer.getBounds().isValid()){
+          bounds.extend(layer.getBounds());
+        }
+        layer.remove();
+      }catch(e){}
+    });
+    if(!bounds.isValid())return;
+    var center=bounds.getCenter();
+
+    /* Extract attributes from the alert's raw properties */
+    /* The raw alert properties include a 'parameters' object with
+       hailSize, windSpeed, tornadoDetection, etc. */
+    /* We need to access the raw alert — check alertLayerCache */
+    var rawAlert=null;
+    if(alertLayerCache[a.id]){
+      rawAlert=alertLayerCache[a.id].alertData;
+    }
+    /* Also check wwasCache for the raw properties */
+    if(!rawAlert&&wwasCache){
+      for(var i=0;i<wwasCache.length;i++){
+        if(wwasCache[i].properties&&wwasCache[i].properties.id===a.id){
+          rawAlert=wwasCache[i].properties;
+          break;
+        }
+      }
+    }
+    if(!rawAlert)return;
+
+    /* Build attribute markers */
+    var markers=[];
+
+    /* Hail size */
+    var hailSize=rawAlert.hailSize;
+    if(hailSize&&!isNaN(parseFloat(hailSize))){
+      markers.push({
+        label: hailSize+'" HAIL',
+        color: parseFloat(hailSize)>=2?'#ff5a5a':parseFloat(hailSize)>=1?'#ffb340':'#ffd60a',
+        icon: 'fa-circle'
+      });
+    }
+
+    /* Max wind speed */
+    var windSpeed=rawAlert.windSpeed;
+    if(windSpeed&&!isNaN(parseInt(windSpeed))){
+      var ws=parseInt(windSpeed);
+      markers.push({
+        label: ws+'MPH WIND',
+        color: ws>=70?'#ff5a5a':ws>=58?'#ffb340':'#ffd60a',
+        icon: 'fa-wind'
+      });
+    }
+
+    /* Tornado detection */
+    var tornadoDet=rawAlert.tornadoDetection;
+    if(tornadoDet){
+      var detText=tornadoDet.toUpperCase();
+      if(detText.includes('OBSERVED')){
+        markers.push({
+          label: '🌪 OBSERVED',
+          color: '#ff0000',
+          icon: 'fa-tornado'
+        });
+      }else if(detText.includes('RADAR INDICATED')){
+        markers.push({
+          label: 'RADAR IND.',
+          color: '#ff5a5a',
+          icon: 'fa-tornado'
+        });
+      }
+    }
+
+    /* If no structured params, try parsing from description */
+    if(markers.length===0&&rawAlert.description){
+      var desc=rawAlert.description;
+      /* Parse hail */
+      var hailMatch=desc.match(/\* HAIL\.\.\.([\d.]+)\s*(?:INCHES|IN)/i);
+      if(hailMatch){
+        markers.push({label:hailMatch[1]+'" HAIL',color:parseFloat(hailMatch[1])>=2?'#ff5a5a':'#ffb340',icon:'fa-circle'});
+      }
+      /* Parse wind */
+      var windMatch=desc.match(/\* WIND\.\.\.(\d+)\s*(?:MPH)/i);
+      if(windMatch){
+        var wv=parseInt(windMatch[1]);
+        markers.push({label:wv+'MPH WIND',color:wv>=70?'#ff5a5a':'#ffb340',icon:'fa-wind'});
+      }
+      /* Parse tornado */
+      var torMatch=desc.match(/\* TORNADO\.\.\.(.+?)(?:\n|$)/i);
+      if(torMatch){
+        var torText=torMatch[1].trim().toUpperCase();
+        if(torText.includes('OBSERVED')){
+          markers.push({label:'🌪 OBSERVED',color:'#ff0000',icon:'fa-tornado'});
+        }else if(torText.includes('RADAR')){
+          markers.push({label:'RADAR IND.',color:'#ff5a5a',icon:'fa-tornado'});
+        }
+      }
+    }
+
+    /* Render markers stacked vertically at the centroid */
+    markers.forEach(function(m,idx){
+      var offsetLat=center.lat+(idx*0.015);
+      var html='<div style="display:flex;align-items:center;gap:4px;background:rgba(10,10,10,.9);border:1px solid '+m.color+';border-radius:4px;padding:2px 6px;font-size:8px;font-weight:700;font-family:Inter,sans-serif;color:'+m.color+';white-space:nowrap;box-shadow:0 2px 4px rgba(0,0,0,.4)">'+
+        '<i class="fas '+m.icon+'" style="font-size:8px"></i>'+
+        '<span>'+m.label+'</span>'+
+        '</div>';
+      var icon=L.divIcon({className:'',html:html,iconSize:[100,16],iconAnchor:[50,8]});
+      var marker=L.marker([offsetLat,center.lng],{icon:icon});
+      alertAttrLayer.addLayer(marker);
+    });
+  });
 }
 
 /* ── Boot sequence ──────────────────────────────────────────────────────── */
