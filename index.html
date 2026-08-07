@@ -2381,6 +2381,13 @@ body.capturing .sat-legend{display:none!important}
           <label style="margin:4px 0;font-size:9px">Buffer: <span id="navBufferLabel">7 mi</span>
             <input type="range" id="navBuffer" min="3" max="15" value="7" step="1" oninput="document.getElementById('navBufferLabel').textContent=this.value+' mi'" style="width:100%;accent-color:var(--acc);cursor:pointer">
           </label>
+          <label style="margin:2px 0;font-size:9px;display:flex;align-items:center;gap:4px">
+            <input type="checkbox" id="navUseStormCell" checked onchange="document.getElementById('navStormCellRow').style.display=this.checked?'flex':'none'" style="accent-color:var(--acc)">
+            Use storm cell tracking
+          </label>
+          <label id="navStormCellRow" style="margin:2px 0;font-size:9px">Storm cell radius: <span id="navCellRadiusLabel">4 mi</span>
+            <input type="range" id="navCellRadius" min="2" max="10" value="4" step="1" oninput="document.getElementById('navCellRadiusLabel').textContent=this.value+' mi'" style="width:100%;accent-color:var(--acc);cursor:pointer">
+          </label>
           <button onclick="navCalculate()" style="width:100%;background:var(--acc);color:#000;border:none;padding:6px 12px;border-radius:4px;cursor:pointer;font-size:10px;font-weight:700;font-family:inherit;margin-top:4px">
             <i class="fas fa-route"></i> Calculate Safe Route
           </button>
@@ -4910,6 +4917,9 @@ async function fAlertMap(){
         style:{color:color,weight:2,fillColor:color,fillOpacity:0.25},
         onEachFeature:function(feature,layer){
           layer.on('click',function(e){
+            /* Suppress the alert popup if the user is in nav pick-on-map
+               mode — the nav pick handler should get the click instead. */
+            if(typeof navPickMode!=='undefined'&&navPickMode)return;
             var ll=e.latlng;
             var html=buildAlertPopup(ll);
             L.popup({maxWidth:240,minWidth:180}).setLatLng(ll).setContent(html).openOn(alertMapInstance);
@@ -14561,6 +14571,12 @@ async function navCalculate(){
 function navCollectHazards(level){
   var hazards=[];
   if(!drawnAlerts||drawnAlerts.length===0)return hazards;
+  /* Check if storm cell tracking is enabled */
+  var useStormCellCb=document.getElementById('navUseStormCell');
+  var useStormCell=useStormCellCb?useStormCellCb.checked:true;
+  var cellRadiusMi=4;
+  var cellRadiusEl=document.getElementById('navCellRadius');
+  if(cellRadiusEl)cellRadiusMi=parseInt(cellRadiusEl.value,10);
   drawnAlerts.forEach(function(a){
     if(!a.event||!a.geoms||a.geoms.length===0)return;
     if(a.cat!=='warnings')return;
@@ -14570,14 +14586,40 @@ function navCollectHazards(level){
     if(level==='tornado_only'&&!isTornado)return;
     if(level==='tornado_severe'&&!isTornado&&!isSevere)return;
     /* 'all_warnings' includes everything in the warnings category */
-    /* Convert each geometry to a turf-compatible GeoJSON Feature */
-    a.geoms.forEach(function(g){
+    /* Check if we have storm motion tracking data for this alert.
+       If so, create a tight "storm cell" polygon (buffered point) around
+       the latest centroid instead of using the full NWS warning polygon.
+       This gives much shorter, more practical detours since the NWS
+       polygon often covers an entire county while the actual storm cell
+       is much smaller (5-15 miles across). */
+    var stormCellGeojson=null;
+    if(useStormCell&&a.id&&stormTracks[a.id]&&stormTracks[a.id].centroids&&stormTracks[a.id].centroids.length>0){
+      var centroids=stormTracks[a.id].centroids;
+      var latest=centroids[centroids.length-1];
+      /* Buffer the latest centroid by the cell radius to create a circle
+         representing the storm cell. turf.buffer takes kilometers. */
+      var cellRadiusKm=cellRadiusMi*1.60934;
       try{
-        /* Some geoms are Polygon, some are MultiPolygon — turf handles both */
-        var feature={type:'Feature',geometry:g,properties:{}};
-        hazards.push({event:a.event,id:a.id||'',geojson:feature});
-      }catch(e){/* skip invalid geoms */}
-    });
+        var pointFeature=turf.point([latest.lon,latest.lat]);
+        stormCellGeojson=turf.buffer(pointFeature,cellRadiusKm,{units:'kilometers'});
+      }catch(e){
+        console.warn('[Nav] Storm cell buffer failed for',a.id,e);
+      }
+    }
+    /* Convert each geometry to a turf-compatible GeoJSON Feature.
+       If we have a storm cell polygon, use it INSTEAD of the NWS polygon. */
+    var geomToUse=stormCellGeojson;
+    if(!geomToUse){
+      /* Fall back to the NWS warning polygon */
+      a.geoms.forEach(function(g){
+        try{
+          var feature={type:'Feature',geometry:g,properties:{}};
+          hazards.push({event:a.event,id:a.id||'',geojson:feature,isStormCell:false});
+        }catch(e){/* skip invalid geoms */}
+      });
+    }else{
+      hazards.push({event:a.event,id:a.id||'',geojson:stormCellGeojson,isStormCell:true});
+    }
   });
   return hazards;
 }
@@ -14702,8 +14744,10 @@ function navRenderPreview(){
   navHazardBufferLayer=L.layerGroup().addTo(alertMapInstance);
   if(!navCurrentRoute)return;
   var r=navCurrentRoute;
-  /* Draw hazard buffer outlines (faint red hatching) so the user can see
-     what we're routing around */
+  /* Draw hazard buffer outlines so the user can see what we're routing
+     around. Storm cell polygons (tight circles around tracked storms) are
+     drawn in orange with solid fill; NWS warning polygons are drawn in
+     red with hatched fill. */
   if(r.hazards&&r.hazards.length>0){
     r.hazards.forEach(function(h){
       try{
@@ -14716,9 +14760,19 @@ function navRenderPreview(){
           buffered=turf.buffer(feat,bufKm,{units:'kilometers'});
         }
         if(buffered){
-          L.geoJSON(buffered,{
-            style:{color:'#ff5a5a',weight:1,dashArray:'4,3',fillColor:'#ff5a5a',fillOpacity:0.08,className:'nav-hazard-buffer'}
-          }).addTo(navHazardBufferLayer);
+          /* Storm cell polygons: orange solid. NWS polygons: red hatched. */
+          var isStormCell=h.isStormCell===true;
+          var style=isStormCell?
+            {color:'#ff7300',weight:2,fillColor:'#ff7300',fillOpacity:0.18,className:'nav-hazard-buffer'}:
+            {color:'#ff5a5a',weight:1,dashArray:'4,3',fillColor:'#ff5a5a',fillOpacity:0.08,className:'nav-hazard-buffer'};
+          L.geoJSON(buffered,{style:style}).addTo(navHazardBufferLayer);
+          /* Also draw the storm cell polygon itself (without buffer) so the
+             user can see the actual cell vs the buffer zone */
+          if(isStormCell){
+            L.geoJSON(h.geojson,{
+              style:{color:'#ff7300',weight:2,fillColor:'#ff7300',fillOpacity:0.3}
+            }).addTo(navHazardBufferLayer);
+          }
         }
       }catch(e){/* skip */}
     });
@@ -14794,6 +14848,10 @@ function navShowResults(){
   var textEl=document.getElementById('navResultsText');
   if(!resultsEl||!textEl||!navCurrentRoute){return}
   var r=navCurrentRoute;
+  /* Count how many hazards used storm cell tracking vs NWS polygon */
+  var stormCellCount=0;
+  if(r.hazards){r.hazards.forEach(function(h){if(h.isStormCell)stormCellCount++})}
+  var nwsCount=(r.hazards||[]).length-stormCellCount;
   var html='';
   if(r.status==='safe'){
     html+='<div style="color:#39d353;font-weight:700;margin-bottom:4px"><i class="fas fa-check-circle"></i> Route is safe</div>';
@@ -14801,7 +14859,11 @@ function navShowResults(){
   }else if(r.status==='rerouted'){
     html+='<div style="color:#39d353;font-weight:700;margin-bottom:4px"><i class="fas fa-route"></i> Safe route calculated</div>';
     html+='Waypoints: <b>'+r.waypoints.length+'</b><br>';
-    html+='Avoiding: <b>'+(r.hazards.length)+' warning(s)</b><br>';
+    html+='Avoiding: <b>'+(r.hazards.length)+' warning(s)</b>';
+    if(stormCellCount>0){
+      html+=' <span style="color:#ff7300;font-size:8px">('+stormCellCount+' storm cell'+(stormCellCount===1?'':'s')+' tracked'+(nwsCount>0?', '+nwsCount+' NWS polygon'+(nwsCount===1?'':'s'):'')+')</span>';
+    }
+    html+='<br>';
     html+='Detour: <b>+'+Math.round(r.detourPct)+'%</b> ('+r.straightDistMi.toFixed(0)+' → '+r.safeDistMi.toFixed(0)+' mi)';
   }else if(r.status==='wait'){
     html+='<div style="color:#ffd60a;font-weight:700;margin-bottom:4px"><i class="fas fa-clock"></i> Suggest waiting</div>';
