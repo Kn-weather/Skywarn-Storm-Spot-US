@@ -1027,6 +1027,21 @@ body{
 .storm-motion-eta-popup .leaflet-popup-content{margin:8px 12px;font-size:11px;font-family:'Inter',sans-serif}
 .storm-motion-eta-popup .leaflet-popup-tip{background:var(--acc)}
 
+/* Flipped popup variant — tip at the TOP pointing UP, popup body hangs
+   BELOW the anchor point. Used for the Storm ETA popup so it doesn't
+   cover the radar/polygon above the clicked point (important for
+   screenshots). The popup position is adjusted via JS after open
+   (stormMotionETAPositionBelow) — the CSS just handles the tip flip. */
+.storm-motion-eta-popup-below .leaflet-popup-tip-container{
+  top:0;
+  bottom:auto;
+  margin-top:-8px;  /* overlap the diamond with the top edge of the wrapper */
+}
+/* Keep the close button below the tip so they don't overlap */
+.storm-motion-eta-popup-below .leaflet-popup-close-button{
+  top:6px;
+}
+
 /* ── Storm-Safe Navigation routes + waypoints ── */
 .nav-route-straight{
   stroke:#ff5a5a;stroke-width:3;stroke-dasharray:6,4;
@@ -13954,10 +13969,13 @@ function stormMotionETA(targetLatlng){
 
   if(!nearestStorm){
     /* No tracked storms with motion — show message */
-    L.popup({className:'storm-motion-eta-popup',maxWidth:260})
+    L.popup({className:'storm-motion-eta-popup storm-motion-eta-popup-below',maxWidth:260,autoPan:false})
       .setLatLng(targetLatlng)
       .setContent('<div style="font-family:Inter,sans-serif"><div style="color:#ff7300;font-weight:700;font-size:12px;margin-bottom:4px"><i class="fas fa-wind"></i> Storm ETA</div><div style="color:var(--t3);font-size:10px">No tracked storms with motion data. Enable Storm Motion Vectors and wait for storm tracking data to accumulate.</div></div>')
       .openOn(alertMapInstance);
+    /* Use requestAnimationFrame to ensure the popup DOM has rendered
+       before measuring its height. */
+    requestAnimationFrame(stormMotionETAPositionBelow);
     return;
   }
 
@@ -14008,16 +14026,68 @@ function stormMotionETA(targetLatlng){
   html+='<div style="font-size:8px;color:var(--t3);margin-top:6px;font-style:italic">ETA assumes current storm motion remains constant.</div>';
   html+='</div>';
 
-  L.popup({className:'storm-motion-eta-popup',maxWidth:280})
+  L.popup({className:'storm-motion-eta-popup storm-motion-eta-popup-below',maxWidth:280,autoPan:false})
     .setLatLng(targetLatlng)
     .setContent(html)
     .openOn(alertMapInstance);
+  /* Position the popup BELOW the clicked point (tip pointing up) so it
+     doesn't cover the radar/polygon above — important for screenshots.
+     Use requestAnimationFrame to ensure the popup DOM has rendered
+     before measuring its height. */
+  requestAnimationFrame(stormMotionETAPositionBelow);
   /* Async reverse-geocode the clicked point to find the nearest town/city.
      Uses OpenStreetMap Nominatim (same service already used for journal
      location lookups). Updates the #stormEtaNearestTown span in the popup
      once the lookup completes. Errors are silent — the popup just shows
      "nearest town: unavailable" instead of the town name. */
   stormMotionETAReverseGeocode(targetLat,targetLon);
+}
+
+/* Position the Storm ETA popup BELOW the clicked point so the tip points
+   UP and the popup body hangs below the anchor. This keeps the area
+   above the clicked point (where the radar/polygon usually is) visible
+   in screenshots.
+
+   How it works:
+   - Leaflet positions the popup so its bottom-center (where the tip
+     normally is) touches the anchor point — i.e., the popup appears
+     ABOVE the point.
+   - The CSS class `storm-motion-eta-popup-below` moves the tip to the
+     TOP of the popup, so visually the tip is at the top.
+   - This function shifts the entire popup DOWN by its content height
+     using margin-top, so the top (where the tip now is) touches the
+     anchor point and the body hangs below.
+   - Called after the popup opens (via requestAnimationFrame to ensure
+     the DOM has rendered) and after the reverse-geocode updates the
+     content (in case the height changes). */
+function stormMotionETAPositionBelow(){
+  if(!alertMapInstance||!alertMapInstance._popup)return;
+  var popup=alertMapInstance._popup;
+  var container=popup._container;
+  if(!container)return;
+  var wrapper=container.querySelector('.leaflet-popup-content-wrapper');
+  if(!wrapper)return;
+  /* Measure the content wrapper height and shift the popup down by that
+     amount + a small offset for the tip. This makes the popup's top
+     (where the flipped tip is) align with the anchor point and the body
+     hang below — keeping the area above the clicked point visible for
+     screenshots.
+
+     We use `top` (not margin-top or transform) because:
+     - transform is already used by Leaflet for positioning
+     - margin-top can be overridden by Leaflet's _updatePosition
+     - `top` is additive with transform: final position = top + transform
+
+     We do NOT call popup.update() because that triggers autoPan which
+     would move the map to compensate for the shifted popup, undoing
+     our adjustment. autoPan is also disabled on the popup options. */
+  var h=wrapper.offsetHeight;
+  /* If height is 0, the popup hasn't rendered yet — try again next frame */
+  if(h===0){
+    requestAnimationFrame(stormMotionETAPositionBelow);
+    return;
+  }
+  container.style.top=(h+6)+'px';
 }
 
 /* Reverse-geocode a lat/lon using OSM Nominatim and update the
@@ -14048,6 +14118,9 @@ async function stormMotionETAReverseGeocode(lat,lon){
     console.warn('[StormETA] Reverse geocode failed:',e);
     span.innerHTML='<span style="color:var(--t3)">Nearest town:</span> <span style="color:var(--t3)">unavailable</span>';
   }
+  /* Re-position the popup below the anchor in case the content height
+     changed when the town name was filled in. */
+  stormMotionETAPositionBelow();
 }
 
 /* ════════════════════════════════════════════════════════════════════════
