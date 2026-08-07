@@ -1004,7 +1004,7 @@ body{
   filter:drop-shadow(0 0 4px rgba(0,0,0,.6));
 }
 .storm-motion-label{
-  background:rgba(10,10,10,.9);
+  background:rgba(10,10,10,.55);
   border:1px solid var(--acc);
   border-radius:4px;
   padding:2px 6px;
@@ -1012,7 +1012,12 @@ body{
   font-family:'Inter',sans-serif;
   color:var(--acc);
   white-space:nowrap;
-  box-shadow:0 2px 6px rgba(0,0,0,.4);
+  box-shadow:0 2px 6px rgba(0,0,0,.3);
+  pointer-events:none;
+  text-shadow:0 1px 2px rgba(0,0,0,.8);
+  /* Semi-transparent so the user can see the map underneath the label */
+  backdrop-filter:blur(2px);
+  -webkit-backdrop-filter:blur(2px);
 }
 .storm-motion-eta-popup .leaflet-popup-content-wrapper{
   background:#0a0a0a;border:1px solid var(--acc);border-radius:6px;
@@ -3595,6 +3600,21 @@ async function screenshotAlert(idx){
   currentScreenshotType=a.event;  /* e.g. "Tornado Warning" */
   /* Close the popup so it doesn't appear in the map capture */
   alertMapInstance.closePopup();
+  /* Temporarily enable Storm Motion arrows for the screenshot so the
+     user can see storm direction/speed in the captured image, even if
+     they have the layer turned off. We restore the previous state
+     in the finally block below. */
+  var stormMotionWasEnabled=(typeof stormMotionEnabled!=='undefined')&&stormMotionEnabled;
+  var stormMotionCb=document.getElementById('amStormMotion');
+  var stormMotionWasChecked=stormMotionCb?stormMotionCb.checked:false;
+  if(!stormMotionWasEnabled&&stormMotionCb){
+    try{
+      stormMotionCb.checked=true;
+      if(typeof toggleStormMotion==='function'){
+        toggleStormMotion();
+      }
+    }catch(e){console.warn('[AlertShot] Could not temporarily enable storm motion:',e)}
+  }
   /* Calculate the alert's bounds so we can zoom to it */
   var alertBounds=null;
   if(a.geoms&&a.geoms.length>0){
@@ -3873,6 +3893,16 @@ async function screenshotAlert(idx){
     alert('Screenshot failed: '+e.message);
   }finally{
     document.body.classList.remove('capturing');
+    /* Restore Storm Motion to its previous state (turn it back off if we
+       temporarily enabled it for the screenshot). */
+    if(!stormMotionWasChecked&&stormMotionCb&&stormMotionCb.checked){
+      try{
+        stormMotionCb.checked=false;
+        if(typeof toggleStormMotion==='function'){
+          toggleStormMotion();
+        }
+      }catch(e){console.warn('[AlertShot] Could not restore storm motion state:',e)}
+    }
     /* Reopen the popup */
     if(alertPopupState){
       var html=renderAlertPopupContent(alertPopupState.currentIndex);
@@ -13772,9 +13802,10 @@ function stormMotionRender(){
     stormMotionLayer.addLayer(head1);
     stormMotionLayer.addLayer(head2);
 
-    /* Label near the midpoint of the arrow */
-    var midLat=(origin.lat+endpoint.lat)/2;
-    var midLon=(origin.lon+endpoint.lon)/2;
+    /* Label at the ORIGIN (beginning) of the arrow — anchored to the storm's
+       current centroid so it stays attached to the storm cell as it moves.
+       iconAnchor [4,8] places the label just to the right of the origin point.
+       interactive:false so the label doesn't block map clicks (ETA tool). */
     var speedMph=Math.round(speedKt*1.15078);
     var dirStr=stormMotionBearingToDir(bearing);
     var labelText=dirStr+' @ '+speedMph+'mph';
@@ -13782,9 +13813,9 @@ function stormMotionRender(){
       className:'',
       html:'<div class="storm-motion-label" style="border-color:'+color+';color:'+color+'">'+labelText+'</div>',
       iconSize:[80,16],
-      iconAnchor:[40,8]
+      iconAnchor:[4,8]
     });
-    var label=L.marker([midLat,midLon],{icon:labelIcon});
+    var label=L.marker([origin.lat,origin.lon],{icon:labelIcon,interactive:false});
     stormMotionLayer.addLayer(label);
 
     count++;
@@ -13850,6 +13881,14 @@ function stormMotionETA(targetLatlng){
   var html='<div style="font-family:Inter,sans-serif;min-width:220px">';
   html+='<div style="color:#ff7300;font-weight:700;font-size:12px;margin-bottom:6px"><i class="fas fa-wind"></i> Storm ETA</div>';
   html+='<div style="font-size:10px;color:var(--t2);margin-bottom:4px"><b style="color:var(--t1)">'+nearestStorm.event+'</b></div>';
+  /* Click location with lat/lon — useful for spotters who need to relay
+     coordinates. The "nearest town" placeholder is filled in async by
+     stormMotionETAReverseGeocode() once the Nominatim lookup completes. */
+  html+='<div style="font-size:10px;color:var(--t2);line-height:1.6;border-left:2px solid var(--bdr-a);padding-left:8px;margin-bottom:6px">';
+  html+='<div style="color:var(--t3);font-size:9px;text-transform:uppercase;letter-spacing:.04em;margin-bottom:2px">Selected Point</div>';
+  html+='Lat/Lon: <b style="color:var(--acc)">'+targetLat.toFixed(4)+', '+targetLon.toFixed(4)+'</b><br>';
+  html+='<span id="stormEtaNearestTown"><span style="color:var(--t3)">Nearest town:</span> <i class="fas fa-spinner fa-spin" style="font-size:8px"></i> <span style="color:var(--t3)">looking up...</span></span>';
+  html+='</div>';
   html+='<div style="font-size:10px;color:var(--t2);line-height:1.6">';
   html+='Storm motion: <b style="color:var(--acc)">'+stormDirStr+' @ '+speedMph+'mph</b><br>';
   html+='Distance: <b>'+distKm.toFixed(1)+' km ('+(distKm*0.621371).toFixed(1)+' mi)</b><br>';
@@ -13873,10 +13912,46 @@ function stormMotionETA(targetLatlng){
   html+='<div style="font-size:8px;color:var(--t3);margin-top:6px;font-style:italic">ETA assumes current storm motion remains constant.</div>';
   html+='</div>';
 
-  L.popup({className:'storm-motion-eta-popup',maxWidth:260})
+  L.popup({className:'storm-motion-eta-popup',maxWidth:280})
     .setLatLng(targetLatlng)
     .setContent(html)
     .openOn(alertMapInstance);
+  /* Async reverse-geocode the clicked point to find the nearest town/city.
+     Uses OpenStreetMap Nominatim (same service already used for journal
+     location lookups). Updates the #stormEtaNearestTown span in the popup
+     once the lookup completes. Errors are silent — the popup just shows
+     "nearest town: unavailable" instead of the town name. */
+  stormMotionETAReverseGeocode(targetLat,targetLon);
+}
+
+/* Reverse-geocode a lat/lon using OSM Nominatim and update the
+   #stormEtaNearestTown span in the currently-open Storm ETA popup.
+   Extracts the town/city + state from the Nominatim address object.
+   Nominatim's free tier is rate-limited to 1 req/sec, but since this
+   only fires on user clicks (not in a loop), we're well within limits. */
+async function stormMotionETAReverseGeocode(lat,lon){
+  var span=document.getElementById('stormEtaNearestTown');
+  if(!span)return;  /* Popup may have been closed already */
+  try{
+    var url='https://nominatim.openstreetmap.org/reverse?format=json&lat='+lat+'&lon='+lon+'&zoom=10&addressdetails=1&countrycodes=us';
+    var resp=await fetch(url,{headers:{'Accept':'application/json'}});
+    if(!resp.ok)throw new Error('HTTP '+resp.status);
+    var data=await resp.json();
+    if(!data||!data.address){
+      span.innerHTML='<span style="color:var(--t3)">Nearest town:</span> <span style="color:var(--t3)">unavailable</span>';
+      return;
+    }
+    /* Nominatim address fields vary by location — try the most common
+       town/city fields in order of preference. */
+    var addr=data.address;
+    var town=addr.city||addr.town||addr.village||addr.hamlet||addr.municipality||addr.county||'Unknown';
+    var state=addr.state||'';
+    var townStr=state?(town+', '+state):town;
+    span.innerHTML='<span style="color:var(--t3)">Nearest town:</span> <b style="color:var(--acc)">'+townStr+'</b>';
+  }catch(e){
+    console.warn('[StormETA] Reverse geocode failed:',e);
+    span.innerHTML='<span style="color:var(--t3)">Nearest town:</span> <span style="color:var(--t3)">unavailable</span>';
+  }
 }
 
 /* ════════════════════════════════════════════════════════════════════════
