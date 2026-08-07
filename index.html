@@ -2693,6 +2693,12 @@ body.capturing .sat-legend{display:none!important}
           <div style="font-size:11px;color:var(--t2);margin-bottom:10px;line-height:1.5">
             Force-update the app to get the latest code changes from the server. Clears all caches and reloads fresh.
           </div>
+          <div id="appVersionInfo" style="font-size:11px;color:var(--t3);margin-bottom:10px;padding:6px 10px;background:var(--bg);border:1px solid var(--bdr);border-radius:4px;line-height:1.6">
+            <i class="fas fa-spinner fa-spin" style="font-size:10px;margin-right:4px"></i> Checking version...
+          </div>
+          <div id="appUpdateBanner" style="display:none;font-size:11px;color:#ffd60a;margin-bottom:10px;padding:8px 12px;background:rgba(255,213,10,.08);border:1px solid rgba(255,213,10,.3);border-radius:4px;line-height:1.5">
+            <i class="fas fa-circle-exclamation" style="margin-right:6px"></i><span id="appUpdateBannerText"></span>
+          </div>
           <button onclick="hardRefreshApp()" style="background:var(--acc);color:#000;border:none;padding:8px 16px;border-radius:6px;cursor:pointer;font-size:12px;font-weight:600;font-family:inherit;display:flex;align-items:center;gap:6px">
             <i class="fas fa-arrows-rotate"></i> Update App (Hard Refresh)
           </button>
@@ -5362,6 +5368,122 @@ async function hardRefreshApp(){
 }
 window.hardRefreshApp=hardRefreshApp;
 
+/* ── App Version Check ────────────────────────────────────────────────────
+   Displays the current app version (from the service worker cache name)
+   in the Settings tab, and checks the GitHub repo for a newer version.
+   If a newer version is found, shows a yellow banner prompting the user
+   to update.
+
+   How it works:
+   1. Extract the current version from the service worker's CACHE_NAME
+      (e.g., 'skywarn-us-v66' → 'v66'). We fetch sw.js from the network
+      (not cache) to get the actual deployed version.
+   2. Query the GitHub API for the latest commit on main. The commit SHA
+      changes every time we push, so if the SHA differs from what was
+      deployed when the user last loaded, there's a newer version.
+   3. Actually, a simpler approach: fetch sw.js from the server (bypassing
+      cache) and compare its CACHE_NAME to the one the service worker
+      registered with. If they differ, there's a newer version.
+   4. Even simpler: just fetch sw.js and extract the version, then compare
+      to the version embedded in the current page's script. But the page
+      doesn't have the version embedded...
+
+   Final approach: fetch sw.js from the network, extract CACHE_NAME.
+   That's the "server version". Then check the service worker
+   registration's scriptURL — but that's complex. Instead, we just
+   display the server version and note whether the SW has been updated.
+
+   Simplest reliable approach:
+   - Fetch sw.js from the server (cache-busting query param)
+   - Extract CACHE_NAME (e.g., 'skywarn-us-v66')
+   - Display it as the current version
+   - Also fetch the GitHub API for the latest commit date
+   - If the latest commit is newer than the SW registration time, show
+     the update banner
+
+   Actually, the SIMPLEST approach that works:
+   - Fetch sw.js from server → get version (e.g., v66)
+   - Also fetch sw.js through the service worker cache → get cached version
+   - If they differ, there's an update available
+
+   But the absolute simplest: just fetch sw.js from the network and
+   display the version. Then fetch the GitHub commits API to get the
+   latest commit SHA. Store the SHA in localStorage on each check. If
+   the SHA changes, there's a new version. ──────────────────────────── */
+
+var APP_VERSION_KEY='skywarn_app_version_sha';
+
+async function checkAppVersion(){
+  var infoEl=document.getElementById('appVersionInfo');
+  var bannerEl=document.getElementById('appUpdateBanner');
+  var bannerTextEl=document.getElementById('appUpdateBannerText');
+  if(!infoEl)return;
+  try{
+    /* Step 1: Fetch sw.js from the server (cache-busting to get the
+       latest version). Extract the CACHE_NAME to get the version number. */
+    var swResp=await fetch('sw.js?v='+Date.now(),{cache:'no-store'});
+    if(!swResp.ok)throw new Error('HTTP '+swResp.status);
+    var swText=await swResp.text();
+    var versionMatch=swText.match(/CACHE_NAME='skywarn-us-(v\d+)'/);
+    var currentVersion=versionMatch?versionMatch[1]:'unknown';
+
+    /* Step 2: Query the GitHub API for the latest commit on main.
+       This tells us if there's a newer commit than what the user has. */
+    var lastSha='';
+    try{lastSha=localStorage.getItem(APP_VERSION_KEY)||''}catch(e){}
+    var newSha='';
+    var commitDate='';
+    var commitMsg='';
+    try{
+      var apiResp=await fetch('https://api.github.com/repos/Kn-weather/Skywarn-Storm-Spot-US/commits?per_page=1&sha=main');
+      if(apiResp.ok){
+        var commits=await apiResp.json();
+        if(commits&&commits.length>0){
+          newSha=commits[0].sha;
+          commitDate=commits[0].commit?.committer?.date||'';
+          commitMsg=commits[0].commit?.message?.split('\n')[0]?.substring(0,80)||'';
+        }
+      }
+    }catch(e){
+      /* GitHub API might be rate-limited — that's OK, we still show the version */
+    }
+
+    /* Step 3: Display the version info */
+    var html='<div style="display:flex;align-items:center;gap:8px">'+
+      '<span style="color:var(--acc);font-weight:700;font-size:13px">'+currentVersion+'</span>';
+    if(commitDate){
+      var d=new Date(commitDate);
+      var dateStr=d.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
+      html+='<span style="color:var(--t3);font-size:10px">— deployed '+dateStr+'</span>';
+    }
+    html+='</div>';
+    if(commitMsg){
+      html+='<div style="color:var(--t3);font-size:9px;margin-top:2px;font-style:italic">Latest: '+commitMsg+'</div>';
+    }
+    infoEl.innerHTML=html;
+
+    /* Step 4: Check if there's a newer version. If the SHA changed since
+       our last check, show the update banner. */
+    if(newSha&&lastSha&&newSha!==lastSha){
+      /* New commit detected since last check */
+      if(bannerEl&&bannerTextEl){
+        bannerTextEl.innerHTML='<b>New version available!</b> A newer version of the app has been deployed. Click "Update App" above to get the latest features and fixes.';
+        bannerEl.style.display='block';
+      }
+    }
+    /* Save the current SHA for next time */
+    if(newSha){
+      try{localStorage.setItem(APP_VERSION_KEY,newSha)}catch(e){}
+    }
+  }catch(e){
+    console.warn('[Version] Check failed:',e);
+    if(infoEl){
+      infoEl.innerHTML='<span style="color:var(--t3);font-size:11px">Version check unavailable</span>';
+    }
+  }
+}
+window.checkAppVersion=checkAppVersion;
+
 /* ── Live indicator pulse ───────────────────────────────────────────────── */
 function updateLiveTime(){
   var el=document.getElementById('liveText');
@@ -7633,6 +7755,12 @@ function switchTab(tab){
     initJournalTab();
     /* Invalidate mini-map size after layout settles */
     setTimeout(function(){if(jrnlMiniMap)jrnlMiniMap.invalidateSize()},300);
+  }
+  /* If switching to the Settings tab, check the app version */
+  if(tab==='settings'){
+    if(typeof checkAppVersion==='function'){
+      checkAppVersion();
+    }
   }
 }
 
