@@ -14099,7 +14099,14 @@ async function screenshotStormETA(){
     headline:'Storm ETA at '+stormETALastData.targetLat.toFixed(4)+', '+stormETALastData.targetLon.toFixed(4)
   };
   /* Close the popup so it doesn't appear in the map capture (we'll rebuild
-     the info as a separate panel), but keep the pin on the map. */
+     the info as a separate panel), but keep the pin on the map.
+
+     CRITICAL: alertMapInstance.closePopup() fires the 'popupclose' event,
+     which is registered to call stormEtaRemovePin(). We need to temporarily
+     detach that handler so the pin stays visible during the screenshot,
+     then re-attach it afterward so closing the popup normally still
+     removes the pin. */
+  alertMapInstance.off('popupclose',stormEtaRemovePin);
   alertMapInstance.closePopup();
 
   /* Helper: wait for map tiles to load after any zoom/pan change */
@@ -14264,8 +14271,12 @@ async function screenshotStormETA(){
     alert('Screenshot failed: '+e.message);
   }finally{
     document.body.classList.remove('capturing');
-    /* Re-open the popup so the user can continue interacting */
+    /* Re-open the popup so the user can continue interacting.
+       stormMotionETA() will re-drop the pin and re-attach the popupclose
+       handler, so we don't need to manually re-attach here. */
     if(stormETALastData){
+      /* Remove the old pin first (stormMotionETA will drop a new one) */
+      stormEtaRemovePin();
       stormMotionETA({lat:stormETALastData.targetLat,lng:stormETALastData.targetLon});
     }
   }
