@@ -2100,6 +2100,8 @@ body.capturing .sat-legend{display:none!important}
             <div class="section-label" style="margin-top:8px">Surface Observations</div>
             <label style="margin:1px 0" id="amObsEnableLabel"><input type="checkbox" id="amObsEnable" onchange="toggleObsLayer()"> Show Surface Obs</label>
             <label style="margin:1px 0;font-size:9px;color:var(--t2)" id="amObsGradientLabel"><input type="checkbox" id="amObsGradient" onchange="toggleObsGradient()" style="accent-color:var(--acc)"> Color Gradient Overlay</label>
+            <label style="margin:1px 0;font-size:9px;color:var(--t2)" id="amObsBoundariesLabel"><input type="checkbox" id="amObsBoundaries" onchange="toggleObsBoundaries()" style="accent-color:var(--acc)"> Detect Outflow Boundaries</label>
+            <div id="obsBoundaryStatus" style="font-size:8px;color:var(--t3);margin-top:2px;display:none"></div>
             <div id="obsAnimControls" style="display:none;margin-top:6px;padding:6px;background:var(--bg);border:1px solid var(--bdr);border-radius:4px">
               <div style="font-size:8px;color:var(--t3);text-transform:uppercase;letter-spacing:.04em;margin-bottom:4px">Animation (stored history)</div>
               <div class="radar-anim-controls">
@@ -11867,6 +11869,7 @@ function obsUpdateStateGate(){
   var hasState=!!state;
   var obsCb=document.getElementById('amObsEnable');
   var gradCb=document.getElementById('amObsGradient');
+  var boundCb=document.getElementById('amObsBoundaries');
   var controlsEl=document.getElementById('obsControls');
   /* Show/hide the entire obs controls block */
   if(controlsEl)controlsEl.style.display=hasState?'block':'none';
@@ -11883,6 +11886,11 @@ function obsUpdateStateGate(){
       gradCb.checked=false;
       wasActive=true;
     }
+    /* Tear down boundary detection if active */
+    if(boundCb&&boundCb.checked){
+      boundCb.checked=false;
+      wasActive=true;
+    }
     if(wasActive){
       console.log('[Obs] State filter cleared — tearing down obs layers to prevent slow all-US fetch');
       /* Call obsDisable to remove pin layer */
@@ -11895,6 +11903,13 @@ function obsUpdateStateGate(){
         try{alertMapInstance.removeLayer(obsGradientLayer)}catch(e){}
         obsGradientLayer=null;
       }
+      /* Remove boundary layer (checkbox already unchecked above) */
+      if(typeof obsClearBoundaryLayer==='function'){
+        obsBoundariesActive=false;
+        obsClearBoundaryLayer();
+      }
+      var bStatusEl=document.getElementById('obsBoundaryStatus');
+      if(bStatusEl)bStatusEl.style.display='none';
       /* Stop auto-refresh timer */
       if(obsRefreshTimer){clearInterval(obsRefreshTimer);obsRefreshTimer=null}
       /* Stop animation if running */
@@ -11959,7 +11974,10 @@ async function obsLoadStations(state){
 
 /* Fetch observations for all stations (batched to avoid rate limiting) */
 async function obsFetchAll(){
-  if(!obsLayer||!obsStations.length)return;
+  /* Only require stations to be loaded — obsLayer may be null if only
+     the gradient or boundary detection is enabled (without pins).
+     obsRender() has its own null guard, so it's safe to call. */
+  if(!obsStations.length)return;
   var varSel=document.getElementById('amObsVar');
   obsCurrentVar=varSel?varSel.value:'temperature';
   console.log('[Obs] Fetching observations for '+obsStations.length+' stations, var='+obsCurrentVar);
@@ -11992,6 +12010,12 @@ async function obsFetchAll(){
   obsRender();
   /* Also re-render gradient if active */
   obsRenderGradient();
+  /* Re-detect boundaries if active (new obs may reveal new boundaries
+     or cause existing ones to dissipate). This is fast — typically
+     < 50ms for a single state's worth of stations. */
+  if(obsBoundariesActive){
+    obsDetectBoundaries();
+  }
   /* Store snapshot to Supabase for animation playback */
   obsStoreSnapshot();
   /* Update timestamp */
@@ -12926,6 +12950,399 @@ function obsHslToRgb(h,s,l){
     b=hue2rgb(p,q,h-1/3);
   }
   return[Math.round(r*255),Math.round(g*255),Math.round(b*255)];
+}
+
+/* ════════════════════════════════════════════════════════════════════════
+   Outflow Boundary Detection
+   ────────────────────────────────────────────────────────────────────────
+   Detects surface outflow boundaries from ASOS observation gradients.
+
+   An outflow boundary (gust front) is the leading edge of rain-cooled air
+   that rushes out ahead of a thunderstorm. Surface obs show a strong
+   gradient across the boundary:
+     • ΔT ≥ 4°F (cold air behind, warm air ahead)
+     • ΔTd ≥ 3°F (moist air behind from rain, drier ahead)
+     • Wind shift ≥ 30° (winds converge at the boundary)
+
+   Algorithm:
+   1. For each pair of stations within 40-60 miles, compute the gradients.
+   2. Identify "boundary station pairs" — pairs that exceed all thresholds.
+   3. Cluster boundary station pairs by geographic proximity (≤ 15 mi gap)
+      and gradient direction similarity (within ±30°).
+   4. For each cluster, build a piecewise-linear polyline by chaining
+      the midpoints of pairs (sorted along the boundary's principal axis).
+      This follows curves naturally, unlike a single straight-line fit.
+   5. Compute confidence (0-100%) as a weighted sum of how far each
+      variable exceeds its threshold.
+   6. Render each cluster as a cyan dashed polyline with a popup showing
+      the details.
+
+   Limitations (documented for future improvement):
+   - ASOS obs update hourly, so fast-moving boundaries may lag.
+   - Detection is state-scoped (only runs when a state is selected).
+   - No automated radar fine-line confirmation (RainViewer serves
+     pre-rendered color tiles, not raw reflectivity values).
+   ════════════════════════════════════════════════════════════════════════ */
+
+var obsBoundaryLayer=null;          /* Leaflet layerGroup for boundary polylines + markers */
+var obsBoundariesActive=false;      /* Is the boundary layer turned on? */
+var obsBoundaryResults=[];          /* Cached detection results for popups */
+
+/* Outflow boundary detection thresholds (tunable). */
+var BOUNDARY_THRESHOLDS={
+  maxPairDistanceMi:60,   /* Only consider station pairs within 60 miles */
+  minPairDistanceMi:5,    /* Skip pairs too close to be meaningful */
+  deltaTempF:4,           /* ΔT ≥ 4°F */
+  deltaDewpointF:3,       /* ΔTd ≥ 3°F */
+  windShiftDeg:30,        /* Wind direction change ≥ 30° */
+  clusterGapMi:15,        /* Midpoints within 15 mi are clustered together */
+  clusterDirTolDeg:30,    /* Gradient directions within ±30° are clustered */
+  minClusterPairs:2       /* Need at least 2 pairs to form a boundary line */
+};
+
+/* Great-circle distance in miles between two lat/lon points (Haversine). */
+function haversineMi(lat1,lon1,lat2,lon2){
+  var R=3958.8;  /* Earth radius in miles */
+  var dLat=(lat2-lat1)*Math.PI/180;
+  var dLon=(lon2-lon1)*Math.PI/180;
+  var a=Math.sin(dLat/2)*Math.sin(dLat/2)+
+    Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*
+    Math.sin(dLon/2)*Math.sin(dLon/2);
+  return 2*R*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));
+}
+
+/* Compute the difference between two wind directions, accounting for
+   the 360° wraparound. Returns the smallest angle (0-180°). */
+function windDirDiff(d1,d2){
+  if(d1==null||d2==null)return null;
+  var diff=Math.abs(d1-d2)%360;
+  return diff>180?360-diff:diff;
+}
+
+/* Toggle the boundary detection layer on/off. Like toggleObsGradient,
+   this can run independently of the pin markers — only requires obs data. */
+function toggleObsBoundaries(){
+  var cb=document.getElementById('amObsBoundaries');
+  if(!cb)return;
+  if(cb.checked){
+    /* DEFENSE-IN-DEPTH: refuse without a state filter */
+    var stateFilter=document.getElementById('amStateFilter');
+    var state=(stateFilter&&stateFilter.value)?stateFilter.value.toUpperCase():'';
+    if(!state){
+      cb.checked=false;
+      console.warn('[ObsBoundary] Cannot enable boundary detection without a state filter');
+      return;
+    }
+    obsBoundariesActive=true;
+    /* If obs data isn't loaded yet, load it first */
+    if(!obsStationsLoaded){
+      obsEnable(state);
+    }else if(Object.keys(obsData).length===0){
+      obsFetchAll();
+    }else{
+      /* Data already available — detect + render */
+      obsDetectBoundaries();
+    }
+  }else{
+    obsBoundariesActive=false;
+    obsClearBoundaryLayer();
+    /* Hide status */
+    var statusEl=document.getElementById('obsBoundaryStatus');
+    if(statusEl)statusEl.style.display='none';
+  }
+}
+
+/* Remove the boundary layer from the map. */
+function obsClearBoundaryLayer(){
+  if(obsBoundaryLayer&&alertMapInstance){
+    try{alertMapInstance.removeLayer(obsBoundaryLayer)}catch(e){}
+  }
+  obsBoundaryLayer=null;
+  obsBoundaryResults=[];
+}
+
+/* Main detection routine. Computes pairwise gradients, identifies
+   boundary station pairs, clusters them, fits piecewise-linear
+   polylines, and renders them on the map. */
+function obsDetectBoundaries(){
+  if(!obsBoundariesActive||!alertMapInstance)return;
+  if(!obsStations.length||!obsStationsLoaded){
+    console.log('[ObsBoundary] Stations not loaded yet — skipping');
+    return;
+  }
+  /* Clear previous results */
+  obsClearBoundaryLayer();
+  obsBoundaryLayer=L.layerGroup().addTo(alertMapInstance);
+
+  /* Collect stations with valid temp, dewpoint, and wind direction */
+  var validStations=[];
+  obsStations.forEach(function(st){
+    var data=obsData[st.id];
+    if(!data||!data.obs)return;
+    var tempC=data.obs.temperature?data.obs.temperature.value:null;
+    var dewC=data.obs.dewpoint?data.obs.dewpoint.value:null;
+    var windDir=data.obs.windDirection?data.obs.windDirection.value:null;
+    var windSpd=data.obs.windSpeed?data.obs.windSpeed.value:null;
+    if(tempC==null||dewC==null||windDir==null)return;
+    /* Convert to Fahrenheit / keep direction in degrees */
+    validStations.push({
+      id:st.id,
+      name:st.name,
+      lat:st.lat,
+      lon:st.lon,
+      tempF:tempC*9/5+32,
+      dewF:dewC*9/5+32,
+      windDir:windDir,
+      windSpd:windSpd||0
+    });
+  });
+  if(validStations.length<2){
+    obsShowBoundaryStatus('Not enough stations with full data ('+validStations.length+')');
+    return;
+  }
+
+  /* Step 1: Find all station pairs that meet the outflow boundary
+     thresholds. For each pair, we compute the gradient and check
+     whether ΔT, ΔTd, and wind shift all exceed their thresholds.
+     We store the gradient direction (the bearing from the cold/dry
+     side to the warm/moist side) — boundaries are perpendicular to
+     this direction. */
+  var boundaryPairs=[];
+  for(var i=0;i<validStations.length;i++){
+    for(var j=i+1;j<validStations.length;j++){
+      var a=validStations[i];
+      var b=validStations[j];
+      var dist=haversineMi(a.lat,a.lon,b.lat,b.lon);
+      if(dist<BOUNDARY_THRESHOLDS.minPairDistanceMi)continue;
+      if(dist>BOUNDARY_THRESHOLDS.maxPairDistanceMi)continue;
+      var dT=Math.abs(a.tempF-b.tempF);
+      var dTd=Math.abs(a.dewF-b.dewF);
+      var dWind=windDirDiff(a.windDir,b.windDir);
+      if(dWind==null)continue;
+      if(dT<BOUNDARY_THRESHOLDS.deltaTempF)continue;
+      if(dTd<BOUNDARY_THRESHOLDS.deltaDewpointF)continue;
+      if(dWind<BOUNDARY_THRESHOLDS.windShiftDeg)continue;
+      /* Identify the cold side (lower temp) — outflow air is colder */
+      var coldSide=a.tempF<b.tempF?a:b;
+      var warmSide=a.tempF<b.tempF?b:a;
+      /* Compute confidence: weighted sum of how far each var exceeds threshold.
+         Each variable contributes up to ~33 points, scaled by how strongly
+         it exceeds the threshold (1.0× threshold = 0 points, 2.0× = 33 points). */
+      var tempScore=Math.min(33,((dT-BOUNDARY_THRESHOLDS.deltaTempF)/BOUNDARY_THRESHOLDS.deltaTempF)*33);
+      var dewScore=Math.min(33,((dTd-BOUNDARY_THRESHOLDS.deltaDewpointF)/BOUNDARY_THRESHOLDS.deltaDewpointF)*33);
+      var windScore=Math.min(34,((dWind-BOUNDARY_THRESHOLDS.windShiftDeg)/BOUNDARY_THRESHOLDS.windShiftDeg)*34);
+      var confidence=Math.round(tempScore+dewScore+windScore);
+      /* Compute the bearing of the gradient (cold→warm direction) */
+      var gradBearing=bearingDeg(coldSide.lat,coldSide.lon,warmSide.lat,warmSide.lon);
+      /* Boundary direction is perpendicular to gradient (±90°) */
+      var boundaryDir=(gradBearing+90)%360;
+      boundaryPairs.push({
+        a:a,b:b,
+        midLat:(a.lat+b.lat)/2,
+        midLon:(a.lon+b.lon)/2,
+        dist:dist,
+        dT:dT,dTd:dTd,dWind:dWind,
+        coldSide:coldSide,warmSide:warmSide,
+        gradBearing:gradBearing,
+        boundaryDir:boundaryDir,
+        confidence:confidence
+      });
+    }
+  }
+  if(boundaryPairs.length===0){
+    obsShowBoundaryStatus('No outflow boundaries detected');
+    return;
+  }
+
+  /* Step 2: Cluster boundary pairs. Two pairs belong to the same
+     cluster if their midpoints are within clusterGapMi AND their
+     boundary directions are within ±clusterDirTolDeg.
+     We use a simple greedy approach (union-find would also work but
+     is overkill here — typically we have 5-30 boundary pairs at most). */
+  var clusters=[];
+  var assigned=new Array(boundaryPairs.length).fill(false);
+  for(var i=0;i<boundaryPairs.length;i++){
+    if(assigned[i])continue;
+    var cluster=[];
+    var queue=[i];
+    assigned[i]=true;
+    while(queue.length){
+      var idx=queue.shift();
+      cluster.push(boundaryPairs[idx]);
+      /* Find unassigned pairs close to this one */
+      for(var k=0;k<boundaryPairs.length;k++){
+        if(assigned[k])continue;
+        var d=haversineMi(boundaryPairs[idx].midLat,boundaryPairs[idx].midLon,
+                          boundaryPairs[k].midLat,boundaryPairs[k].midLon);
+        if(d>BOUNDARY_THRESHOLDS.clusterGapMi)continue;
+        var dirDiff=windDirDiff(boundaryPairs[idx].boundaryDir,boundaryPairs[k].boundaryDir);
+        if(dirDiff>BOUNDARY_THRESHOLDS.clusterDirTolDeg)continue;
+        assigned[k]=true;
+        queue.push(k);
+      }
+    }
+    if(cluster.length>=BOUNDARY_THRESHOLDS.minClusterPairs){
+      clusters.push(cluster);
+    }
+  }
+  if(clusters.length===0){
+    /* No clusters met the minimum size — show single-pair "boundary hints"
+       as small markers instead of polylines, so users still get a signal. */
+    boundaryPairs.forEach(function(pair){
+      obsRenderBoundaryHint(pair);
+    });
+    obsShowBoundaryStatus(boundaryPairs.length+' boundary hints (need '+BOUNDARY_THRESHOLDS.minClusterPairs+'+ pairs to draw lines)');
+    return;
+  }
+
+  /* Step 3: For each cluster, fit a piecewise-linear polyline.
+     Strategy: compute the principal axis of the cluster's midpoints
+     (using PCA — eigenvector of the covariance matrix), project all
+     midpoints onto this axis to get their position along the boundary,
+     sort by position, and connect adjacent midpoints as line segments.
+     This produces a smooth piecewise-linear line that follows curves
+     naturally (unlike a single straight-line fit). */
+  clusters.forEach(function(cluster,idx){
+    var midpoints=cluster.map(function(p){return{lat:p.midLat,lon:p.midLon}});
+    var sorted=sortByPrincipalAxis(midpoints);
+    /* Build polyline from sorted midpoints */
+    var latlngs=sorted.map(function(m){return[m.lat,m.lon]});
+    /* Cluster confidence = average of pair confidences, capped at 100 */
+    var avgConfidence=Math.round(cluster.reduce(function(s,p){return s+p.confidence},0)/cluster.length);
+    /* Build detail string for popup */
+    var avgDT=(cluster.reduce(function(s,p){return s+p.dT},0)/cluster.length).toFixed(1);
+    var avgDTd=(cluster.reduce(function(s,p){return s+p.dTd},0)/cluster.length).toFixed(1);
+    var avgDWind=Math.round(cluster.reduce(function(s,p){return s+p.dWind},0)/cluster.length);
+    /* Render the polyline */
+    var polyline=L.polyline(latlngs,{
+      color:'#00ffff',
+      weight:2.5,
+      opacity:0.85,
+      dashArray:'8,5',
+      lineCap:'round',
+      lineJoin:'round'
+    });
+    var popupHtml=
+      '<div style="font-family:Inter,sans-serif;min-width:180px">'+
+        '<div style="font-size:11px;font-weight:700;color:#00ffff;margin-bottom:4px">Outflow Boundary</div>'+
+        '<div style="font-size:10px;color:#fff;margin-bottom:6px">Confidence: <b>'+avgConfidence+'%</b></div>'+
+        '<div style="font-size:9px;color:#ccc;line-height:1.5">'+
+          '<div>ΔT: <b>'+avgDT+'°F</b> <span style="color:#888">(≥'+BOUNDARY_THRESHOLDS.deltaTempF+'°F)</span></div>'+
+          '<div>ΔTd: <b>'+avgDTd+'°F</b> <span style="color:#888">(≥'+BOUNDARY_THRESHOLDS.deltaDewpointF+'°F)</span></div>'+
+          '<div>Wind Shift: <b>'+avgDWind+'°</b> <span style="color:#888">(≥'+BOUNDARY_THRESHOLDS.windShiftDeg+'°)</span></div>'+
+          '<div>Pairs in cluster: <b>'+cluster.length+'</b></div>'+
+        '</div>'+
+        '<div style="font-size:8px;color:#888;margin-top:6px;border-top:1px solid #444;padding-top:4px">Surface-obs detected. Visually verify fine line on radar.</div>'+
+      '</div>';
+    polyline.bindPopup(popupHtml,{className:'obs-boundary-popup',maxWidth:240});
+    polyline.addTo(obsBoundaryLayer);
+    /* Store result for screenshot metadata */
+    obsBoundaryResults.push({
+      type:'outflow',
+      confidence:avgConfidence,
+      dT:parseFloat(avgDT),
+      dTd:parseFloat(avgDTd),
+      dWind:avgDWind,
+      pairCount:cluster.length,
+      latlngs:latlngs
+    });
+  });
+  var totalBoundaries=clusters.length;
+  var totalPairs=boundaryPairs.length;
+  obsShowBoundaryStatus(totalBoundaries+' boundary '+(totalBoundaries===1?'line':'lines')+' detected ('+totalPairs+' station pairs)');
+  console.log('[ObsBoundary] Detected '+totalBoundaries+' boundaries from '+totalPairs+' pairs');
+}
+
+/* Render a single-pair "boundary hint" — a small cyan diamond marker
+   shown when not enough pairs exist to form a line. Helps users spot
+   potential boundaries even with sparse data. */
+function obsRenderBoundaryHint(pair){
+  var marker=L.circleMarker([pair.midLat,pair.midLon],{
+    radius:4,
+    color:'#00ffff',
+    weight:1.5,
+    fillColor:'#00ffff',
+    fillOpacity:0.4,
+    opacity:0.85
+  });
+  var popupHtml=
+    '<div style="font-family:Inter,sans-serif;min-width:180px">'+
+      '<div style="font-size:11px;font-weight:700;color:#00ffff;margin-bottom:4px">Boundary Hint</div>'+
+      '<div style="font-size:10px;color:#fff;margin-bottom:6px">Confidence: <b>'+pair.confidence+'%</b></div>'+
+      '<div style="font-size:9px;color:#ccc;line-height:1.5">'+
+        '<div>ΔT: <b>'+pair.dT.toFixed(1)+'°F</b></div>'+
+        '<div>ΔTd: <b>'+pair.dTd.toFixed(1)+'°F</b></div>'+
+        '<div>Wind Shift: <b>'+pair.dWind.toFixed(0)+'°</b></div>'+
+        '<div>Distance: <b>'+pair.dist.toFixed(1)+' mi</b></div>'+
+      '</div>'+
+      '<div style="font-size:8px;color:#888;margin-top:6px;border-top:1px solid #444;padding-top:4px">Single pair — needs 2+ pairs to draw a line.</div>'+
+    '</div>';
+  marker.bindPopup(popupHtml,{className:'obs-boundary-popup',maxWidth:240});
+  marker.addTo(obsBoundaryLayer);
+}
+
+/* Update the status text below the checkbox. */
+function obsShowBoundaryStatus(msg){
+  var statusEl=document.getElementById('obsBoundaryStatus');
+  if(!statusEl)return;
+  if(msg){
+    statusEl.textContent=msg;
+    statusEl.style.display='block';
+  }else{
+    statusEl.style.display='none';
+  }
+}
+
+/* Compute the bearing (compass direction) from point 1 to point 2, in
+   degrees clockwise from north. */
+function bearingDeg(lat1,lon1,lat2,lon2){
+  var φ1=lat1*Math.PI/180;
+  var φ2=lat2*Math.PI/180;
+  var Δλ=(lon2-lon1)*Math.PI/180;
+  var y=Math.sin(Δλ)*Math.cos(φ2);
+  var x=Math.cos(φ1)*Math.sin(φ2)-Math.sin(φ1)*Math.cos(φ2)*Math.cos(Δλ);
+  var θ=Math.atan2(y,x);
+  return (θ*180/Math.PI+360)%360;
+}
+
+/* Sort a list of {lat,lon} points along their principal axis (PCA).
+   This determines the order in which to connect them as a polyline.
+   The principal axis is the eigenvector of the covariance matrix
+   corresponding to the largest eigenvalue — it's the direction of
+   maximum variance, which is the boundary's overall orientation. */
+function sortByPrincipalAxis(points){
+  if(points.length<=2)return points.slice();
+  /* Compute centroid */
+  var n=points.length;
+  var cLat=0,cLon=0;
+  points.forEach(function(p){cLat+=p.lat;cLon+=p.lon});
+  cLat/=n;cLon/=n;
+  /* Compute covariance matrix entries (treating lat/lon as x/y) */
+  var sxx=0,syy=0,sxy=0;
+  points.forEach(function(p){
+    var dx=p.lon-cLon;
+    var dy=p.lat-cLat;
+    sxx+=dx*dx;
+    syy+=dy*dy;
+    sxy+=dx*dy;
+  });
+  sxx/=n;syy/=n;sxy/=n;
+  /* Principal axis direction (eigenvector for largest eigenvalue).
+     For a 2x2 covariance matrix [[sxx,sxy],[sxy,syy]], the eigenvector
+     for the largest eigenvalue is (sxy, λ1-sxx) where λ1 is the larger
+     eigenvalue. We don't need to compute λ explicitly — we can use
+     the closed-form: direction = (1, m) where m = (λ1 - sxx) / sxy,
+     but a simpler robust formula is atan2(2*sxy, sxx-syy)/2 for the
+     axis angle. */
+  var angle=Math.atan2(2*sxy,sxx-syy)/2;
+  var dirX=Math.cos(angle);
+  var dirY=Math.sin(angle);
+  /* Project each point onto the principal axis and sort by projection */
+  return points.slice().sort(function(p1,p2){
+    var proj1=(p1.lon-cLon)*dirX+(p1.lat-cLat)*dirY;
+    var proj2=(p2.lon-cLon)*dirX+(p2.lat-cLat)*dirY;
+    return proj1-proj2;
+  });
 }
 
 /* Called when user changes the variable dropdown */
