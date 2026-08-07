@@ -1106,6 +1106,50 @@ body{
 .alert-map-picking .leaflet-container{cursor:crosshair!important}
 .alert-map-picking .leaflet-grab{cursor:crosshair!important}
 
+/* No-Go zone draw mode — banner + active button */
+.nav-draw-banner{
+  position:absolute;top:50px;left:50%;transform:translateX(-50%);
+  z-index:1200;
+  background:#bb55ff;color:#fff;
+  padding:8px 16px;border-radius:6px;
+  font-size:11px;font-weight:700;font-family:Inter,sans-serif;
+  box-shadow:0 4px 12px rgba(0,0,0,.5);
+  display:flex;align-items:center;gap:10px;
+  pointer-events:auto;
+  animation:navDrawPulse 1.5s ease-in-out infinite;
+}
+@keyframes navDrawPulse{
+  0%,100%{box-shadow:0 4px 12px rgba(0,0,0,.5)}
+  50%{box-shadow:0 4px 20px rgba(187,85,255,.6)}
+}
+.nav-draw-banner button{
+  background:#fff;color:#bb55ff;
+  border:none;padding:3px 10px;border-radius:3px;
+  cursor:pointer;font-size:10px;font-weight:700;font-family:inherit;
+}
+.nav-draw-active{
+  background:#bb55ff!important;color:#fff!important;
+  animation:navDrawPulse 1.5s ease-in-out infinite;
+}
+/* Vertex markers while drawing (small purple dots) */
+.nav-draw-vertex{
+  background:#bb55ff;
+  border:2px solid #fff;
+  border-radius:50%;
+  width:10px;height:10px;
+  box-shadow:0 1px 4px rgba(0,0,0,.6);
+}
+/* No-Go zone polygon (purple, drawn by user) */
+.nav-nogo-zone{
+  stroke:#bb55ff;stroke-width:2;
+  fill:#bb55ff;fill-opacity:.15;
+  stroke-dasharray:6,3;
+}
+.nav-nogo-buffer{
+  stroke:#bb55ff;stroke-width:1;stroke-dasharray:3,3;
+  fill:#bb55ff;fill-opacity:.05;
+}
+
 /* ── Surface observation markers ── */
 .obs-marker{
   display:flex;align-items:center;justify-content:center;
@@ -2395,6 +2439,12 @@ body.capturing .sat-legend{display:none!important}
             <input type="checkbox" id="navPredictive" checked style="accent-color:var(--acc)">
             Predictive avoidance (project storm forward by drive time)
           </label>
+          <div style="height:1px;background:var(--bdr);margin:6px 0"></div>
+          <div style="font-size:8px;color:var(--t3);text-transform:uppercase;letter-spacing:.04em;margin-bottom:2px">Custom No-Go Zones</div>
+          <button id="navDrawNoGoBtn" onclick="navDrawNoGoZone()" style="width:100%;background:var(--bg2);color:#bb55ff;border:1px solid #bb55ff40;padding:5px 8px;border-radius:4px;cursor:pointer;font-size:9px;font-weight:600;font-family:inherit;margin-bottom:4px">
+            <i class="fas fa-draw-polygon"></i> Draw No-Go Zone
+          </button>
+          <div id="navNoGoList" style="font-size:9px;color:var(--t2);line-height:1.4"></div>
           <button onclick="navCalculate()" style="width:100%;background:var(--acc);color:#000;border:none;padding:6px 12px;border-radius:4px;cursor:pointer;font-size:10px;font-weight:700;font-family:inherit;margin-top:4px">
             <i class="fas fa-route"></i> Calculate Safe Route
           </button>
@@ -14306,6 +14356,242 @@ function navCancelPick(){
   if(destBtn)destBtn.classList.remove('nav-pick-active');
 }
 
+/* ── Custom No-Go Zone Drawing ──
+   Lets the user draw their own "no-go" polygons on the map — areas they
+   want the route calculation to avoid (construction, flooding, damage
+   paths, local knowledge, etc.). These are added to the hazards list in
+   navCollectHazards() and routed around just like NWS warning polygons
+   and storm cell polygons.
+
+   Draw flow:
+   1. Click "Draw No-Go Zone" button → enters draw mode
+   2. Click on map to add vertices (shown as small purple dots)
+   3. A live preview line connects the vertices
+   4. Double-click OR click "Finish" to close the polygon (min 3 vertices)
+   5. The polygon is stored in navNoGoZones[] and rendered on the map
+   6. Each zone appears in the zone list with a delete button
+   7. "Clear All" button removes all zones
+
+   The zones are buffered by the same buffer slider as other hazards,
+   so the route stays a configurable distance away from each zone.
+
+   Zones persist in-memory until cleared (no Supabase storage). */
+var navNoGoZones=[];              /* Array of {id, latlngs:[[lat,lon],...], label} */
+var navNoGoLayer=null;            /* Leaflet layerGroup for rendered zones */
+var navDrawMode=false;            /* Are we currently drawing a zone? */
+var navDrawVertices=[];           /* Current vertices being drawn */
+var navDrawVertexMarkers=[];      /* Leaflet markers for each vertex */
+var navDrawPreviewLine=null;      /* Live preview polyline */
+var navDrawClickHandler=null;     /* Map click handler during draw mode */
+var navDrawDblClickHandler=null;  /* Map double-click handler (finish drawing) */
+var navDrawBannerEl=null;         /* The draw-mode banner */
+var navDrawEscapeHandler=null;    /* Escape key handler */
+var navNoGoIdCounter=1;           /* Auto-incrementing ID for zones */
+
+function navDrawNoGoZone(){
+  if(!alertMapInstance)initAlertMap();
+  if(!alertMapInstance)return;
+  if(navDrawMode)return;  /* Already drawing */
+  /* Cancel pick mode if active (can't draw and pick at the same time) */
+  if(navPickMode)navCancelPick();
+  navDrawMode=true;
+  navDrawVertices=[];
+  navDrawVertexMarkers=[];
+  /* Add crosshair cursor */
+  var mapWrap=document.getElementById('alertMap');
+  if(mapWrap)mapWrap.classList.add('alert-map-picking');
+  /* Highlight the draw button */
+  var btn=document.getElementById('navDrawNoGoBtn');
+  if(btn)btn.classList.add('nav-draw-active');
+  /* Show the banner */
+  navDrawBannerEl=document.createElement('div');
+  navDrawBannerEl.className='nav-draw-banner';
+  navDrawBannerEl.innerHTML=
+    '<i class="fas fa-draw-polygon"></i> '+
+    '<span>Click to add vertices — double-click to finish (min 3 points)</span>'+
+    '<button onclick="navFinishDrawNoGoZone()">Finish</button>'+
+    '<button onclick="navCancelDrawNoGoZone()" style="background:#bb55ff;color:#fff;border:1px solid #fff">Cancel</button>';
+  var mapParent=document.getElementById('alertMap').parentElement;
+  if(mapParent)mapParent.appendChild(navDrawBannerEl);
+  /* Add map click handler to add vertices */
+  navDrawClickHandler=function(e){
+    var lat=e.latlng.lat;
+    var lon=e.latlng.lng;
+    /* Normalize lat/lon (Leaflet worldCopyJump can produce out-of-range values) */
+    lat=((lat+90)%180+180)%180-90;
+    lon=((lon+180)%360+360)%360-180;
+    navDrawVertices.push([lat,lon]);
+    /* Add a vertex marker */
+    var icon=L.divIcon({
+      className:'',
+      html:'<div class="nav-draw-vertex"></div>',
+      iconSize:[10,10],iconAnchor:[5,5]
+    });
+    var marker=L.marker([lat,lon],{icon:icon,interactive:false});
+    marker.addTo(alertMapInstance);
+    navDrawVertexMarkers.push(marker);
+    /* Update preview line */
+    navUpdateDrawPreview();
+    /* Update banner text with vertex count */
+    var span=navDrawBannerEl.querySelector('span');
+    if(span){
+      span.textContent=navDrawVertices.length+' point'+(navDrawVertices.length===1?'':'s')+' — '+(navDrawVertices.length<3?'need '+(3-navDrawVertices.length)+' more':'double-click or Finish to close');
+    }
+  };
+  alertMapInstance.on('click',navDrawClickHandler);
+  /* Double-click to finish */
+  navDrawDblClickHandler=function(e){
+    navFinishDrawNoGoZone();
+  };
+  alertMapInstance.on('dblclick',navDrawDblClickHandler);
+  /* Escape to cancel */
+  navDrawEscapeHandler=function(e){
+    if(e.key==='Escape')navCancelDrawNoGoZone();
+  };
+  document.addEventListener('keydown',navDrawEscapeHandler);
+}
+
+/* Update the live preview polyline while drawing */
+function navUpdateDrawPreview(){
+  if(navDrawPreviewLine){
+    try{alertMapInstance.removeLayer(navDrawPreviewLine)}catch(e){}
+    navDrawPreviewLine=null;
+  }
+  if(navDrawVertices.length>=2){
+    navDrawPreviewLine=L.polyline(navDrawVertices,{
+      color:'#bb55ff',weight:2,dashArray:'6,3',opacity:0.8
+    }).addTo(alertMapInstance);
+  }
+}
+
+/* Finish drawing — close the polygon and add it to the zones list */
+function navFinishDrawNoGoZone(){
+  if(!navDrawMode)return;
+  if(navDrawVertices.length<3){
+    navShowStatus('Need at least 3 points to create a no-go zone','error');
+    /* Don't exit draw mode — let the user add more points */
+    return;
+  }
+  /* Create the polygon and add to zones list */
+  var zoneId=navNoGoIdCounter++;
+  var zone={
+    id:zoneId,
+    latlngs:navDrawVertices.slice(),
+    label:'No-Go Zone '+zoneId
+  };
+  navNoGoZones.push(zone);
+  /* Clean up draw mode */
+  navCancelDrawNoGoZone();
+  /* Render the zone on the map */
+  navRenderNoGoZones();
+  /* Update the zone list UI */
+  navUpdateNoGoList();
+  navShowStatus(zone.label+' created — will be avoided in route calculation','success');
+  console.log('[Nav] Created no-go zone:',zone.label,'with',zone.latlngs.length,'vertices');
+}
+
+/* Cancel draw mode — clean up temporary markers and lines */
+function navCancelDrawNoGoZone(){
+  navDrawMode=false;
+  navDrawVertices=[];
+  /* Remove vertex markers */
+  navDrawVertexMarkers.forEach(function(m){
+    try{alertMapInstance.removeLayer(m)}catch(e){}
+  });
+  navDrawVertexMarkers=[];
+  /* Remove preview line */
+  if(navDrawPreviewLine){
+    try{alertMapInstance.removeLayer(navDrawPreviewLine)}catch(e){}
+    navDrawPreviewLine=null;
+  }
+  /* Remove click/dblclick handlers */
+  if(navDrawClickHandler&&alertMapInstance){
+    alertMapInstance.off('click',navDrawClickHandler);
+    navDrawClickHandler=null;
+  }
+  if(navDrawDblClickHandler&&alertMapInstance){
+    alertMapInstance.off('dblclick',navDrawDblClickHandler);
+    navDrawDblClickHandler=null;
+  }
+  /* Remove banner */
+  if(navDrawBannerEl){
+    navDrawBannerEl.remove();
+    navDrawBannerEl=null;
+  }
+  /* Remove escape handler */
+  if(navDrawEscapeHandler){
+    document.removeEventListener('keydown',navDrawEscapeHandler);
+    navDrawEscapeHandler=null;
+  }
+  /* Remove crosshair cursor */
+  var mapWrap=document.getElementById('alertMap');
+  if(mapWrap)mapWrap.classList.remove('alert-map-picking');
+  /* Unhighlight the draw button */
+  var btn=document.getElementById('navDrawNoGoBtn');
+  if(btn)btn.classList.remove('nav-draw-active');
+}
+
+/* Render all no-go zones on the map (called after zone creation/deletion) */
+function navRenderNoGoZones(){
+  if(!alertMapInstance)return;
+  if(navNoGoLayer){
+    try{alertMapInstance.removeLayer(navNoGoLayer)}catch(e){}
+  }
+  if(navNoGoZones.length===0){navNoGoLayer=null;return}
+  navNoGoLayer=L.layerGroup().addTo(alertMapInstance);
+  navNoGoZones.forEach(function(zone){
+    var polygon=L.polygon(zone.latlngs,{
+      color:'#bb55ff',weight:2,dashArray:'6,3',
+      fillColor:'#bb55ff',fillOpacity:0.15,
+      className:'nav-nogo-zone'
+    });
+    polygon.bindPopup(
+      '<div style="font-family:Inter,sans-serif;min-width:140px">'+
+        '<div style="color:#bb55ff;font-weight:700;font-size:11px;margin-bottom:4px">'+zone.label+'</div>'+
+        '<div style="font-size:9px;color:var(--t3)">Custom no-go zone — route will avoid this area</div>'+
+      '</div>',
+      {maxWidth:200}
+    );
+    polygon.addTo(navNoGoLayer);
+  });
+}
+
+/* Update the zone list UI in the panel */
+function navUpdateNoGoList(){
+  var listEl=document.getElementById('navNoGoList');
+  if(!listEl)return;
+  if(navNoGoZones.length===0){
+    listEl.innerHTML='';
+    return;
+  }
+  var html='';
+  navNoGoZones.forEach(function(zone){
+    html+='<div style="display:flex;align-items:center;gap:4px;margin:2px 0;padding:2px 4px;background:var(--bg);border:1px solid var(--bdr);border-radius:3px">'+
+      '<i class="fas fa-draw-polygon" style="color:#bb55ff;font-size:8px"></i>'+
+      '<span style="flex:1;color:#bb55ff;font-size:9px">'+zone.label+'</span>'+
+      '<button onclick="navDeleteNoGoZone('+zone.id+')" title="Delete zone" style="background:none;border:none;color:var(--t3);cursor:pointer;font-size:10px;padding:0 4px"><i class="fas fa-xmark"></i></button>'+
+    '</div>';
+  });
+  html+='<button onclick="navClearNoGoZones()" style="width:100%;background:var(--bg2);color:var(--t2);border:1px solid var(--bdr);padding:3px 6px;border-radius:3px;cursor:pointer;font-size:8px;font-family:inherit;margin-top:2px">Clear All Zones</button>';
+  listEl.innerHTML=html;
+}
+
+/* Delete a single no-go zone by ID */
+function navDeleteNoGoZone(id){
+  navNoGoZones=navNoGoZones.filter(function(z){return z.id!==id});
+  navRenderNoGoZones();
+  navUpdateNoGoList();
+  navShowStatus('No-go zone deleted','info');
+}
+
+/* Clear all no-go zones */
+function navClearNoGoZones(){
+  navNoGoZones=[];
+  navRenderNoGoZones();
+  navUpdateNoGoList();
+  navShowStatus('All no-go zones cleared','info');
+}
+
 function navUseMyLocation(){
   if(!navigator.geolocation){
     navShowStatus('Geolocation not supported by your browser','error');
@@ -14706,6 +14992,41 @@ function navCollectHazards(level){
       hazards.push({event:a.event,id:a.id||'',geojson:stormCellGeojson,isStormCell:true});
     }
   });
+  /* Add user-drawn custom no-go zones as hazards. These are treated the
+     same as NWS warning polygons — buffered by the buffer slider, routed
+     around with the same waypoint computation. Marked with isNoGoZone=true
+     so the renderer can draw them in purple instead of red. */
+  if(typeof navNoGoZones!=='undefined'&&navNoGoZones.length>0){
+    navNoGoZones.forEach(function(zone){
+      try{
+        /* Convert [[lat,lon],...] to GeoJSON Polygon: coordinates must be
+           [lon,lat] and the ring must be closed (first point = last point). */
+        var coords=zone.latlngs.map(function(ll){return[ll[1],ll[0]]});
+        /* Close the ring if not already closed */
+        if(coords.length>0){
+          var first=coords[0];
+          var last=coords[coords.length-1];
+          if(first[0]!==last[0]||first[1]!==last[1]){
+            coords.push([first[0],first[1]]);
+          }
+        }
+        var feature={
+          type:'Feature',
+          geometry:{type:'Polygon',coordinates:[coords]},
+          properties:{}
+        };
+        hazards.push({
+          event:'No-Go Zone',
+          id:'nogo-'+zone.id,
+          geojson:feature,
+          isStormCell:false,
+          isNoGoZone:true
+        });
+      }catch(e){
+        console.warn('[Nav] Failed to add no-go zone',zone.id,e);
+      }
+    });
+  }
   return hazards;
 }
 
@@ -14912,11 +15233,18 @@ function navRenderPreview(){
           buffered=turf.buffer(feat,bufKm,{units:'kilometers'});
         }
         if(buffered){
-          /* Storm cell polygons: orange solid. NWS polygons: red hatched. */
+          /* Storm cell polygons: orange solid. NWS polygons: red hatched.
+             Custom no-go zones: purple hatched. */
           var isStormCell=h.isStormCell===true;
-          var style=isStormCell?
-            {color:'#ff7300',weight:2,fillColor:'#ff7300',fillOpacity:0.18,className:'nav-hazard-buffer'}:
-            {color:'#ff5a5a',weight:1,dashArray:'4,3',fillColor:'#ff5a5a',fillOpacity:0.08,className:'nav-hazard-buffer'};
+          var isNoGoZone=h.isNoGoZone===true;
+          var style;
+          if(isNoGoZone){
+            style={color:'#bb55ff',weight:1,dashArray:'4,3',fillColor:'#bb55ff',fillOpacity:0.08,className:'nav-nogo-buffer'};
+          }else if(isStormCell){
+            style={color:'#ff7300',weight:2,fillColor:'#ff7300',fillOpacity:0.18,className:'nav-hazard-buffer'};
+          }else{
+            style={color:'#ff5a5a',weight:1,dashArray:'4,3',fillColor:'#ff5a5a',fillOpacity:0.08,className:'nav-hazard-buffer'};
+          }
           L.geoJSON(buffered,{style:style}).addTo(navHazardBufferLayer);
           /* Also draw the storm cell polygon itself (without buffer) so the
              user can see the actual cell vs the buffer zone */
