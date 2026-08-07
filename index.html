@@ -1077,6 +1077,34 @@ body{
   stroke:#ff5a5a;stroke-width:1;stroke-dasharray:4,3;
   fill:#ff5a5a;fill-opacity:.08;
 }
+/* Pick-on-map mode — banner shown at top of map + active button highlight */
+.nav-pick-banner{
+  position:absolute;top:50px;left:50%;transform:translateX(-50%);
+  z-index:1200;
+  background:var(--acc);color:#000;
+  padding:8px 16px;border-radius:6px;
+  font-size:11px;font-weight:700;font-family:Inter,sans-serif;
+  box-shadow:0 4px 12px rgba(0,0,0,.5);
+  display:flex;align-items:center;gap:10px;
+  pointer-events:auto;
+  animation:navPickPulse 1.5s ease-in-out infinite;
+}
+@keyframes navPickPulse{
+  0%,100%{box-shadow:0 4px 12px rgba(0,0,0,.5)}
+  50%{box-shadow:0 4px 20px rgba(255,115,0,.6)}
+}
+.nav-pick-banner button{
+  background:#000;color:var(--acc);
+  border:none;padding:3px 10px;border-radius:3px;
+  cursor:pointer;font-size:10px;font-weight:700;font-family:inherit;
+}
+.nav-pick-active{
+  background:var(--acc)!important;color:#000!important;
+  animation:navPickPulse 1.5s ease-in-out infinite;
+}
+/* Crosshair cursor on the map during pick mode */
+.alert-map-picking .leaflet-container{cursor:crosshair!important}
+.alert-map-picking .leaflet-grab{cursor:crosshair!important}
 
 /* ── Surface observation markers ── */
 .obs-marker{
@@ -2336,11 +2364,13 @@ body.capturing .sat-legend{display:none!important}
           <div style="display:flex;gap:4px;align-items:center">
             <input type="text" id="navStartInput" placeholder="Lat, Lon or place name" style="flex:1;background:var(--bg);border:1px solid var(--bdr);color:var(--t1);font-family:inherit;font-size:9px;padding:4px 6px;border-radius:4px;outline:none">
             <button class="radar-anim-btn" onclick="navUseMyLocation()" title="Use my location" style="font-size:10px"><i class="fas fa-location-crosshairs"></i></button>
+            <button class="radar-anim-btn" id="navStartPickBtn" onclick="navPickOnMap('start')" title="Pick on map" style="font-size:10px"><i class="fas fa-map-pin"></i></button>
           </div>
           <div style="font-size:8px;color:var(--t3);text-transform:uppercase;letter-spacing:.04em;margin-top:4px;margin-bottom:2px">Destination</div>
           <div style="display:flex;gap:4px;align-items:center">
             <input type="text" id="navDestInput" placeholder="Lat, Lon or place name" style="flex:1;background:var(--bg);border:1px solid var(--bdr);color:var(--t1);font-family:inherit;font-size:9px;padding:4px 6px;border-radius:4px;outline:none">
             <button class="radar-anim-btn" onclick="navLookupDestination()" title="Lookup place" style="font-size:10px"><i class="fas fa-magnifying-glass"></i></button>
+            <button class="radar-anim-btn" id="navDestPickBtn" onclick="navPickOnMap('dest')" title="Pick on map" style="font-size:10px"><i class="fas fa-map-pin"></i></button>
           </div>
           <div style="font-size:8px;color:var(--t3);text-transform:uppercase;letter-spacing:.04em;margin-top:6px;margin-bottom:2px">Hazards to Avoid</div>
           <select id="navHazardLevel" style="width:100%;background:var(--bg);border:1px solid var(--bdr);color:var(--t1);font-family:inherit;font-size:9px;padding:4px 6px;border-radius:4px;cursor:pointer;outline:none">
@@ -13640,6 +13670,9 @@ function toggleStormMotion(){
       stormMotionClickHandler=function(e){
         if(!stormMotionEnabled)return;
         if(currentTab!=='polygonmap')return;
+        /* Suppress the Storm ETA popup if the user is in nav pick-on-map
+           mode — the nav pick handler should get the click instead. */
+        if(typeof navPickMode!=='undefined'&&navPickMode)return;
         stormMotionETA(e.latlng);
       };
       alertMapInstance.on('click',stormMotionClickHandler);
@@ -14163,7 +14196,99 @@ var navHazardBufferLayer=null;      /* Leaflet layerGroup for hazard buffer outl
 var navCurrentRoute=null;           /* {start:{lat,lon}, dest:{lat,lon}, waypoints:[{lat,lon}], hazards:[{event,id}], status:'safe'|'rerouted'|'wait', straightDistMi, safeDistMi} */
 var navIsCalculating=false;
 
-/* Use the browser's geolocation API to fill the start point. */
+/* ── Pick-on-map mode ──
+   Lets the user click on the map to set the start or destination point
+   instead of typing coordinates or place names. When active:
+   - A banner appears at the top of the map: "Click on the map to set
+     start point — Cancel"
+   - The map cursor changes to a crosshair
+   - The pin button for the active point is highlighted (pulsing accent color)
+   - The next map click sets the point and exits pick mode
+   - The storm motion ETA popup is suppressed during pick mode (checked
+     in stormMotionClickHandler via the navPickMode variable)
+
+   The user can cancel by clicking the Cancel button in the banner, or by
+   pressing Escape. Only one point can be picked at a time. */
+var navPickMode=null;               /* null | 'start' | 'dest' */
+var navPickClickHandler=null;       /* Temporary map click handler */
+var navPickBannerEl=null;           /* The banner DOM element */
+var navPickEscapeHandler=null;      /* Escape key handler */
+
+function navPickOnMap(which){
+  if(!alertMapInstance)initAlertMap();
+  if(!alertMapInstance)return;
+  if(navPickMode){
+    /* Already picking — capture the previous mode before cancelling,
+       then check if the user clicked the same button (toggle off). */
+    var prevMode=navPickMode;
+    navCancelPick();
+    if(prevMode===which)return;  /* Toggling the same button cancels */
+  }
+  navPickMode=which;
+  /* Add crosshair cursor to the map container */
+  var mapWrap=document.getElementById('alertMap');
+  if(mapWrap)mapWrap.classList.add('alert-map-picking');
+  /* Highlight the active pin button */
+  var btnId=which==='start'?'navStartPickBtn':'navDestPickBtn';
+  var btn=document.getElementById(btnId);
+  if(btn)btn.classList.add('nav-pick-active');
+  /* Show the banner */
+  navPickBannerEl=document.createElement('div');
+  navPickBannerEl.className='nav-pick-banner';
+  navPickBannerEl.innerHTML=
+    '<i class="fas fa-map-pin"></i> '+
+    '<span>Click on the map to set '+(which==='start'?'start point':'destination')+'</span>'+
+    '<button onclick="navCancelPick()">Cancel</button>';
+  /* Append to the map's parent (the view-polygonmap div) so it's positioned
+     relative to the map area, not the whole page. */
+  var mapParent=document.getElementById('alertMap').parentElement;
+  if(mapParent)mapParent.appendChild(navPickBannerEl);
+  /* Add the map click handler. Use a one-shot handler — after the first
+     click, we remove ourselves and exit pick mode. */
+  navPickClickHandler=function(e){
+    var lat=e.latlng.lat;
+    var lon=e.latlng.lng;
+    /* Sanity-check the lat/lon (Leaflet can produce values outside normal
+       ranges when worldCopyJump wraps) */
+    lat=((lat+90)%180+180)%180-90;
+    lon=((lon+180)%360+360)%360-180;
+    var inputId=which==='start'?'navStartInput':'navDestInput';
+    var input=document.getElementById(inputId);
+    if(input)input.value=lat.toFixed(4)+', '+lon.toFixed(4);
+    navShowStatus((which==='start'?'Start point':'Destination')+' set to '+lat.toFixed(4)+', '+lon.toFixed(4),'success');
+    navCancelPick();
+  };
+  alertMapInstance.on('click',navPickClickHandler);
+  /* Escape key cancels pick mode */
+  navPickEscapeHandler=function(e){
+    if(e.key==='Escape')navCancelPick();
+  };
+  document.addEventListener('keydown',navPickEscapeHandler);
+}
+
+/* Cancel pick mode — removes the banner, click handler, cursor, and button highlight. */
+function navCancelPick(){
+  navPickMode=null;
+  if(navPickClickHandler&&alertMapInstance){
+    alertMapInstance.off('click',navPickClickHandler);
+    navPickClickHandler=null;
+  }
+  if(navPickBannerEl){
+    navPickBannerEl.remove();
+    navPickBannerEl=null;
+  }
+  if(navPickEscapeHandler){
+    document.removeEventListener('keydown',navPickEscapeHandler);
+    navPickEscapeHandler=null;
+  }
+  var mapWrap=document.getElementById('alertMap');
+  if(mapWrap)mapWrap.classList.remove('alert-map-picking');
+  var startBtn=document.getElementById('navStartPickBtn');
+  if(startBtn)startBtn.classList.remove('nav-pick-active');
+  var destBtn=document.getElementById('navDestPickBtn');
+  if(destBtn)destBtn.classList.remove('nav-pick-active');
+}
+
 function navUseMyLocation(){
   if(!navigator.geolocation){
     navShowStatus('Geolocation not supported by your browser','error');
