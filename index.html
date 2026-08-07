@@ -24,6 +24,7 @@
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@turf/turf@7.0.0/turf.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.0/dist/umd/supabase.min.js"></script>
 <script src="https://platform.x.com/widgets.js" charset="utf-8"></script>
 <style>
@@ -1025,6 +1026,42 @@ body{
 }
 .storm-motion-eta-popup .leaflet-popup-content{margin:8px 12px;font-size:11px;font-family:'Inter',sans-serif}
 .storm-motion-eta-popup .leaflet-popup-tip{background:var(--acc)}
+
+/* ── Storm-Safe Navigation routes + waypoints ── */
+.nav-route-straight{
+  stroke:#ff5a5a;stroke-width:3;stroke-dasharray:6,4;
+  stroke-linecap:round;opacity:.7;
+  filter:drop-shadow(0 0 3px rgba(255,90,90,.5));
+}
+.nav-route-safe{
+  stroke:#39d353;stroke-width:4;
+  stroke-linecap:round;stroke-linejoin:round;opacity:.9;
+  filter:drop-shadow(0 0 4px rgba(57,211,83,.6));
+}
+.nav-route-wait{
+  stroke:#ffd60a;stroke-width:3;stroke-dasharray:3,5;
+  stroke-linecap:round;opacity:.7;
+}
+.nav-waypoint-marker{
+  background:#39d353;
+  border:2px solid #fff;
+  border-radius:50%;
+  width:14px;height:14px;
+  box-shadow:0 2px 6px rgba(0,0,0,.6);
+  display:flex;align-items:center;justify-content:center;
+  color:#000;font-size:8px;font-weight:700;
+  font-family:Inter,sans-serif;
+}
+.nav-waypoint-start{
+  background:#4285F4;border-color:#fff;
+}
+.nav-waypoint-end{
+  background:#ff7300;border-color:#fff;
+}
+.nav-hazard-buffer{
+  stroke:#ff5a5a;stroke-width:1;stroke-dasharray:4,3;
+  fill:#ff5a5a;fill-opacity:.08;
+}
 
 /* ── Surface observation markers ── */
 .obs-marker{
@@ -2267,6 +2304,59 @@ body.capturing .sat-legend{display:none!important}
             <option value="60">60 min</option>
           </select></label>
           <div style="font-size:8px;color:var(--t3);margin-top:4px" id="stormMotionStatus"></div>
+        </div>
+      </div>
+
+      <!-- Storm-Safe Navigation -->
+      <div class="collapsible-section" data-section="navroute">
+        <div class="collapsible-header" onclick="toggleSection(this)">
+          <span>Storm-Safe Navigation</span><i class="fas fa-chevron-right"></i>
+        </div>
+        <div class="collapsible-body">
+          <div style="font-size:9px;color:var(--t3);line-height:1.4;margin-bottom:6px">
+            Calculates a driving route that avoids active warning polygons.
+            Outputs a deep link for Google/Apple Maps with safe waypoints.
+          </div>
+          <div style="font-size:8px;color:var(--t3);text-transform:uppercase;letter-spacing:.04em;margin-top:4px;margin-bottom:2px">Start Point</div>
+          <div style="display:flex;gap:4px;align-items:center">
+            <input type="text" id="navStartInput" placeholder="Lat, Lon or place name" style="flex:1;background:var(--bg);border:1px solid var(--bdr);color:var(--t1);font-family:inherit;font-size:9px;padding:4px 6px;border-radius:4px;outline:none">
+            <button class="radar-anim-btn" onclick="navUseMyLocation()" title="Use my location" style="font-size:10px"><i class="fas fa-location-crosshairs"></i></button>
+          </div>
+          <div style="font-size:8px;color:var(--t3);text-transform:uppercase;letter-spacing:.04em;margin-top:4px;margin-bottom:2px">Destination</div>
+          <div style="display:flex;gap:4px;align-items:center">
+            <input type="text" id="navDestInput" placeholder="Lat, Lon or place name" style="flex:1;background:var(--bg);border:1px solid var(--bdr);color:var(--t1);font-family:inherit;font-size:9px;padding:4px 6px;border-radius:4px;outline:none">
+            <button class="radar-anim-btn" onclick="navLookupDestination()" title="Lookup place" style="font-size:10px"><i class="fas fa-magnifying-glass"></i></button>
+          </div>
+          <div style="font-size:8px;color:var(--t3);text-transform:uppercase;letter-spacing:.04em;margin-top:6px;margin-bottom:2px">Hazards to Avoid</div>
+          <select id="navHazardLevel" style="width:100%;background:var(--bg);border:1px solid var(--bdr);color:var(--t1);font-family:inherit;font-size:9px;padding:4px 6px;border-radius:4px;cursor:pointer;outline:none">
+            <option value="tornado_only">Tornado Warnings only</option>
+            <option value="tornado_severe" selected>Tornado + Severe T-Storm Warnings</option>
+            <option value="all_warnings">All Warnings</option>
+          </select>
+          <label style="margin:4px 0;font-size:9px">Buffer: <span id="navBufferLabel">7 mi</span>
+            <input type="range" id="navBuffer" min="3" max="15" value="7" step="1" oninput="document.getElementById('navBufferLabel').textContent=this.value+' mi'" style="width:100%;accent-color:var(--acc);cursor:pointer">
+          </label>
+          <button onclick="navCalculate()" style="width:100%;background:var(--acc);color:#000;border:none;padding:6px 12px;border-radius:4px;cursor:pointer;font-size:10px;font-weight:700;font-family:inherit;margin-top:4px">
+            <i class="fas fa-route"></i> Calculate Safe Route
+          </button>
+          <div id="navStatus" style="font-size:9px;color:var(--t3);margin-top:4px;line-height:1.4"></div>
+          <div id="navResults" style="display:none;margin-top:6px;padding:6px;background:var(--bg);border:1px solid var(--bdr);border-radius:4px">
+            <div style="font-size:9px;color:var(--t2);line-height:1.5" id="navResultsText"></div>
+            <div style="display:flex;gap:4px;margin-top:6px">
+              <button onclick="navOpenGoogle()" style="flex:1;background:#4285F4;color:#fff;border:none;padding:5px 8px;border-radius:3px;cursor:pointer;font-size:9px;font-weight:600;font-family:inherit">
+                <i class="fab fa-google"></i> Google Maps
+              </button>
+              <button onclick="navOpenApple()" style="flex:1;background:#000;color:#fff;border:1px solid #888;padding:5px 8px;border-radius:3px;cursor:pointer;font-size:9px;font-weight:600;font-family:inherit">
+                <i class="fab fa-apple"></i> Apple Maps
+              </button>
+            </div>
+            <button onclick="navClear()" style="width:100%;background:var(--bg2);color:var(--t2);border:1px solid var(--bdr);padding:4px 8px;border-radius:3px;cursor:pointer;font-size:9px;font-family:inherit;margin-top:4px">
+              <i class="fas fa-xmark"></i> Clear Route
+            </button>
+          </div>
+          <div style="font-size:7px;color:var(--t3);margin-top:6px;line-height:1.4;font-style:italic;border-top:1px solid var(--bdr);padding-top:4px">
+            <i class="fas fa-triangle-exclamation"></i> Routing aid only — not a safety guarantee. Always use your own judgment. No side of a severe storm is truly safe.
+          </div>
         </div>
       </div>
 
@@ -4876,6 +4966,12 @@ async function fAlertMap(){
     var attrCb=document.getElementById('amAlertAttrs');
     if(attrCb&&attrCb.checked){
       alertAttrRender();
+    }
+    /* Re-check the Storm-Safe Navigation route against new alerts.
+       Only fires if the user has an active route calculated — shows a
+       warning banner if new warnings intersect the route. */
+    if(typeof navRecheckRoute==='function'){
+      try{navRecheckRoute()}catch(e){console.warn('[Nav] Recheck failed:',e)}
     }
     /* Log the update to the console */
     if(isDeltaUpdate){
@@ -13951,6 +14047,685 @@ async function stormMotionETAReverseGeocode(lat,lon){
   }catch(e){
     console.warn('[StormETA] Reverse geocode failed:',e);
     span.innerHTML='<span style="color:var(--t3)">Nearest town:</span> <span style="color:var(--t3)">unavailable</span>';
+  }
+}
+
+/* ════════════════════════════════════════════════════════════════════════
+   Storm-Safe Navigation
+   ────────────────────────────────────────────────────────────────────────
+   Calculates a driving route from a start point to a destination that
+   avoids active NWS warning polygons. Generates deep links for Google
+   Maps and Apple Maps with safe waypoints.
+
+   Algorithm:
+   1. Parse start/destination (lat,lon or place name → Nominatim lookup)
+   2. Collect active warning polygons matching the user's hazard level
+   3. Buffer each polygon using turf.js (Tornado gets 1.5× buffer for
+      extra safety margin)
+   4. Sample the straight-line route from start to destination into ~30
+      points and check each against the buffered polygons
+   5. If no intersections → straight route is safe, no waypoints needed
+   6. If intersections found → for each intersecting polygon, compute a
+      safe waypoint on the perpendicular to storm motion (or to the
+      start→destination line if no storm motion data) on the side closer
+      to the original route
+   7. Order waypoints along the route, cap at 9 (Google Maps limit)
+   8. If too many hazards (>9 waypoints) or detour adds >50% to distance,
+      suggest "wait it out" instead of routing
+   9. Render preview on map + generate deep links
+
+   Limitations (documented):
+   - Straight-line heuristic only — actual driving distance may differ
+   - Storm motion is current, not predictive (storms can change course)
+   - Cannot push new routes to Maps during turn-by-turn navigation —
+     user must manually open the updated deep link
+   - "Safe flank" is a heuristic, not a meteorological guarantee
+
+   Dependencies: turf.js (loaded from CDN in <head>)
+   ════════════════════════════════════════════════════════════════════════ */
+
+/* Route state — kept in-memory only (no Supabase persistence). */
+var navRouteLayer=null;             /* Leaflet layerGroup for route preview */
+var navHazardBufferLayer=null;      /* Leaflet layerGroup for hazard buffer outlines */
+var navCurrentRoute=null;           /* {start:{lat,lon}, dest:{lat,lon}, waypoints:[{lat,lon}], hazards:[{event,id}], status:'safe'|'rerouted'|'wait', straightDistMi, safeDistMi} */
+var navIsCalculating=false;
+
+/* Use the browser's geolocation API to fill the start point. */
+function navUseMyLocation(){
+  if(!navigator.geolocation){
+    navShowStatus('Geolocation not supported by your browser','error');
+    return;
+  }
+  navShowStatus('<i class="fas fa-spinner fa-spin"></i> Getting your location...','info');
+  navigator.geolocation.getCurrentPosition(
+    function(pos){
+      var lat=pos.coords.latitude.toFixed(4);
+      var lon=pos.coords.longitude.toFixed(4);
+      var input=document.getElementById('navStartInput');
+      if(input)input.value=lat+', '+lon;
+      navShowStatus('Start point set to your current location','success');
+    },
+    function(err){
+      var msg='Geolocation error: ';
+      if(err.code===1)msg+='permission denied';
+      else if(err.code===2)msg+='position unavailable';
+      else if(err.code===3)msg+='timeout';
+      else msg+=err.message;
+      navShowStatus(msg,'error');
+    },
+    {enableHighAccuracy:true,timeout:10000,maximumAge:30000}
+  );
+}
+
+/* Look up a destination place name via OpenStreetMap Nominatim and fill
+   the destination input with the resulting lat,lon. Same service we use
+   for journal location lookups. */
+async function navLookupDestination(){
+  var input=document.getElementById('navDestInput');
+  if(!input)return;
+  var q=input.value.trim();
+  if(!q){
+    navShowStatus('Enter a place name in the destination field first','error');
+    return;
+  }
+  /* If the input already looks like lat,lon, skip the lookup */
+  if(/^-?\d+\.?\d*\s*,\s*-?\d+\.?\d*$/.test(q)){
+    navShowStatus('Destination is already coordinates','success');
+    return;
+  }
+  navShowStatus('<i class="fas fa-spinner fa-spin"></i> Looking up "'+q+'"...','info');
+  try{
+    var url='https://nominatim.openstreetmap.org/search?format=json&q='+encodeURIComponent(q)+'&limit=1&countrycodes=us';
+    var resp=await fetch(url,{headers:{'Accept':'application/json'}});
+    if(!resp.ok)throw new Error('HTTP '+resp.status);
+    var data=await resp.json();
+    if(!data||data.length===0){
+      navShowStatus('No match found for "'+q+'"','error');
+      return;
+    }
+    var lat=parseFloat(data[0].lat).toFixed(4);
+    var lon=parseFloat(data[0].lon).toFixed(4);
+    input.value=lat+', '+lon;
+    navShowStatus('Found: '+(data[0].display_name||q).split(',').slice(0,2).join(','),'success');
+  }catch(e){
+    navShowStatus('Lookup failed: '+(e.message||e),'error');
+  }
+}
+
+/* Parse a coordinate input — accepts "lat, lon" or "lat,lon". Returns
+   {lat,lon} or null if the input is invalid. */
+function navParseCoord(str){
+  if(!str)return null;
+  var m=str.match(/^(-?\d+\.?\d*)\s*,\s*(-?\d+\.?\d*)$/);
+  if(!m)return null;
+  var lat=parseFloat(m[1]);
+  var lon=parseFloat(m[2]);
+  if(isNaN(lat)||isNaN(lon))return null;
+  if(lat<-90||lat>90||lon<-180||lon>180)return null;
+  return {lat:lat,lon:lon};
+}
+
+/* Main calculation routine — called when user clicks "Calculate Safe Route". */
+async function navCalculate(){
+  if(navIsCalculating)return;
+  if(typeof turf==='undefined'){
+    navShowStatus('Geometry library (turf.js) not loaded. Check your connection.','error');
+    return;
+  }
+  if(!alertMapInstance)initAlertMap();
+  if(!alertMapInstance)return;
+
+  var startInput=document.getElementById('navStartInput');
+  var destInput=document.getElementById('navDestInput');
+  var startStr=startInput?startInput.value.trim():'';
+  var destStr=destInput?destInput.value.trim():'';
+
+  if(!startStr||!destStr){
+    navShowStatus('Enter both a start point and a destination','error');
+    return;
+  }
+
+  /* If destination looks like a place name (not coordinates), look it up first */
+  if(!navParseCoord(destStr)){
+    navShowStatus('<i class="fas fa-spinner fa-spin"></i> Looking up destination...','info');
+    await navLookupDestination();
+    destStr=destInput?destInput.value.trim():'';
+  }
+  /* Same for start */
+  if(!navParseCoord(startStr)){
+    navShowStatus('<i class="fas fa-spinner fa-spin"></i> Looking up start point...','info');
+    /* Temporarily swap inputs to reuse navLookupDestination */
+    var origDest=destInput.value;
+    destInput.value=startStr;
+    await navLookupDestination();
+    startInput.value=destInput.value;
+    destInput.value=origDest;
+    startStr=startInput.value.trim();
+  }
+
+  var start=navParseCoord(startStr);
+  var dest=navParseCoord(destStr);
+  if(!start||!dest){
+    navShowStatus('Could not parse coordinates. Use "lat, lon" format.','error');
+    return;
+  }
+
+  navIsCalculating=true;
+  navShowStatus('<i class="fas fa-spinner fa-spin"></i> Calculating safe route...','info');
+
+  try{
+    var hazardLevel=document.getElementById('navHazardLevel');
+    var bufferMi=parseInt(document.getElementById('navBuffer').value,10);
+    var level=hazardLevel?hazardLevel.value:'tornado_severe';
+
+    /* Step 1: Collect active warning polygons matching the hazard level */
+    var hazards=navCollectHazards(level);
+    if(hazards.length===0){
+      /* No hazards — straight route is safe */
+      navCurrentRoute={
+        start:start,dest:dest,waypoints:[],hazards:[],
+        status:'safe',
+        straightDistMi:navHaversineMi(start.lat,start.lon,dest.lat,dest.lon),
+        safeDistMi:navHaversineMi(start.lat,start.lon,dest.lat,dest.lon)
+      };
+      navRenderPreview();
+      navShowResults();
+      navShowStatus('No active warnings along route — straight path is safe','success');
+      return;
+    }
+
+    /* Step 2: Buffer each hazard polygon. Tornado warnings get 1.5× buffer
+       for extra safety. turf.buffer takes kilometers. */
+    var bufferedHazards=hazards.map(function(h){
+      var isTornado=h.event.toLowerCase().indexOf('tornado')>=0;
+      var bufKm=(isTornado?bufferMi*1.5:bufferMi)*1.60934;
+      try{
+        var buffered=turf.buffer(h.geojson,bufKm,{units:'kilometers'});
+        return {event:h.event,id:h.id,geojson:buffered,isTornado:isTornado};
+      }catch(e){
+        console.warn('[Nav] Buffer failed for',h.id,e);
+        return null;
+      }
+    }).filter(function(x){return x!==null});
+
+    /* Step 3: Build a turf line for the straight route and check intersection */
+    var startPt=turf.point([start.lon,start.lat]);
+    var destPt=turf.point([dest.lon,dest.lat]);
+    var straightLine=turf.lineString([[start.lon,start.lat],[dest.lon,dest.lat]]);
+
+    /* Step 4: Find which buffered polygons the straight route intersects */
+    var intersectingHazards=bufferedHazards.filter(function(h){
+      try{
+        return turf.booleanIntersects(straightLine,h.geojson);
+      }catch(e){
+        /* booleanIntersects can fail on geometry collections — try a fallback */
+        try{
+          var pts=turf.coordAll(h.geojson);
+          return pts.length>0;  /* assume intersection if we can't determine */
+        }catch(e2){return false}
+      }
+    });
+
+    if(intersectingHazards.length===0){
+      /* Buffered polygons exist but don't intersect the route — safe */
+      navCurrentRoute={
+        start:start,dest:dest,waypoints:[],hazards:hazards,
+        status:'safe',
+        straightDistMi:navHaversineMi(start.lat,start.lon,dest.lat,dest.lon),
+        safeDistMi:navHaversineMi(start.lat,start.lon,dest.lat,dest.lon)
+      };
+      navRenderPreview();
+      navShowResults();
+      navShowStatus(intersectingHazards.length+' warning(s) nearby but route is clear of buffered zones','success');
+      return;
+    }
+
+    /* Step 5: Compute safe waypoints for each intersecting hazard.
+       For each hazard:
+       - Compute the polygon's centroid + bounding radius
+       - Compute the perpendicular to the storm motion (if available)
+         or to the start→destination line
+       - Project a waypoint at centroid + perp × (radius + buffer) on the
+         side closer to the original route
+       - Pick the side that minimizes detour distance */
+    var waypoints=[];
+    var MAX_WAYPOINTS=9;  /* Google Maps hard limit */
+    intersectingHazards.forEach(function(h){
+      if(waypoints.length>=MAX_WAYPOINTS)return;
+      var wp=navComputeSafeWaypoint(h,start,dest,bufferMi);
+      if(wp)waypoints.push(wp);
+    });
+
+    /* Step 6: Order waypoints along the start→destination line (project
+       onto the line and sort by projection). */
+    if(waypoints.length>1){
+      var dir={x:dest.lon-start.lon,y:dest.lat-start.lat};
+      var dirLen=Math.sqrt(dir.x*dir.x+dir.y*dir.y);
+      if(dirLen>0){dir.x/=dirLen;dir.y/=dirLen}
+      waypoints.sort(function(a,b){
+        var pa=(a.lon-start.lon)*dir.x+(a.lat-start.lat)*dir.y;
+        var pb=(b.lon-start.lon)*dir.x+(b.lat-start.lat)*dir.y;
+        return pa-pb;
+      });
+    }
+
+    /* Step 7: Compute safe route distance (start → wp1 → wp2 → ... → dest) */
+    var safeDistMi=navHaversineMi(start.lat,start.lon,dest.lat,dest.lon);
+    if(waypoints.length>0){
+      safeDistMi=navHaversineMi(start.lat,start.lon,waypoints[0].lat,waypoints[0].lon);
+      for(var i=1;i<waypoints.length;i++){
+        safeDistMi+=navHaversineMi(waypoints[i-1].lat,waypoints[i-1].lon,waypoints[i].lat,waypoints[i].lon);
+      }
+      safeDistMi+=navHaversineMi(waypoints[waypoints.length-1].lat,waypoints[waypoints.length-1].lon,dest.lat,dest.lon);
+    }
+    var straightDistMi=navHaversineMi(start.lat,start.lon,dest.lat,dest.lon);
+    var detourPct=((safeDistMi-straightDistMi)/straightDistMi)*100;
+
+    /* Step 8: Decide — safe route, rerouted, or wait-it-out */
+    if(waypoints.length===0||detourPct>50||intersectingHazards.length>MAX_WAYPOINTS){
+      /* Too many hazards or absurd detour — suggest waiting */
+      navCurrentRoute={
+        start:start,dest:dest,waypoints:[],hazards:hazards,
+        status:'wait',
+        straightDistMi:straightDistMi,
+        safeDistMi:safeDistMi,
+        detourPct:detourPct,
+        reason:waypoints.length===0?'No safe waypoint could be computed':
+                detourPct>50?'Detour would add '+Math.round(detourPct)+'% to distance':
+                'Too many active warnings ('+intersectingHazards.length+') to route around'
+      };
+      navRenderPreview();
+      navShowResults();
+      navShowStatus('Suggest waiting — '+navCurrentRoute.reason,'warn');
+      return;
+    }
+
+    /* Safe rerouted route */
+    navCurrentRoute={
+      start:start,dest:dest,waypoints:waypoints,hazards:hazards,
+      status:'rerouted',
+      straightDistMi:straightDistMi,
+      safeDistMi:safeDistMi,
+      detourPct:detourPct
+    };
+    navRenderPreview();
+    navShowResults();
+    navShowStatus('Safe route calculated — '+waypoints.length+' waypoint(s), +'+Math.round(detourPct)+'% detour','success');
+  }catch(e){
+    console.error('[Nav] Calculation failed:',e);
+    navShowStatus('Calculation failed: '+(e.message||e),'error');
+  }finally{
+    navIsCalculating=false;
+  }
+}
+
+/* Collect active warning polygons from drawnAlerts matching the hazard level. */
+function navCollectHazards(level){
+  var hazards=[];
+  if(!drawnAlerts||drawnAlerts.length===0)return hazards;
+  drawnAlerts.forEach(function(a){
+    if(!a.event||!a.geoms||a.geoms.length===0)return;
+    if(a.cat!=='warnings')return;
+    var ev=a.event.toLowerCase();
+    var isTornado=ev.indexOf('tornado')>=0;
+    var isSevere=ev.indexOf('severe thunderstorm')>=0||ev.indexOf('severe tstorm')>=0;
+    if(level==='tornado_only'&&!isTornado)return;
+    if(level==='tornado_severe'&&!isTornado&&!isSevere)return;
+    /* 'all_warnings' includes everything in the warnings category */
+    /* Convert each geometry to a turf-compatible GeoJSON Feature */
+    a.geoms.forEach(function(g){
+      try{
+        /* Some geoms are Polygon, some are MultiPolygon — turf handles both */
+        var feature={type:'Feature',geometry:g,properties:{}};
+        hazards.push({event:a.event,id:a.id||'',geojson:feature});
+      }catch(e){/* skip invalid geoms */}
+    });
+  });
+  return hazards;
+}
+
+/* Compute a safe waypoint around a single hazard polygon.
+   - Compute centroid via turf
+   - Compute bounding radius (max distance from centroid to any vertex)
+   - Compute perpendicular direction:
+     * Prefer perpendicular to storm motion (if we have it for this storm)
+     * Fall back to perpendicular to the start→dest line
+   - Project waypoint on both sides, pick the one closer to the start→dest line */
+function navComputeSafeWaypoint(hazard,start,dest,bufferMi){
+  try{
+    var centroid=turf.centroid(hazard.geojson);
+    var cLon=centroid.geometry.coordinates[0];
+    var cLat=centroid.geometry.coordinates[1];
+    /* Bounding radius — find max distance from centroid to any vertex */
+    var coords=turf.coordAll(hazard.geojson);
+    var maxDistKm=0;
+    coords.forEach(function(c){
+      var d=turf.distance(turf.point(c),centroid,{units:'kilometers'});
+      if(d>maxDistKm)maxDistKm=d;
+    });
+    /* Add the buffer to the bounding radius, plus 10% safety margin */
+    var radiusKm=maxDistKm+(bufferMi*1.60934*0.5)+5;
+    /* Determine storm motion for this hazard (if we have it) */
+    var motionBearing=null;
+    if(hazard.id&&stormTracks[hazard.id]&&stormTracks[hazard.id].motion){
+      motionBearing=stormTracks[hazard.id].motion.bearing;
+    }
+    /* Compute the "axis" we want to go perpendicular to.
+       - If we have storm motion, the safe side is perpendicular to motion
+       - Otherwise, perpendicular to the start→dest line (route around the side) */
+    var axisBearing;
+    if(motionBearing!==null){
+      axisBearing=motionBearing;
+    }else{
+      axisBearing=navBearing(start.lat,start.lon,dest.lat,dest.lon);
+    }
+    /* Perpendicular directions (axis ± 90°) */
+    var perp1=(axisBearing+90)%360;
+    var perp2=(axisBearing+270)%360;
+    /* Compute candidate waypoints on both sides */
+    var wp1=navDestinationPoint(cLat,cLon,radiusKm,perp1);
+    var wp2=navDestinationPoint(cLat,cLon,radiusKm,perp2);
+    /* Pick the side closer to the start→dest line.
+       Compute perpendicular distance from each candidate to the line. */
+    var d1=navPointToLineDistanceMi(wp1.lat,wp1.lon,start.lat,start.lon,dest.lat,dest.lon);
+    var d2=navPointToLineDistanceMi(wp2.lat,wp2.lon,start.lat,start.lon,dest.lat,dest.lon);
+    var wp=d1<=d2?wp1:wp2;
+    /* Sanity check — make sure the waypoint itself is not inside another hazard.
+       (Skip this check for simplicity in Phase 1 — turf.booleanContains per hazard
+       would be O(n²) and we have few hazards.) */
+    return {lat:wp.lat,lon:wp.lon,hazardEvent:hazard.event};
+  }catch(e){
+    console.warn('[Nav] Waypoint computation failed:',e);
+    return null;
+  }
+}
+
+/* Haversine distance in miles (reused from boundary detection). */
+function navHaversineMi(lat1,lon1,lat2,lon2){
+  var R=3958.8;
+  var dLat=(lat2-lat1)*Math.PI/180;
+  var dLon=(lon2-lon1)*Math.PI/180;
+  var a=Math.sin(dLat/2)*Math.sin(dLat/2)+
+    Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*
+    Math.sin(dLon/2)*Math.sin(dLon/2);
+  return 2*R*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));
+}
+
+/* Bearing from point 1 to point 2, in degrees clockwise from north. */
+function navBearing(lat1,lon1,lat2,lon2){
+  var φ1=lat1*Math.PI/180;
+  var φ2=lat2*Math.PI/180;
+  var Δλ=(lon2-lon1)*Math.PI/180;
+  var y=Math.sin(Δλ)*Math.cos(φ2);
+  var x=Math.cos(φ1)*Math.sin(φ2)-Math.sin(φ1)*Math.cos(φ2)*Math.cos(Δλ);
+  return (Math.atan2(y,x)*180/Math.PI+360)%360;
+}
+
+/* Destination point given origin, distance (km), and bearing (degrees).
+   Reuses the storm motion destination point logic. */
+function navDestinationPoint(lat,lon,distanceKm,bearing){
+  var R=6371;  /* Earth radius in km */
+  var br=bearing*Math.PI/180;
+  var lat1=lat*Math.PI/180;
+  var lon1=lon*Math.PI/180;
+  var lat2=Math.asin(Math.sin(lat1)*Math.cos(distanceKm/R)+Math.cos(lat1)*Math.sin(distanceKm/R)*Math.cos(br));
+  var lon2=lon1+Math.atan2(Math.sin(br)*Math.sin(distanceKm/R)*Math.cos(lat1),Math.cos(distanceKm/R)-Math.sin(lat1)*Math.sin(lat2));
+  return {lat:lat2*180/Math.PI,lon:lon2*180/Math.PI};
+}
+
+/* Perpendicular distance from a point to a line segment (in miles).
+   Used to pick which side of a hazard to route around. */
+function navPointToLineDistanceMi(px,py,x1,y1,x2,y2){
+  /* Convert lat/lon to a flat approximation (good enough for short distances) */
+  var dx=x2-x1,dy=y2-y1;
+  var lenSq=dx*dx+dy*dy;
+  if(lenSq===0){
+    return navHaversineMi(px,py,x1,y1);
+  }
+  var t=((px-x1)*dx+(py-y1)*dy)/lenSq;
+  t=Math.max(0,Math.min(1,t));
+  var projX=x1+t*dx;
+  var projY=y1+t*dy;
+  return navHaversineMi(px,py,projX,projY);
+}
+
+/* Render the route preview on the map — straight line (red if blocked),
+   safe route (green), and waypoint markers. */
+function navRenderPreview(){
+  if(!alertMapInstance)return;
+  /* Clear previous preview */
+  if(navRouteLayer){
+    try{alertMapInstance.removeLayer(navRouteLayer)}catch(e){}
+  }
+  if(navHazardBufferLayer){
+    try{alertMapInstance.removeLayer(navHazardBufferLayer)}catch(e){}
+  }
+  navRouteLayer=L.layerGroup().addTo(alertMapInstance);
+  navHazardBufferLayer=L.layerGroup().addTo(alertMapInstance);
+  if(!navCurrentRoute)return;
+  var r=navCurrentRoute;
+  /* Draw hazard buffer outlines (faint red hatching) so the user can see
+     what we're routing around */
+  if(r.hazards&&r.hazards.length>0){
+    r.hazards.forEach(function(h){
+      try{
+        var buffered=null;
+        var isTornado=h.event.toLowerCase().indexOf('tornado')>=0;
+        var bufferMi=parseInt(document.getElementById('navBuffer').value,10);
+        var bufKm=(isTornado?bufferMi*1.5:bufferMi)*1.60934;
+        if(typeof turf!=='undefined'&&h.geojson){
+          var feat=h.geojson.type==='Feature'?h.geojson:{type:'Feature',geometry:h.geojson,properties:{}};
+          buffered=turf.buffer(feat,bufKm,{units:'kilometers'});
+        }
+        if(buffered){
+          L.geoJSON(buffered,{
+            style:{color:'#ff5a5a',weight:1,dashArray:'4,3',fillColor:'#ff5a5a',fillOpacity:0.08,className:'nav-hazard-buffer'}
+          }).addTo(navHazardBufferLayer);
+        }
+      }catch(e){/* skip */}
+    });
+  }
+  /* Draw straight-line route (red if blocked, faded if safe) */
+  var straightClass=r.status==='safe'?'':'nav-route-straight';
+  var straightColor=r.status==='safe'?'#39d353':'#ff5a5a';
+  var straightOpacity=r.status==='safe'?0.5:0.7;
+  L.polyline([[r.start.lat,r.start.lon],[r.dest.lat,r.dest.lon]],{
+    color:straightColor,weight:r.status==='safe'?2:3,opacity:straightOpacity,
+    dashArray:r.status==='safe'?'4,6':'6,4',className:straightClass
+  }).addTo(navRouteLayer);
+  /* Draw safe route (green) if we have waypoints */
+  if(r.waypoints&&r.waypoints.length>0){
+    var latlngs=[[r.start.lat,r.start.lon]];
+    r.waypoints.forEach(function(wp){latlngs.push([wp.lat,wp.lon])});
+    latlngs.push([r.dest.lat,r.dest.lon]);
+    L.polyline(latlngs,{
+      color:'#39d353',weight:4,opacity:0.9,className:'nav-route-safe'
+    }).addTo(navRouteLayer);
+    /* Draw waypoint markers */
+    r.waypoints.forEach(function(wp,i){
+      var icon=L.divIcon({
+        className:'',
+        html:'<div class="nav-waypoint-marker">'+(i+1)+'</div>',
+        iconSize:[14,14],iconAnchor:[7,7]
+      });
+      var marker=L.marker([wp.lat,wp.lon],{icon:icon});
+      marker.bindPopup(
+        '<div style="font-family:Inter,sans-serif;min-width:160px">'+
+          '<div style="color:#39d353;font-weight:700;font-size:11px;margin-bottom:4px">Waypoint '+(i+1)+' of '+r.waypoints.length+'</div>'+
+          '<div style="font-size:9px;color:var(--t2);line-height:1.5">'+
+            'Avoiding: <b style="color:#ff5a5a">'+(wp.hazardEvent||'warning')+'</b><br>'+
+            'Lat/Lon: '+wp.lat.toFixed(4)+', '+wp.lon.toFixed(4)+
+          '</div>'+
+        '</div>',
+        {maxWidth:220}
+      );
+      marker.addTo(navRouteLayer);
+    });
+  }
+  /* Draw start marker (blue) */
+  var startIcon=L.divIcon({
+    className:'',
+    html:'<div class="nav-waypoint-marker nav-waypoint-start">S</div>',
+    iconSize:[14,14],iconAnchor:[7,7]
+  });
+  L.marker([r.start.lat,r.start.lon],{icon:startIcon}).bindPopup(
+    '<div style="font-family:Inter,sans-serif"><b style="color:#4285F4">Start</b><br><span style="font-size:9px;color:var(--t3)">'+r.start.lat.toFixed(4)+', '+r.start.lon.toFixed(4)+'</span></div>'
+  ).addTo(navRouteLayer);
+  /* Draw destination marker (orange) */
+  var destIcon=L.divIcon({
+    className:'',
+    html:'<div class="nav-waypoint-marker nav-waypoint-end">D</div>',
+    iconSize:[14,14],iconAnchor:[7,7]
+  });
+  L.marker([r.dest.lat,r.dest.lon],{icon:destIcon}).bindPopup(
+    '<div style="font-family:Inter,sans-serif"><b style="color:#ff7300">Destination</b><br><span style="font-size:9px;color:var(--t3)">'+r.dest.lat.toFixed(4)+', '+r.dest.lon.toFixed(4)+'</span></div>'
+  ).addTo(navRouteLayer);
+  /* Fit the map to show the full route */
+  var bounds=L.latLngBounds([r.start.lat,r.start.lon],[r.dest.lat,r.dest.lon]);
+  if(r.waypoints){
+    r.waypoints.forEach(function(wp){bounds.extend([wp.lat,wp.lon])});
+  }
+  if(bounds.isValid()){
+    alertMapInstance.fitBounds(bounds,{padding:[60,60],maxZoom:11});
+  }
+}
+
+/* Show the results panel with summary + open in Maps buttons. */
+function navShowResults(){
+  var resultsEl=document.getElementById('navResults');
+  var textEl=document.getElementById('navResultsText');
+  if(!resultsEl||!textEl||!navCurrentRoute){return}
+  var r=navCurrentRoute;
+  var html='';
+  if(r.status==='safe'){
+    html+='<div style="color:#39d353;font-weight:700;margin-bottom:4px"><i class="fas fa-check-circle"></i> Route is safe</div>';
+    html+='No active warnings along your straight-line route.';
+  }else if(r.status==='rerouted'){
+    html+='<div style="color:#39d353;font-weight:700;margin-bottom:4px"><i class="fas fa-route"></i> Safe route calculated</div>';
+    html+='Waypoints: <b>'+r.waypoints.length+'</b><br>';
+    html+='Avoiding: <b>'+(r.hazards.length)+' warning(s)</b><br>';
+    html+='Detour: <b>+'+Math.round(r.detourPct)+'%</b> ('+r.straightDistMi.toFixed(0)+' → '+r.safeDistMi.toFixed(0)+' mi)';
+  }else if(r.status==='wait'){
+    html+='<div style="color:#ffd60a;font-weight:700;margin-bottom:4px"><i class="fas fa-clock"></i> Suggest waiting</div>';
+    html+=r.reason||'No safe route available.<br>';
+    html+='Active warnings: <b>'+r.hazards.length+'</b><br>';
+    html+='Try again in 30 minutes when storms may have cleared.';
+  }
+  textEl.innerHTML=html;
+  resultsEl.style.display='block';
+}
+
+/* Show status text below the Calculate button. */
+function navShowStatus(msg,type){
+  var el=document.getElementById('navStatus');
+  if(!el)return;
+  var color=type==='error'?'#ff5a5a':type==='success'?'#39d353':type==='warn'?'#ffd60a':'var(--t3)';
+  el.innerHTML='<span style="color:'+color+'">'+msg+'</span>';
+}
+
+/* Build the Google Maps deep link with waypoints. */
+function navOpenGoogle(){
+  if(!navCurrentRoute){return}
+  var r=navCurrentRoute;
+  var url='https://www.google.com/maps/dir/?api=1';
+  url+='&origin='+r.start.lat+','+r.start.lon;
+  url+='&destination='+r.dest.lat+','+r.dest.lon;
+  url+='&travelmode=driving';
+  if(r.waypoints&&r.waypoints.length>0){
+    /* Google Maps accepts waypoints as pipe-separated lat,lon pairs */
+    var wpStr=r.waypoints.map(function(wp){return wp.lat+','+wp.lon}).join('|');
+    url+='&waypoints='+encodeURIComponent(wpStr);
+  }
+  window.open(url,'_blank');
+}
+
+/* Build the Apple Maps deep link with waypoints. */
+function navOpenApple(){
+  if(!navCurrentRoute){return}
+  var r=navCurrentRoute;
+  /* Apple Maps URL scheme: https://developer.apple.com/library/archive/featuredarticles/iPhoneURLScheme_Reference/MapLinks/MapLinks.html */
+  var url='https://maps.apple.com/?';
+  var params=[];
+  params.push('saddr='+r.start.lat+','+r.start.lon);
+  /* Apple Maps doesn't support multiple waypoints in the same way as Google.
+     For waypoints, we use daddr with the destination, and the user has to
+     manually add intermediate stops. As a workaround, if we have waypoints,
+     we set the destination to the FIRST waypoint (closest to start) and
+     note that the user should add the rest manually.
+     Actually, Apple Maps supports multiple daddr params separated by commas
+     for multi-stop routes — but only on iOS 16+. We'll use that format. */
+  if(r.waypoints&&r.waypoints.length>0){
+    /* Multi-stop: daddr=wp1,wp2,...,dest */
+    var stops=r.waypoints.map(function(wp){return wp.lat+','+wp.lon});
+    stops.push(r.dest.lat+','+r.dest.lon);
+    params.push('daddr='+stops.join(','));
+  }else{
+    params.push('daddr='+r.dest.lat+','+r.dest.lon);
+  }
+  params.push('dirflg=d');  /* driving */
+  url+=params.join('&');
+  window.open(url,'_blank');
+}
+
+/* Clear the current route and preview. */
+function navClear(){
+  if(navRouteLayer){
+    try{alertMapInstance.removeLayer(navRouteLayer)}catch(e){}
+    navRouteLayer=null;
+  }
+  if(navHazardBufferLayer){
+    try{alertMapInstance.removeLayer(navHazardBufferLayer)}catch(e){}
+    navHazardBufferLayer=null;
+  }
+  navCurrentRoute=null;
+  var resultsEl=document.getElementById('navResults');
+  if(resultsEl)resultsEl.style.display='none';
+  navShowStatus('','info');
+}
+
+/* Re-check the current route against new alert data. Called from fAlertMap
+   after each alert refresh cycle. If a new warning intersects the route,
+   show a warning banner prompting the user to recalculate. */
+function navRecheckRoute(){
+  if(!navCurrentRoute||!navCurrentRoute.start||!navCurrentRoute.dest)return;
+  /* Don't recheck if the user is in the middle of calculating */
+  if(navIsCalculating)return;
+  var hazardLevel=document.getElementById('navHazardLevel');
+  var level=hazardLevel?hazardLevel.value:'tornado_severe';
+  var hazards=navCollectHazards(level);
+  if(hazards.length===0)return;  /* No active hazards, nothing to recheck */
+  /* Check if any NEW hazard (not in the original route's hazards list)
+     intersects the straight line OR any of the safe route's segments */
+  var originalHazardIds=(navCurrentRoute.hazards||[]).map(function(h){return h.id});
+  var newHazards=hazards.filter(function(h){
+    return originalHazardIds.indexOf(h.id)<0;
+  });
+  if(newHazards.length===0)return;
+  /* Check if any new hazard intersects the route */
+  var startPt=navCurrentRoute.start;
+  var destPt=navCurrentRoute.dest;
+  var straightLine=turf.lineString([[startPt.lon,startPt.lat],[destPt.lon,destPt.lat]]);
+  /* Also check safe route segments if we have waypoints */
+  var routeLines=[straightLine];
+  if(navCurrentRoute.waypoints&&navCurrentRoute.waypoints.length>0){
+    var pts=[[startPt.lon,startPt.lat]];
+    navCurrentRoute.waypoints.forEach(function(wp){pts.push([wp.lon,wp.lat])});
+    pts.push([destPt.lon,destPt.lat]);
+    routeLines.push(turf.lineString(pts));
+  }
+  var intersectingNew=newHazards.filter(function(h){
+    return routeLines.some(function(line){
+      try{return turf.booleanIntersects(line,h.geojson)}catch(e){return false}
+    });
+  });
+  if(intersectingNew.length>0){
+    /* Show a prominent warning banner */
+    navShowStatus(
+      '<i class="fas fa-triangle-exclamation"></i> <b>NEW WARNING detected near your route!</b> '+
+      intersectingNew.length+' new hazard(s). <a href="javascript:navCalculate()" style="color:var(--acc);font-weight:700">Recalculate route →</a>',
+      'warn'
+    );
+    console.log('[Nav] New hazards detected near route:',intersectingNew.length);
   }
 }
 

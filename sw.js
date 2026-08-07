@@ -13,7 +13,7 @@
    - Map tiles (cartocdn.com, tilecache.rainviewer.com): network-only
      (too many to cache, and they update frequently) */
 
-var CACHE_NAME='skywarn-us-v53';
+var CACHE_NAME='skywarn-us-v54';
 var STATIC_ASSETS=[
   './manifest.json',
   './skywarn-logo.png',
@@ -21,7 +21,8 @@ var STATIC_ASSETS=[
   'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css',
   'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css',
   'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js',
-  'https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js'
+  'https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js',
+  'https://cdn.jsdelivr.net/npm/@turf/turf@7.0.0/turf.min.js'
   /* NOTE: index.html is NOT in this list - it's fetched network-first
      so the latest version is always loaded. See the fetch handler below. */
 ];
