@@ -1041,6 +1041,25 @@ body{
 .storm-motion-eta-popup-below .leaflet-popup-close-button{
   top:6px;
 }
+/* The pin marker dropped at the exact clicked point — a red location pin
+   icon that stays put while the popup hangs below it. */
+.storm-eta-pin-icon{
+  background:transparent;
+  border:none;
+}
+.storm-eta-pin-icon::before{
+  content:'\f3c5';  /* fa-map-pin-alt / location-dot */
+  font-family:'Font Awesome 6 Free';
+  font-weight:900;
+  color:#ff5a5a;
+  font-size:24px;
+  text-shadow:0 1px 3px rgba(0,0,0,.8),0 0 8px rgba(255,90,90,.5);
+  /* Center the icon on the lat/lon point. The icon anchor is set to
+     [12,24] in the divIcon (half width, full height) so the bottom tip
+     of the pin touches the exact clicked point. */
+  display:block;
+  line-height:1;
+}
 
 /* ── Storm-Safe Navigation routes + waypoints ── */
 .nav-route-straight{
@@ -14067,12 +14086,20 @@ function stormMotionETA(targetLatlng){
     }
   });
 
+  /* Drop a pin marker 📍 at the exact clicked point so the user can see
+     where they clicked. The popup will hang below this pin. The pin is
+     removed when the popup closes (see stormEtaRemovePin below). */
+  stormEtaDropPin(targetLat,targetLon);
+
   if(!nearestStorm){
     /* No tracked storms with motion — show message */
     L.popup({className:'storm-motion-eta-popup storm-motion-eta-popup-below',maxWidth:260,autoPan:false})
       .setLatLng(targetLatlng)
       .setContent('<div style="font-family:Inter,sans-serif"><div style="color:#ff7300;font-weight:700;font-size:12px;margin-bottom:4px"><i class="fas fa-wind"></i> Storm ETA</div><div style="color:var(--t3);font-size:10px">No tracked storms with motion data. Enable Storm Motion Vectors and wait for storm tracking data to accumulate.</div></div>')
       .openOn(alertMapInstance);
+    /* When the popup is closed (by clicking elsewhere or pressing Escape),
+       remove the pin marker. */
+    alertMapInstance.once('popupclose',stormEtaRemovePin);
     /* Use requestAnimationFrame to ensure the popup DOM has rendered
        before measuring its height. */
     requestAnimationFrame(stormMotionETAPositionBelow);
@@ -14130,6 +14157,8 @@ function stormMotionETA(targetLatlng){
     .setLatLng(targetLatlng)
     .setContent(html)
     .openOn(alertMapInstance);
+  /* When the popup is closed, remove the pin marker. */
+  alertMapInstance.once('popupclose',stormEtaRemovePin);
   /* Position the popup BELOW the clicked point (tip pointing up) so it
      doesn't cover the radar/polygon above — important for screenshots.
      Use requestAnimationFrame to ensure the popup DOM has rendered
@@ -14167,27 +14196,64 @@ function stormMotionETAPositionBelow(){
   if(!container)return;
   var wrapper=container.querySelector('.leaflet-popup-content-wrapper');
   if(!wrapper)return;
-  /* Measure the content wrapper height and shift the popup down by that
-     amount + a small offset for the tip. This makes the popup's top
-     (where the flipped tip is) align with the anchor point and the body
-     hang below — keeping the area above the clicked point visible for
-     screenshots.
-
-     We use `top` (not margin-top or transform) because:
-     - transform is already used by Leaflet for positioning
-     - margin-top can be overridden by Leaflet's _updatePosition
-     - `top` is additive with transform: final position = top + transform
-
-     We do NOT call popup.update() because that triggers autoPan which
-     would move the map to compensate for the shifted popup, undoing
-     our adjustment. autoPan is also disabled on the popup options. */
+  /* Measure the content wrapper height. If 0, the popup hasn't rendered
+     yet — try again next frame. */
   var h=wrapper.offsetHeight;
-  /* If height is 0, the popup hasn't rendered yet — try again next frame */
   if(h===0){
     requestAnimationFrame(stormMotionETAPositionBelow);
     return;
   }
-  container.style.top=(h+6)+'px';
+  /* Leaflet positions the popup using transform: translate3d(x, y, 0).
+     The y value is calculated to put the BOTTOM of the popup (where the
+     tip normally is) at the anchor point. Since we moved the tip to the
+     TOP via CSS, we need to shift the popup DOWN by its height so the
+     top (where the flipped tip is) aligns with the anchor point.
+
+     We modify the transform directly — parse the current translate3d,
+     add the popup height to the y component, and set it back. This is
+     more reliable than using `top` or `margin-top` which Leaflet's
+     _updatePosition can override. */
+  var transform=container.style.transform;
+  if(transform){
+    /* Parse: translate3d(Xpx, Ypx, 0) → extract X and Y */
+    var m=transform.match(/translate3d\(\s*(-?[\d.]+)px\s*,\s*(-?[\d.]+)px\s*,\s*(-?[\d.]+)px\s*\)/);
+    if(m){
+      var x=parseFloat(m[1]);
+      var y=parseFloat(m[2]);
+      var z=parseFloat(m[3]);
+      /* Shift the popup down by its height + tip offset (6px) so the
+         top of the popup (where the flipped tip is) sits at the anchor
+         point, and the body hangs below the pin. */
+      var newY=y+h+6;
+      container.style.transform='translate3d('+x+'px,'+newY+'px,'+z+'px)';
+    }
+  }
+}
+
+/* Drop a pin marker 📍 at the exact clicked point. The pin stays on the
+   map while the Storm ETA popup is open, giving the user a visual anchor
+   for where they clicked. Removed when the popup closes. */
+var stormEtaPinMarker=null;
+function stormEtaDropPin(lat,lon){
+  /* Remove any existing pin first (in case one is left over) */
+  stormEtaRemovePin();
+  if(!alertMapInstance)return;
+  var icon=L.divIcon({
+    className:'storm-eta-pin-icon',
+    html:'',
+    iconSize:[24,24],
+    iconAnchor:[12,24]  /* bottom-center of the pin touches the lat/lon */
+  });
+  stormEtaPinMarker=L.marker([lat,lon],{icon:icon,interactive:false,zIndexOffset:1000});
+  stormEtaPinMarker.addTo(alertMapInstance);
+}
+
+/* Remove the pin marker from the map. */
+function stormEtaRemovePin(){
+  if(stormEtaPinMarker&&alertMapInstance){
+    try{alertMapInstance.removeLayer(stormEtaPinMarker)}catch(e){}
+    stormEtaPinMarker=null;
+  }
 }
 
 /* Reverse-geocode a lat/lon using OSM Nominatim and update the
