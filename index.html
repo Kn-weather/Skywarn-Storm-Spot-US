@@ -14069,6 +14069,205 @@ function stormMotionDestinationPoint(lat,lon,distanceM,bearing){
 }
 
 /* Step 4: Storm ETA tool — user clicks map, compute ETA from nearest storm */
+/* Store the last ETA data so the screenshot function can build the info
+   panel after the popup is closed (html2canvas needs the popup hidden
+   during capture, so we rebuild the info as a separate panel). */
+var stormETALastData=null;
+
+/* Screenshot the Storm ETA popup + map view. Captures the current map
+   view (with the pin + popup visible), then composites it with an info
+   panel containing the ETA details and the Skywarn branding footer.
+   Same pattern as screenshotAlert(). */
+async function screenshotStormETA(){
+  if(!alertMapInstance||typeof html2canvas==='undefined'){
+    alert('Screenshot library not loaded');
+    return;
+  }
+  if(!stormETALastData){
+    alert('No Storm ETA data available');
+    return;
+  }
+  currentScreenshotType='Storm ETA';
+  currentScreenshotAlertCoords={lat:stormETALastData.targetLat,lon:stormETALastData.targetLon};
+  currentScreenshotAlertMeta={
+    event:'Storm ETA — '+stormETALastData.event,
+    areaDesc:'',
+    headline:'Storm ETA at '+stormETALastData.targetLat.toFixed(4)+', '+stormETALastData.targetLon.toFixed(4)
+  };
+  /* Close the popup so it doesn't appear in the map capture (we'll rebuild
+     the info as a separate panel), but keep the pin on the map. */
+  alertMapInstance.closePopup();
+
+  /* Helper: wait for map tiles to load after any zoom/pan change */
+  function waitForMapLoad(){
+    return new Promise(function(resolve){
+      var done=false;
+      function finish(){if(!done){done=true;setTimeout(resolve,400)}}
+      if(!alertMapInstance._loaded){resolve();return}
+      alertMapInstance.once('load',finish);
+      setTimeout(finish,1800);
+    });
+  }
+  /* Helper: capture the current map view */
+  async function captureMap(){
+    var mapEl=document.getElementById('alertMap');
+    var dpr=window.devicePixelRatio||1;
+    var capScale=Math.min(dpr,1.5);
+    return await html2canvas(mapEl,{
+      useCORS:true,allowTaint:true,backgroundColor:'#e0e0e0',scale:capScale,
+      logging:false,imageTimeout:5000,
+      width:mapEl.offsetWidth,height:mapEl.offsetHeight,
+      windowWidth:mapEl.offsetWidth,windowHeight:mapEl.offsetHeight,
+      x:0,y:0,scrollX:0,scrollY:0
+    });
+  }
+
+  var mapCanvas=null;
+  try{
+    await waitForMapLoad();
+    document.body.classList.add('capturing');
+    /* Keep the pin visible during capture — we want to show where the
+       user clicked. The pin is a Leaflet marker, so it's part of the
+       map canvas. The popup is closed (we'll rebuild the info panel). */
+    await new Promise(function(r){requestAnimationFrame(function(){requestAnimationFrame(r)})});
+    mapCanvas=await captureMap();
+    document.body.classList.remove('capturing');
+    if(!mapCanvas)throw new Error('Map capture failed');
+
+    /* Build the info panel (RIGHT side) — same style as screenshotAlert */
+    var panel=document.createElement('div');
+    panel.style.cssText='position:absolute;left:-9999px;top:0;width:280px;background:#0a0a0a;border:1px solid #ff7300;border-radius:8px;padding:16px;font-family:Inter,sans-serif;font-size:11px;color:#f0f0f0;line-height:1.5;box-shadow:0 4px 20px rgba(0,0,0,.5)';
+    var d=stormETALastData;
+    var ph='';
+    ph+='<div style="background:#ff7300;margin:-16px -16px 12px -16px;padding:12px 16px;border-radius:7px 7px 0 0;font-size:15px;font-weight:700;color:#000"><i class="fas fa-wind"></i> Storm ETA</div>';
+    ph+='<div style="font-size:10px;color:#a0a0a0;margin-bottom:10px">'+d.event+'</div>';
+    /* Selected Point section */
+    ph+='<div style="margin-bottom:10px"><div style="font-size:9px;color:#ff7300;text-transform:uppercase;letter-spacing:.04em;margin-bottom:4px;font-weight:700"><i class="fas fa-map-marker-alt"></i> Selected Point</div>';
+    ph+='<table style="width:100%;font-size:10px;border-collapse:collapse">';
+    ph+='<tr><td style="padding:3px 8px 3px 0;color:#606060;white-space:nowrap">Lat/Lon</td><td style="padding:3px 0;color:#ff7300;font-weight:600">'+d.targetLat.toFixed(4)+', '+d.targetLon.toFixed(4)+'</td></tr>';
+    var townText=d.nearestTown||'unavailable';
+    ph+='<tr><td style="padding:3px 8px 3px 0;color:#606060;white-space:nowrap">Nearest town</td><td style="padding:3px 0;color:#a0a0a0">'+townText+'</td></tr>';
+    ph+='</table></div>';
+    /* Storm info section */
+    ph+='<div style="margin-bottom:10px"><div style="font-size:9px;color:#ff7300;text-transform:uppercase;letter-spacing:.04em;margin-bottom:4px;font-weight:700"><i class="fas fa-tornado"></i> Storm Info</div>';
+    ph+='<table style="width:100%;font-size:10px;border-collapse:collapse">';
+    ph+='<tr><td style="padding:3px 8px 3px 0;color:#606060;white-space:nowrap">Storm motion</td><td style="padding:3px 0;color:#ff7300;font-weight:600">'+d.stormDirStr+' @ '+d.speedMph+'mph</td></tr>';
+    ph+='<tr><td style="padding:3px 8px 3px 0;color:#606060;white-space:nowrap">Distance</td><td style="padding:3px 0;color:#a0a0a0">'+d.distKm.toFixed(1)+' km ('+(d.distKm*0.621371).toFixed(1)+' mi)</td></tr>';
+    ph+='<tr><td style="padding:3px 8px 3px 0;color:#606060;white-space:nowrap">Direction</td><td style="padding:3px 0;color:#a0a0a0">'+d.dirStr+' ('+Math.round(d.bearing)+'°)</td></tr>';
+    /* ETA line with color based on urgency */
+    var etaColor='#39d353';
+    var etaText='';
+    if(d.etaMin===Infinity||!d.movingToward){
+      etaColor='#ff5a5a';etaText='Storm not approaching';
+    }else if(d.etaMin<1){
+      etaColor='#ff5a5a';etaText='IMMINENT (<1 min)';
+    }else if(d.etaMin<15){
+      etaColor='#ff5a5a';etaText='~'+Math.round(d.etaMin)+' min';
+    }else if(d.etaMin<30){
+      etaColor='#ffb340';etaText='~'+Math.round(d.etaMin)+' min';
+    }else if(d.etaMin<60){
+      etaColor='#ffd60a';etaText='~'+Math.round(d.etaMin)+' min';
+    }else if(d.etaMin<120){
+      etaColor='#39d353';etaText='~'+Math.round(d.etaMin)+' min ('+(d.etaMin/60).toFixed(1)+' hrs)';
+    }else{
+      etaColor='#a0a0a0';etaText='~'+(d.etaMin/60).toFixed(1)+' hrs';
+    }
+    ph+='<tr><td style="padding:3px 8px 3px 0;color:#606060;white-space:nowrap">ETA</td><td style="padding:3px 0;color:'+etaColor+';font-weight:700">'+etaText+'</td></tr>';
+    ph+='</table></div>';
+    ph+='<div style="font-size:8px;color:#606060;margin-top:8px;font-style:italic">ETA assumes current storm motion remains constant.</div>';
+    panel.innerHTML=ph;
+    document.body.appendChild(panel);
+    var panelCanvas=await html2canvas(panel,{backgroundColor:null,scale:window.devicePixelRatio||1,logging:false});
+    document.body.removeChild(panel);
+
+    /* Composite: LEFT = info panel, RIGHT = map */
+    await preloadLogoDataUrl();
+    var panelW=panelCanvas.width;
+    var panelH=panelCanvas.height;
+    var gap=10;
+    var mapTargetH=panelH;
+    var mapScale=mapTargetH/mapCanvas.height;
+    var mapTargetW=Math.floor(mapCanvas.width*mapScale);
+    var compositeW=panelW+gap+mapTargetW;
+    var compositeH=panelH;
+    var footerH=90;
+    var finalCanvas=document.createElement('canvas');
+    finalCanvas.width=compositeW;
+    finalCanvas.height=compositeH+footerH;
+    var fctx=finalCanvas.getContext('2d');
+    fctx.fillStyle='#e0e0e0';
+    fctx.fillRect(0,0,finalCanvas.width,finalCanvas.height);
+    /* Draw panel on LEFT */
+    fctx.drawImage(panelCanvas,0,0);
+    /* Draw map on RIGHT */
+    var mapX=panelW+gap;
+    fctx.drawImage(mapCanvas,0,0,mapCanvas.width,mapCanvas.height,mapX,0,mapTargetW,mapTargetH);
+    /* Draw label above the map section */
+    fctx.fillStyle='rgba(255,115,0,.8)';
+    fctx.font='bold 10px Inter,sans-serif';
+    fctx.textBaseline='top';
+    fctx.fillText('Storm ETA Map',mapX+4,2);
+    /* Draw footer branding */
+    var logoSize=72;
+    var siteName='Skywarn Storm Spotters & Chasers United States';
+    var stampStr=new Date().toLocaleString('en-US',{weekday:'short',year:'numeric',month:'short',day:'numeric',hour:'2-digit',minute:'2-digit',hour12:true});
+    fctx.font='bold 22px Inter,sans-serif';
+    var nameW=fctx.measureText(siteName).width;
+    fctx.font='14px Inter,sans-serif';
+    var stampW=fctx.measureText(stampStr).width;
+    var textW=Math.max(nameW,stampW);
+    var contentW=logoSize+16+textW;
+    var barY=compositeH;
+    fctx.fillStyle='rgba(0,0,0,.85)';
+    fctx.fillRect(0,barY,finalCanvas.width,footerH);
+    fctx.fillStyle='#ff7300';
+    fctx.fillRect(0,barY-2,finalCanvas.width,2);
+    var groupX=Math.floor((finalCanvas.width-contentW)/2);
+    var logoX=groupX;
+    var logoY=barY+9;
+    if(LOGO_DATA_URL){
+      var logoImg=new Image();
+      await new Promise(function(resolve){
+        logoImg.onload=function(){try{fctx.drawImage(logoImg,logoX,logoY,logoSize,logoSize)}catch(e){}resolve()};
+        logoImg.onerror=function(){resolve()};
+        logoImg.src=LOGO_DATA_URL;
+      });
+    }
+    var textX=logoX+logoSize+16;
+    fctx.fillStyle='#ff7300';
+    fctx.font='bold 22px Inter,sans-serif';
+    fctx.textBaseline='middle';
+    fctx.fillText(siteName,textX,barY+footerH/2-13);
+    fctx.fillStyle='#a0a0a0';
+    fctx.font='14px Inter,sans-serif';
+    fctx.fillText(stampStr,textX,barY+footerH/2+15);
+
+    /* Show preview */
+    var dataUrl=finalCanvas.toDataURL('image/png');
+    var previewImg=document.getElementById('shotPreviewImg');
+    var downloadLink=document.getElementById('shotDownloadLink');
+    var infoEl=document.getElementById('shotInfo');
+    if(previewImg)previewImg.src=dataUrl;
+    if(downloadLink){
+      var filename='skywarn-storm-eta-'+new Date().toISOString().slice(0,19).replace(/[:T]/g,'-')+'.png';
+      downloadLink.href=dataUrl;
+      downloadLink.download=filename;
+    }
+    if(infoEl)infoEl.textContent=finalCanvas.width+'x'+finalCanvas.height+'px - PNG';
+    document.getElementById('shotModal').classList.add('visible');
+  }catch(e){
+    console.error('[StormETA] Screenshot failed:',e);
+    alert('Screenshot failed: '+e.message);
+  }finally{
+    document.body.classList.remove('capturing');
+    /* Re-open the popup so the user can continue interacting */
+    if(stormETALastData){
+      stormMotionETA({lat:stormETALastData.targetLat,lng:stormETALastData.targetLon});
+    }
+  }
+}
+window.screenshotStormETA=screenshotStormETA;
+
 function stormMotionETA(targetLatlng){
   if(!targetLatlng)return;
   var targetLat=targetLatlng.lat,targetLon=targetLatlng.lng;
@@ -14151,7 +14350,19 @@ function stormMotionETA(targetLatlng){
   }
   html+='</div>';
   html+='<div style="font-size:8px;color:var(--t3);margin-top:6px;font-style:italic">ETA assumes current storm motion remains constant.</div>';
+  /* Screenshot button — same style as the alert polygon screenshot */
+  html+='<button type="button" onclick="event.stopPropagation();event.preventDefault();screenshotStormETA();return false;" style="display:flex;align-items:center;justify-content:center;gap:4px;width:100%;margin-top:6px;padding:4px 8px;background:rgba(255,115,0,.12);border:1px solid var(--bdr-a);color:var(--acc);border-radius:3px;cursor:pointer;font-family:inherit;font-size:8px;font-weight:600"><i class="fas fa-camera"></i> Screenshot</button>';
   html+='</div>';
+
+  /* Store ETA data for the screenshot function */
+  stormETALastData={
+    targetLat:targetLat,targetLon:targetLon,
+    event:nearestStorm.event,
+    stormDirStr:stormDirStr,speedMph:speedMph,
+    distKm:distKm,bearing:bearing,dirStr:dirStr,
+    etaMin:etaMin,movingToward:movingToward,
+    nearestTown:document.getElementById('stormEtaNearestTown')?document.getElementById('stormEtaNearestTown').textContent:''
+  };
 
   L.popup({className:'storm-motion-eta-popup storm-motion-eta-popup-below',maxWidth:280,autoPan:false})
     .setLatLng(targetLatlng)
@@ -14252,9 +14463,16 @@ function stormEtaRemovePin(){
 async function stormMotionETAReverseGeocode(lat,lon){
   var span=document.getElementById('stormEtaNearestTown');
   if(!span)return;  /* Popup may have been closed already */
+  /* Set a 5-second timeout — if Nominatim doesn't respond in time (due to
+     rate-limiting, network issues, or server load), show "unavailable"
+     instead of spinning forever. The AbortController cancels the fetch
+     when the timeout fires. */
+  var controller=new AbortController();
+  var timeoutId=setTimeout(function(){controller.abort()},5000);
   try{
     var url='https://nominatim.openstreetmap.org/reverse?format=json&lat='+lat+'&lon='+lon+'&zoom=10&addressdetails=1&countrycodes=us';
-    var resp=await fetch(url,{headers:{'Accept':'application/json'}});
+    var resp=await fetch(url,{headers:{'Accept':'application/json'},signal:controller.signal});
+    clearTimeout(timeoutId);
     if(!resp.ok)throw new Error('HTTP '+resp.status);
     var data=await resp.json();
     if(!data||!data.address){
@@ -14269,6 +14487,7 @@ async function stormMotionETAReverseGeocode(lat,lon){
     var townStr=state?(town+', '+state):town;
     span.innerHTML='<span style="color:var(--t3)">Nearest town:</span> <b style="color:var(--acc)">'+townStr+'</b>';
   }catch(e){
+    clearTimeout(timeoutId);
     console.warn('[StormETA] Reverse geocode failed:',e);
     span.innerHTML='<span style="color:var(--t3)">Nearest town:</span> <span style="color:var(--t3)">unavailable</span>';
   }
