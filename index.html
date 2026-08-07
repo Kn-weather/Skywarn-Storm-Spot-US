@@ -14173,9 +14173,9 @@ function stormMotionETA(targetLatlng){
 }
 
 /* Position the Storm ETA popup BELOW the clicked point so the tip points
-   UP and the popup body hangs below the anchor. This keeps the area
-   above the clicked point (where the radar/polygon usually is) visible
-   in screenshots.
+   UP and the popup body hangs below the pin. This keeps the area above
+   the clicked point (where the radar/polygon usually is) visible in
+   screenshots.
 
    How it works:
    - Leaflet positions the popup so its bottom-center (where the tip
@@ -14183,9 +14183,10 @@ function stormMotionETA(targetLatlng){
      ABOVE the point.
    - The CSS class `storm-motion-eta-popup-below` moves the tip to the
      TOP of the popup, so visually the tip is at the top.
-   - This function shifts the entire popup DOWN by its content height
-     using margin-top, so the top (where the tip now is) touches the
-     anchor point and the body hangs below.
+   - We set the popup's `offset` option to [0, height + 6] so Leaflet
+     shifts the popup DOWN by its height. This is the cleanest approach
+     because Leaflet handles all positioning consistently — pan, zoom,
+     animation — using the offset. No need to override _updatePosition.
    - Called after the popup opens (via requestAnimationFrame to ensure
      the DOM has rendered) and after the reverse-geocode updates the
      content (in case the height changes). */
@@ -14203,31 +14204,18 @@ function stormMotionETAPositionBelow(){
     requestAnimationFrame(stormMotionETAPositionBelow);
     return;
   }
-  /* Leaflet positions the popup using transform: translate3d(x, y, 0).
-     The y value is calculated to put the BOTTOM of the popup (where the
-     tip normally is) at the anchor point. Since we moved the tip to the
-     TOP via CSS, we need to shift the popup DOWN by its height so the
-     top (where the flipped tip is) aligns with the anchor point.
+  /* Set the popup's offset option to shift it DOWN by its height + 6px
+     tip offset. Leaflet's _updatePosition adds this offset to the popup
+     position, so the popup's top (where the flipped tip is) aligns with
+     the anchor point and the body hangs below the pin.
 
-     We modify the transform directly — parse the current translate3d,
-     add the popup height to the y component, and set it back. This is
-     more reliable than using `top` or `margin-top` which Leaflet's
-     _updatePosition can override. */
-  var transform=container.style.transform;
-  if(transform){
-    /* Parse: translate3d(Xpx, Ypx, 0) → extract X and Y */
-    var m=transform.match(/translate3d\(\s*(-?[\d.]+)px\s*,\s*(-?[\d.]+)px\s*,\s*(-?[\d.]+)px\s*\)/);
-    if(m){
-      var x=parseFloat(m[1]);
-      var y=parseFloat(m[2]);
-      var z=parseFloat(m[3]);
-      /* Shift the popup down by its height + tip offset (6px) so the
-         top of the popup (where the flipped tip is) sits at the anchor
-         point, and the body hangs below the pin. */
-      var newY=y+h+6;
-      container.style.transform='translate3d('+x+'px,'+newY+'px,'+z+'px)';
-    }
-  }
+     This is the cleanest approach because Leaflet handles ALL positioning
+     — pan, zoom, animation — using the offset option. No need to override
+     _updatePosition or fight with transform values. */
+  popup.options.offset=[0,h+6];
+  /* Call update() to re-position with the new offset. autoPan is disabled
+     so this won't move the map. */
+  popup.update();
 }
 
 /* Drop a pin marker 📍 at the exact clicked point. The pin stays on the
