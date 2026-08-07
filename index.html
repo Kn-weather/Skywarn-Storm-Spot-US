@@ -11314,9 +11314,13 @@ async function jrnlLookupLocation(){
   jrnlToast('Looking up "'+q+'"...','info');
   try{
     var url='https://nominatim.openstreetmap.org/search?format=json&q='+encodeURIComponent(q)+'&limit=1&countrycodes=us';
-    var resp=await fetch(url,{headers:{'Accept':'application/json'}});
-    if(!resp.ok)throw new Error('HTTP '+resp.status);
-    var data=await resp.json();
+    /* Use fP() (CORS proxy fallback) — Nominatim doesn't send CORS headers */
+    var txt=await fP(url);
+    if(!txt){
+      jrnlToast('Lookup failed — network or CORS error','error');
+      return;
+    }
+    var data=JSON.parse(txt);
     if(!data||data.length===0){
       jrnlToast('No match found for "'+q+'"','warn');
       return;
@@ -14634,18 +14638,20 @@ function stormEtaRemovePin(){
 async function stormMotionETAReverseGeocode(lat,lon){
   var span=document.getElementById('stormEtaNearestTown');
   if(!span)return;  /* Popup may have been closed already */
-  /* Set a 5-second timeout — if Nominatim doesn't respond in time (due to
-     rate-limiting, network issues, or server load), show "unavailable"
-     instead of spinning forever. The AbortController cancels the fetch
-     when the timeout fires. */
-  var controller=new AbortController();
-  var timeoutId=setTimeout(function(){controller.abort()},5000);
+  /* Use fP() (CORS proxy fallback) instead of fetch() directly.
+     Nominatim doesn't send CORS headers (Access-Control-Allow-Origin),
+     so browsers block the response when fetched from a different origin
+     (like our GitHub Pages site). fP() tries direct fetch first, then
+     falls back to allorigins.win and corsproxy.io CORS proxies.
+     fP() returns text (not JSON), so we parse it with JSON.parse(). */
   try{
     var url='https://nominatim.openstreetmap.org/reverse?format=json&lat='+lat+'&lon='+lon+'&zoom=10&addressdetails=1&countrycodes=us';
-    var resp=await fetch(url,{headers:{'Accept':'application/json'},signal:controller.signal});
-    clearTimeout(timeoutId);
-    if(!resp.ok)throw new Error('HTTP '+resp.status);
-    var data=await resp.json();
+    var txt=await fP(url);
+    if(!txt){
+      span.innerHTML='<span style="color:var(--t3)">Nearest town:</span> <span style="color:var(--t3)">unavailable</span>';
+      return;
+    }
+    var data=JSON.parse(txt);
     if(!data||!data.address){
       span.innerHTML='<span style="color:var(--t3)">Nearest town:</span> <span style="color:var(--t3)">unavailable</span>';
       return;
@@ -14658,7 +14664,6 @@ async function stormMotionETAReverseGeocode(lat,lon){
     var townStr=state?(town+', '+state):town;
     span.innerHTML='<span style="color:var(--t3)">Nearest town:</span> <b style="color:var(--acc)">'+townStr+'</b>';
   }catch(e){
-    clearTimeout(timeoutId);
     console.warn('[StormETA] Reverse geocode failed:',e);
     span.innerHTML='<span style="color:var(--t3)">Nearest town:</span> <span style="color:var(--t3)">unavailable</span>';
   }
@@ -15081,9 +15086,13 @@ async function navLookupDestination(){
   navShowStatus('<i class="fas fa-spinner fa-spin"></i> Looking up "'+q+'"...','info');
   try{
     var url='https://nominatim.openstreetmap.org/search?format=json&q='+encodeURIComponent(q)+'&limit=1&countrycodes=us';
-    var resp=await fetch(url,{headers:{'Accept':'application/json'}});
-    if(!resp.ok)throw new Error('HTTP '+resp.status);
-    var data=await resp.json();
+    /* Use fP() (CORS proxy fallback) — Nominatim doesn't send CORS headers */
+    var txt=await fP(url);
+    if(!txt){
+      navShowStatus('Lookup failed — network or CORS error','error');
+      return;
+    }
+    var data=JSON.parse(txt);
     if(!data||data.length===0){
       navShowStatus('No match found for "'+q+'"','error');
       return;
