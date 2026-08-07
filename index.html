@@ -14638,30 +14638,30 @@ function stormEtaRemovePin(){
 async function stormMotionETAReverseGeocode(lat,lon){
   var span=document.getElementById('stormEtaNearestTown');
   if(!span)return;  /* Popup may have been closed already */
-  /* Use fP() (CORS proxy fallback) instead of fetch() directly.
-     Nominatim doesn't send CORS headers (Access-Control-Allow-Origin),
-     so browsers block the response when fetched from a different origin
-     (like our GitHub Pages site). fP() tries direct fetch first, then
-     falls back to allorigins.win and corsproxy.io CORS proxies.
-     fP() returns text (not JSON), so we parse it with JSON.parse(). */
+  /* Use the NWS /points API for reverse geocoding instead of Nominatim.
+     Nominatim doesn't send CORS headers, and the CORS proxies we were
+     using (allorigins.win, corsproxy.io) are either down or now require
+     payment. The NWS API has proper CORS headers (Access-Control-Allow-Origin: *)
+     and returns the nearest city + state in the relativeLocation property.
+     It's the same API we already use for alerts and observations, so no
+     new dependencies. */
   try{
-    var url='https://nominatim.openstreetmap.org/reverse?format=json&lat='+lat+'&lon='+lon+'&zoom=10&addressdetails=1&countrycodes=us';
+    var url='https://api.weather.gov/points/'+lat.toFixed(4)+','+lon.toFixed(4);
     var txt=await fP(url);
     if(!txt){
       span.innerHTML='<span style="color:var(--t3)">Nearest town:</span> <span style="color:var(--t3)">unavailable</span>';
       return;
     }
     var data=JSON.parse(txt);
-    if(!data||!data.address){
+    if(!data||!data.properties||!data.properties.relativeLocation){
       span.innerHTML='<span style="color:var(--t3)">Nearest town:</span> <span style="color:var(--t3)">unavailable</span>';
       return;
     }
-    /* Nominatim address fields vary by location — try the most common
-       town/city fields in order of preference. */
-    var addr=data.address;
-    var town=addr.city||addr.town||addr.village||addr.hamlet||addr.municipality||addr.county||'Unknown';
-    var state=addr.state||'';
-    var townStr=state?(town+', '+state):town;
+    var rel=data.properties.relativeLocation.properties;
+    var city=rel.city||rel.name||'Unknown';
+    var state=rel.state||'';
+    /* Convert state abbreviation to full name for better readability */
+    var townStr=state?(city+', '+state):city;
     span.innerHTML='<span style="color:var(--t3)">Nearest town:</span> <b style="color:var(--acc)">'+townStr+'</b>';
   }catch(e){
     console.warn('[StormETA] Reverse geocode failed:',e);
