@@ -4564,7 +4564,7 @@ async function fetchSpcProbLayers(day,enabledProbs){
                   html='<div style="font-family:Inter,sans-serif;font-size:11px;max-width:220px"><div style="color:var(--t3);font-size:10px">No SPC outlook at this location</div></div>';
                 }else if(overlappingSpc.length===1){
                   var s=overlappingSpc[0];
-                  html='<div style="font-family:Inter,sans-serif;font-size:11px;max-width:220px"><h3 style="font-size:12px;color:'+s.color+';margin-bottom:4px">SPC '+s.label+'</h3><div style="font-size:9px;color:var(--t3)">Day '+dayStr+' Convective Outlook</div><div style="font-size:9px;color:var(--t3);margin-top:4px">Source: spc.noaa.gov</div></div>';
+                  html='<div style="font-family:Inter,sans-serif;font-size:11px;max-width:220px"><h3 style="font-size:12px;color:'+s.color+';margin-bottom:4px">SPC '+s.label+'</h3><div style="font-size:9px;color:var(--t3)">Day '+dayStr+' Convective Outlook</div><div style="font-size:9px;color:var(--t3);margin-top:4px">Source: spc.noaa.gov</div><button type="button" onclick="event.stopPropagation();event.preventDefault();screenshotGenericPopup(\'SPC Outlook\',this.parentElement.outerHTML,'+ll.lat+','+ll.lng+',\'#ff7300\');return false;" style="display:flex;align-items:center;justify-content:center;gap:4px;width:100%;margin-top:6px;padding:4px 8px;background:rgba(255,115,0,.12);border:1px solid var(--bdr-a);color:var(--acc);border-radius:3px;cursor:pointer;font-family:inherit;font-size:8px;font-weight:600"><i class="fas fa-camera"></i> Screenshot</button></div>';
                 }else{
                   html='<div style="font-family:Inter,sans-serif;font-size:11px;max-width:240px">';
                   overlappingSpc.forEach(function(s,idx){
@@ -4572,6 +4572,7 @@ async function fetchSpcProbLayers(day,enabledProbs){
                     html+='<div class="spc-popup-item" data-idx="'+idx+'" style="display:'+display+'"><h3 style="font-size:12px;color:'+s.color+';margin-bottom:4px">SPC '+s.label+'</h3><div style="font-size:9px;color:var(--t3)">Day '+dayStr+' Convective Outlook</div><div style="font-size:9px;color:var(--t3);margin-top:4px">Source: spc.noaa.gov</div></div>';
                   });
                   html+='<div style="display:flex;align-items:center;justify-content:space-between;margin-top:6px;padding:3px 6px;background:rgba(255,115,0,.1);border-radius:3px"><button type="button" onclick="event.stopPropagation();event.preventDefault();cycleSpcPopup(-1,'+overlappingSpc.length+');return false;" style="background:rgba(255,115,0,.12);border:1px solid var(--bdr-a);color:var(--acc);width:20px;height:20px;border-radius:3px;cursor:pointer;font-size:8px;display:flex;align-items:center;justify-content:center;padding:0"><i class="fas fa-chevron-left"></i></button><span class="spc-popup-counter" style="font-size:8px;color:var(--t2);font-weight:600">1 of '+overlappingSpc.length+'</span><button type="button" onclick="event.stopPropagation();event.preventDefault();cycleSpcPopup(1,'+overlappingSpc.length+');return false;" style="background:rgba(255,115,0,.12);border:1px solid var(--bdr-a);color:var(--acc);width:20px;height:20px;border-radius:3px;cursor:pointer;font-size:8px;display:flex;align-items:center;justify-content:center;padding:0"><i class="fas fa-chevron-right"></i></button></div>';
+                  html+='<button type="button" onclick="event.stopPropagation();event.preventDefault();screenshotGenericPopup(\'SPC Outlook\',this.parentElement.outerHTML,'+ll.lat+','+ll.lng+',\'#ff7300\');return false;" style="display:flex;align-items:center;justify-content:center;gap:4px;width:100%;margin-top:6px;padding:4px 8px;background:rgba(255,115,0,.12);border:1px solid var(--bdr-a);color:var(--acc);border-radius:3px;cursor:pointer;font-family:inherit;font-size:8px;font-weight:600"><i class="fas fa-camera"></i> Screenshot</button>';
                   html+='</div>';
                 }
                 L.popup({maxWidth:260,minWidth:200}).setLatLng(ll).setContent(html).openOn(alertMapInstance);
@@ -12827,6 +12828,7 @@ function obsBuildPopup(st,data){
   html+='<div><span style="color:#888">RH:</span> <b>'+rh+'%</b></div>';
   html+='<div><span style="color:#888">Precip:</span> <b style="color:#5b8cff">'+precip+'in</b></div>';
   html+='</div>';
+  html+='<button type="button" onclick="event.stopPropagation();event.preventDefault();screenshotGenericPopup(\'Surface Observation\',this.parentElement.outerHTML,'+st.lat+','+st.lon+',\'#ff7300\');return false;" style="display:flex;align-items:center;justify-content:center;gap:4px;width:100%;margin-top:6px;padding:4px 8px;background:rgba(255,115,0,.12);border:1px solid var(--bdr-a);color:var(--acc);border-radius:3px;cursor:pointer;font-family:inherit;font-size:8px;font-weight:600"><i class="fas fa-camera"></i> Screenshot</button>';
   html+='</div>';
   return html;
 }
@@ -13490,6 +13492,7 @@ function obsDetectBoundaries(){
           '<div>Pairs in cluster: <b>'+cluster.length+'</b></div>'+
         '</div>'+
         '<div style="font-size:8px;color:#888;margin-top:6px;border-top:1px solid #444;padding-top:4px">Surface-obs detected. Visually verify fine line on radar.</div>'+
+        '<button type="button" onclick="event.stopPropagation();event.preventDefault();screenshotGenericPopup(\'Outflow Boundary\',this.parentElement.outerHTML,'+latlngs[0][0]+','+latlngs[0][1]+',\'#00ffff\');return false;" style="display:flex;align-items:center;justify-content:center;gap:4px;width:100%;margin-top:6px;padding:4px 8px;background:rgba(0,255,255,.12);border:1px solid #00ffff40;color:#00ffff;border-radius:3px;cursor:pointer;font-family:inherit;font-size:8px;font-weight:600"><i class="fas fa-camera"></i> Screenshot</button>'+
       '</div>';
     polyline.bindPopup(popupHtml,{className:'obs-boundary-popup',maxWidth:240});
     polyline.addTo(obsBoundaryLayer);
@@ -13533,6 +13536,7 @@ function obsRenderBoundaryHint(pair){
         '<div>Distance: <b>'+pair.dist.toFixed(1)+' mi</b></div>'+
       '</div>'+
       '<div style="font-size:8px;color:#888;margin-top:6px;border-top:1px solid #444;padding-top:4px">Single pair — needs 2+ pairs to draw a line.</div>'+
+      '<button type="button" onclick="event.stopPropagation();event.preventDefault();screenshotGenericPopup(\'Boundary Hint\',this.parentElement.outerHTML,'+pair.midLat+','+pair.midLon+',\'#00ffff\');return false;" style="display:flex;align-items:center;justify-content:center;gap:4px;width:100%;margin-top:6px;padding:4px 8px;background:rgba(0,255,255,.12);border:1px solid #00ffff40;color:#00ffff;border-radius:3px;cursor:pointer;font-family:inherit;font-size:8px;font-weight:600"><i class="fas fa-camera"></i> Screenshot</button>'+
     '</div>';
   marker.bindPopup(popupHtml,{className:'obs-boundary-popup',maxWidth:240});
   marker.addTo(obsBoundaryLayer);
@@ -14267,6 +14271,162 @@ async function screenshotStormETA(){
   }
 }
 window.screenshotStormETA=screenshotStormETA;
+
+/* ════════════════════════════════════════════════════════════════════════
+   Generic Popup Screenshot
+   ────────────────────────────────────────────────────────────────────────
+   Captures the current map view + builds an info panel from the popup's
+   content, then composites them with the Skywarn branding footer. Used
+   by MD polygon, SPC outlook, surface obs, and obs boundary popups.
+
+   Parameters:
+   - title: the screenshot type label (e.g., "Mesoscale Discussion")
+   - infoHtml: the HTML content of the popup (will be rendered into the
+     info panel)
+   - lat, lon: the click location (for the journal auto-fill)
+   - accentColor: the accent color for the panel header (default #ff7300)
+   ════════════════════════════════════════════════════════════════════════ */
+async function screenshotGenericPopup(title,infoHtml,lat,lon,accentColor){
+  if(!alertMapInstance||typeof html2canvas==='undefined'){
+    alert('Screenshot library not loaded');
+    return;
+  }
+  if(!infoHtml){
+    alert('No popup data available');
+    return;
+  }
+  var acc=accentColor||'#ff7300';
+  currentScreenshotType=title;
+  currentScreenshotAlertCoords=(lat!=null&&lon!=null)?{lat:lat,lon:lon}:null;
+  currentScreenshotAlertMeta={event:title,areaDesc:'',headline:title};
+  /* Close the popup so it doesn't appear in the map capture */
+  alertMapInstance.closePopup();
+
+  /* Helper: wait for map tiles to load */
+  function waitForMapLoad(){
+    return new Promise(function(resolve){
+      var done=false;
+      function finish(){if(!done){done=true;setTimeout(resolve,400)}}
+      if(!alertMapInstance._loaded){resolve();return}
+      alertMapInstance.once('load',finish);
+      setTimeout(finish,1800);
+    });
+  }
+  /* Helper: capture the current map view */
+  async function captureMap(){
+    var mapEl=document.getElementById('alertMap');
+    var dpr=window.devicePixelRatio||1;
+    var capScale=Math.min(dpr,1.5);
+    return await html2canvas(mapEl,{
+      useCORS:true,allowTaint:true,backgroundColor:'#e0e0e0',scale:capScale,
+      logging:false,imageTimeout:5000,
+      width:mapEl.offsetWidth,height:mapEl.offsetHeight,
+      windowWidth:mapEl.offsetWidth,windowHeight:mapEl.offsetHeight,
+      x:0,y:0,scrollX:0,scrollY:0
+    });
+  }
+
+  var mapCanvas=null;
+  try{
+    await waitForMapLoad();
+    document.body.classList.add('capturing');
+    await new Promise(function(r){requestAnimationFrame(function(){requestAnimationFrame(r)})});
+    mapCanvas=await captureMap();
+    document.body.classList.remove('capturing');
+    if(!mapCanvas)throw new Error('Map capture failed');
+
+    /* Build the info panel (LEFT side) — wraps the popup's HTML in a
+       styled container with a colored header. */
+    var panel=document.createElement('div');
+    panel.style.cssText='position:absolute;left:-9999px;top:0;width:280px;background:#0a0a0a;border:1px solid '+acc+';border-radius:8px;padding:16px;font-family:Inter,sans-serif;font-size:11px;color:#f0f0f0;line-height:1.5;box-shadow:0 4px 20px rgba(0,0,0,.5)';
+    var ph='<div style="background:'+acc+';margin:-16px -16px 12px -16px;padding:12px 16px;border-radius:7px 7px 0 0;font-size:14px;font-weight:700;color:#000"><i class="fas fa-camera"></i> '+title+'</div>';
+    /* Insert the popup's HTML content (strip outer div if present) */
+    ph+='<div style="font-size:10px;color:#f0f0f0">'+infoHtml+'</div>';
+    panel.innerHTML=ph;
+    document.body.appendChild(panel);
+    var panelCanvas=await html2canvas(panel,{backgroundColor:null,scale:window.devicePixelRatio||1,logging:false});
+    document.body.removeChild(panel);
+
+    /* Composite: LEFT = info panel, RIGHT = map */
+    await preloadLogoDataUrl();
+    var panelW=panelCanvas.width;
+    var panelH=panelCanvas.height;
+    var gap=10;
+    var mapTargetH=panelH;
+    var mapScale=mapTargetH/mapCanvas.height;
+    var mapTargetW=Math.floor(mapCanvas.width*mapScale);
+    var compositeW=panelW+gap+mapTargetW;
+    var compositeH=panelH;
+    var footerH=90;
+    var finalCanvas=document.createElement('canvas');
+    finalCanvas.width=compositeW;
+    finalCanvas.height=compositeH+footerH;
+    var fctx=finalCanvas.getContext('2d');
+    fctx.fillStyle='#e0e0e0';
+    fctx.fillRect(0,0,finalCanvas.width,finalCanvas.height);
+    fctx.drawImage(panelCanvas,0,0);
+    var mapX=panelW+gap;
+    fctx.drawImage(mapCanvas,0,0,mapCanvas.width,mapCanvas.height,mapX,0,mapTargetW,mapTargetH);
+    fctx.fillStyle='rgba(255,115,0,.8)';
+    fctx.font='bold 10px Inter,sans-serif';
+    fctx.textBaseline='top';
+    fctx.fillText(title+' Map',mapX+4,2);
+    /* Draw footer branding */
+    var logoSize=72;
+    var siteName='Skywarn Storm Spotters & Chasers United States';
+    var stampStr=new Date().toLocaleString('en-US',{weekday:'short',year:'numeric',month:'short',day:'numeric',hour:'2-digit',minute:'2-digit',hour12:true});
+    fctx.font='bold 22px Inter,sans-serif';
+    var nameW=fctx.measureText(siteName).width;
+    fctx.font='14px Inter,sans-serif';
+    var stampW=fctx.measureText(stampStr).width;
+    var textW=Math.max(nameW,stampW);
+    var contentW=logoSize+16+textW;
+    var barY=compositeH;
+    fctx.fillStyle='rgba(0,0,0,.85)';
+    fctx.fillRect(0,barY,finalCanvas.width,footerH);
+    fctx.fillStyle='#ff7300';
+    fctx.fillRect(0,barY-2,finalCanvas.width,2);
+    var groupX=Math.floor((finalCanvas.width-contentW)/2);
+    var logoX=groupX;
+    var logoY=barY+9;
+    if(LOGO_DATA_URL){
+      var logoImg=new Image();
+      await new Promise(function(resolve){
+        logoImg.onload=function(){try{fctx.drawImage(logoImg,logoX,logoY,logoSize,logoSize)}catch(e){}resolve()};
+        logoImg.onerror=function(){resolve()};
+        logoImg.src=LOGO_DATA_URL;
+      });
+    }
+    var textX=logoX+logoSize+16;
+    fctx.fillStyle='#ff7300';
+    fctx.font='bold 22px Inter,sans-serif';
+    fctx.textBaseline='middle';
+    fctx.fillText(siteName,textX,barY+footerH/2-13);
+    fctx.fillStyle='#a0a0a0';
+    fctx.font='14px Inter,sans-serif';
+    fctx.fillText(stampStr,textX,barY+footerH/2+15);
+
+    /* Show preview */
+    var dataUrl=finalCanvas.toDataURL('image/png');
+    var previewImg=document.getElementById('shotPreviewImg');
+    var downloadLink=document.getElementById('shotDownloadLink');
+    var infoEl=document.getElementById('shotInfo');
+    if(previewImg)previewImg.src=dataUrl;
+    if(downloadLink){
+      var filename='skywarn-'+title.toLowerCase().replace(/[^a-z0-9]/g,'-')+'-'+new Date().toISOString().slice(0,19).replace(/[:T]/g,'-')+'.png';
+      downloadLink.href=dataUrl;
+      downloadLink.download=filename;
+    }
+    if(infoEl)infoEl.textContent=finalCanvas.width+'x'+finalCanvas.height+'px - PNG';
+    document.getElementById('shotModal').classList.add('visible');
+  }catch(e){
+    console.error('[Screenshot] Generic popup screenshot failed:',e);
+    alert('Screenshot failed: '+e.message);
+  }finally{
+    document.body.classList.remove('capturing');
+  }
+}
+window.screenshotGenericPopup=screenshotGenericPopup;
 
 function stormMotionETA(targetLatlng){
   if(!targetLatlng)return;
@@ -15854,6 +16014,7 @@ async function mdFetch(){
         (mdData.probability?'<div style="font-size:10px;color:#ffd60a;margin-bottom:4px"><b>Watch Probability:</b> '+mdData.probability+'</div>':'')+
         (mdData.summary?'<div style="font-size:10px;color:var(--t1);margin-top:6px;padding:6px 8px;background:var(--bg2);border-radius:4px;border-left:2px solid #ffd60a">'+mdData.summary+'</div>':'')+
         '<div style="margin-top:6px"><a href="'+mdUrl+'" target="_blank" rel="noopener" style="color:var(--acc);font-size:10px;text-decoration:none">View full discussion →</a></div>'+
+        '<button type="button" onclick="event.stopPropagation();event.preventDefault();screenshotGenericPopup(\'Mesoscale Discussion\',this.parentElement.outerHTML,'+center.lat+','+center.lng+',\'#ffd60a\');return false;" style="display:flex;align-items:center;justify-content:center;gap:4px;width:100%;margin-top:6px;padding:4px 8px;background:rgba(255,213,10,.12);border:1px solid #ffd60a40;color:#ffd60a;border-radius:3px;cursor:pointer;font-family:inherit;font-size:8px;font-weight:600"><i class="fas fa-camera"></i> Screenshot</button>'+
         '</div>';
       poly.bindPopup(popupHtml,{maxWidth:320});
       mdLayer.addLayer(poly);

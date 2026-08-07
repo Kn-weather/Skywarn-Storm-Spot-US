@@ -8,16 +8,27 @@ A comprehensive weather monitoring PWA for storm spotters and chasers, featuring
 
 ### Polygon Map (Main Tab)
 - **Live NWS Alert Polygons** — Tornado Warnings, Severe Thunderstorm Warnings, Watches, Advisories with delta updates (only adds/removes changed alerts)
-- **SPC Convective Outlooks** — Day 1-3 categorical + tornado/hail/wind probability layers
+- **Alert Attributes** — Hail size, tornado detection, max wind markers on warning polygons (in Alert Categories section)
+- **SPC Information** — Day 1-3 convective outlooks (categorical + tornado/hail/wind probability layers) + Mesoscale Discussion polygons with auto-refresh every 5 min
 - **Radar Overlay** — RainViewer API with 3-layer rolling buffer for smooth animation, play/pause/step controls, dBZ legend
-- **Satellite Layers** — NASA GIBS GOES-East/West ABI imagery (GeoColor, Infrared Band 13, Visible Band 2, Air Mass, Dust) with 24-frame animation (last 4 hours, 10-min intervals), opacity control, brightness-temperature legend for IR/Air Mass, auto-refresh every 10 minutes
-- **Surface Observations** — NWS ASOS station data with 9 weather variables (temp, dewpoint, wind, pressure, visibility, RH, precip), color-coded markers, and IDW gradient heatmap overlay with NWS-standard color ramps
+- **Satellite Layers** — NASA GIBS GOES-East/West ABI imagery (GeoColor, Infrared Band 13, Visible Band 2, Air Mass, Dust) with 24-frame 3-layer rolling buffer animation (last 4 hours, 10-min intervals), opacity control, brightness-temperature legend for IR/Air Mass, auto-refresh every 10 minutes. Two-dropdown UI (Satellite + View Type) for compact panel
+- **Surface Observations** — NWS ASOS station data with 9 weather variables (temp, dewpoint, wind, pressure, visibility, RH, precip), color-coded markers, and IDW gradient heatmap overlay with NWS-standard color ramps. State-filtered for performance (controls hidden until state selected)
+- **Outflow Boundary Detection** — Detects surface outflow boundaries from ASOS observation gradients (ΔT ≥ 4°F, ΔTd ≥ 3°F, wind shift ≥ 30°). Piecewise-linear cyan dashed polylines with confidence scores, PCA-based clustering, and popups with gradient details
 - **Observation Animation** — Play through stored observation snapshots (Supabase-backed) with speed control, pin + gradient animation
+- **Storm Motion Vectors** — Tracks warned storms and draws motion arrows with semi-transparent labels at the origin (beginning of arrow). Click the map for Storm ETA popup with nearest town (reverse-geocoded), positioned below the clicked point with a pin marker
+- **Storm-Safe Navigation** — Calculates driving routes that avoid active NWS warning polygons. Features:
+  - Storm cell tracking (tight polygon around tracked storm vs full NWS polygon)
+  - Predictive avoidance (projects storm forward by drive time)
+  - Drive ETA + Storm ETA comparison with "storm arrives before you" warnings
+  - Custom no-go zone drawing (user-drawn purple polygons)
+  - Pick-on-map for start/destination points
+  - Google Maps + Apple Maps deep link generation with safe waypoints
+  - Buffer slider (3-15 mi), storm cell radius (2-50 mi), drive speed (35-75 mph)
 - **Sounding Station Pins** — 68 NWS upper-air sites with click-to-view skew-T popups
 - **Tornado Tracker Mode** — Auto-zoom to newly issued Tornado Warnings (Settings)
-- **Screenshots** — Three-panel alert screenshots, live map screenshots, sounding collage screenshots with Skywarn branding
+- **Screenshots** — Every popup type has a screenshot button (alert polygons, Storm ETA, Mesoscale Discussions, SPC outlooks, surface observations, outflow boundaries). Composites info panel + map + Skywarn branding footer. Download, share to Facebook/Discord, or add to journal
 - **Share** — Facebook, Discord, native Web Share API
-- **Collapsible Layers Panel** — All layer sections collapsible with persisted state
+- **Collapsible Layers Panel** — All layer sections collapsible with persisted state. Reorganized: Alert Categories, Surface Obs, SPC Information, Radar Overlay, Satellite Layers, Sounding Stations, Storm Motion, Storm-Safe Navigation
 - **Collapsible Alert Legend** — Active alerts grouped by category (Warnings/Watches/Advisories)
 
 ### Soundings Tab
@@ -84,14 +95,17 @@ A comprehensive weather monitoring PWA for storm spotters and chasers, featuring
 
 | Component | Technology |
 |-----------|-----------|
-| Frontend | Single HTML file (~12,000+ lines), vanilla JavaScript |
+| Frontend | Single HTML file (~14,000+ lines), vanilla JavaScript |
 | Map | Leaflet.js 1.9.4 with CARTO Voyager basemap |
 | Radar | RainViewer API with 3-layer rolling buffer |
 | Satellite | NASA GIBS WMTS (GOES-East/West ABI imagery) |
+| Geospatial | turf.js 7.0.0 (polygon buffering, intersection detection, routing) |
 | Alerts | NWS API (api.weather.gov) with CORS proxy fallback |
 | Soundings | Iowa Environmental Mesonet (Iowa State University) RAOB JSON API |
 | SPC Outlooks | spc.noaa.gov GeoJSON API |
+| SPC Mesoscale Discussions | spc.noaa.gov HTML parsing |
 | Observations | NWS ASOS stations via api.weather.gov |
+| Reverse Geocoding | OpenStreetMap Nominatim (nearest town for Storm ETA) |
 | Backend | Supabase (PostgreSQL, Auth, Storage, Realtime) |
 | Auth | Supabase Auth (Google OAuth, Facebook OAuth, magic link) |
 | PWA | manifest.json, service worker (network-first HTML, cache-first static) |
@@ -155,11 +169,12 @@ Just visit the [live site](https://kn-weather.github.io/Skywarn-Storm-Spot-US/).
 
 - [NWS API](https://www.weather.gov/documentation/services-web-api) — Alerts, observations, station data
 - [Iowa Environmental Mesonet](https://mesonet.agron.iastate.edu/) — RAOB soundings
-- [SPC](https://www.spc.noaa.gov/) — Convective outlooks
+- [SPC](https://www.spc.noaa.gov/) — Convective outlooks, Mesoscale Discussions
 - [RainViewer](https://www.rainviewer.com/) — Radar tiles
 - [NASA GIBS](https://earthdata.nasa.gov/gibs) — GOES-East/West satellite imagery (WMTS)
 - [CARTO](https://carto.com/) — Basemap tiles
-- [OpenStreetMap Nominatim](https://nominatim.openstreetmap.org/) — Geocoding
+- [OpenStreetMap Nominatim](https://nominatim.openstreetmap.org/) — Geocoding + reverse geocoding (nearest town)
+- [turf.js](https://turfjs.org/) — Geospatial analysis (polygon buffering, intersection detection, routing)
 - [TwisterData](http://www.twisterdata.com/) — Forecast soundings (embedded)
 
 ## References
