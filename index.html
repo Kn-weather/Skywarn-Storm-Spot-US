@@ -2386,7 +2386,14 @@ body.capturing .sat-legend{display:none!important}
             Use storm cell tracking
           </label>
           <label id="navStormCellRow" style="margin:2px 0;font-size:9px">Storm cell radius: <span id="navCellRadiusLabel">4 mi</span>
-            <input type="range" id="navCellRadius" min="2" max="10" value="4" step="1" oninput="document.getElementById('navCellRadiusLabel').textContent=this.value+' mi'" style="width:100%;accent-color:var(--acc);cursor:pointer">
+            <input type="range" id="navCellRadius" min="2" max="50" value="4" step="1" oninput="document.getElementById('navCellRadiusLabel').textContent=this.value+' mi'" style="width:100%;accent-color:var(--acc);cursor:pointer">
+          </label>
+          <label style="margin:2px 0;font-size:9px">Drive speed: <span id="navDriveSpeedLabel">55 mph</span>
+            <input type="range" id="navDriveSpeed" min="35" max="75" value="55" step="5" oninput="document.getElementById('navDriveSpeedLabel').textContent=this.value+' mph'" style="width:100%;accent-color:var(--acc);cursor:pointer">
+          </label>
+          <label style="margin:2px 0;font-size:9px;display:flex;align-items:center;gap:4px">
+            <input type="checkbox" id="navPredictive" checked style="accent-color:var(--acc)">
+            Predictive avoidance (project storm forward by drive time)
           </label>
           <button onclick="navCalculate()" style="width:100%;background:var(--acc);color:#000;border:none;padding:6px 12px;border-radius:4px;cursor:pointer;font-size:10px;font-weight:700;font-family:inherit;margin-top:4px">
             <i class="fas fa-route"></i> Calculate Safe Route
@@ -14424,17 +14431,26 @@ async function navCalculate(){
   try{
     var hazardLevel=document.getElementById('navHazardLevel');
     var bufferMi=parseInt(document.getElementById('navBuffer').value,10);
+    var driveSpeedMph=parseInt(document.getElementById('navDriveSpeed').value,10);
+    var predictiveCb=document.getElementById('navPredictive');
+    var usePredictive=predictiveCb?predictiveCb.checked:true;
     var level=hazardLevel?hazardLevel.value:'tornado_severe';
 
     /* Step 1: Collect active warning polygons matching the hazard level */
     var hazards=navCollectHazards(level);
     if(hazards.length===0){
       /* No hazards — straight route is safe */
+      var straightDist=navHaversineMi(start.lat,start.lon,dest.lat,dest.lon);
+      var driveEtaMin=navComputeDriveEta(straightDist,driveSpeedMph);
       navCurrentRoute={
         start:start,dest:dest,waypoints:[],hazards:[],
         status:'safe',
-        straightDistMi:navHaversineMi(start.lat,start.lon,dest.lat,dest.lon),
-        safeDistMi:navHaversineMi(start.lat,start.lon,dest.lat,dest.lon)
+        straightDistMi:straightDist,
+        safeDistMi:straightDist,
+        driveSpeedMph:driveSpeedMph,
+        driveEtaMin:driveEtaMin,
+        stormEtaMin:null,
+        stormBeatsDriver:false
       };
       navRenderPreview();
       navShowResults();
@@ -14443,13 +14459,51 @@ async function navCalculate(){
     }
 
     /* Step 2: Buffer each hazard polygon. Tornado warnings get 1.5× buffer
-       for extra safety. turf.buffer takes kilometers. */
+       for extra safety. turf.buffer takes kilometers.
+       If predictive avoidance is enabled and we have storm motion data,
+       project the storm cell FORWARD by the estimated drive time to the
+       hazard's current position — this makes the route avoid where the
+       storm WILL be, not just where it IS now. */
     var bufferedHazards=hazards.map(function(h){
       var isTornado=h.event.toLowerCase().indexOf('tornado')>=0;
       var bufKm=(isTornado?bufferMi*1.5:bufferMi)*1.60934;
+      var geoToBuffer=h.geojson;
+      /* Predictive avoidance: if this is a storm cell with motion data,
+         project it forward by the drive time from start to the storm's
+         current centroid. This estimates where the storm will be when
+         the driver arrives. */
+      if(usePredictive&&h.id&&stormTracks[h.id]&&stormTracks[h.id].motion&&stormTracks[h.id].centroids&&stormTracks[h.id].centroids.length>0){
+        try{
+          var centroids=stormTracks[h.id].centroids;
+          var latest=centroids[centroids.length-1];
+          var motion=stormTracks[h.id].motion;
+          if(motion.speedKt>0){
+            /* Distance from start to storm's current position (miles) */
+            var distToStormMi=navHaversineMi(start.lat,start.lon,latest.lat,latest.lon);
+            /* Drive time to reach the storm's current position (minutes) */
+            var driveTimeToStormMin=navComputeDriveEta(distToStormMi,driveSpeedMph);
+            /* Project the storm forward by that drive time.
+               speedKt → miles per minute: 1 kt = 1.15078 mph, /60 min/hr */
+            var stormMph=motion.speedKt*1.15078;
+            var stormMiTraveled=stormMph*(driveTimeToStormMin/60);
+            var stormTraveledKm=stormMiTraveled*1.60934;
+            var projected=navDestinationPoint(latest.lat,latest.lon,stormTraveledKm,motion.bearing);
+            /* Create a new storm cell polygon at the projected position */
+            var cellRadiusMi=4;
+            var cellRadiusEl=document.getElementById('navCellRadius');
+            if(cellRadiusEl)cellRadiusMi=parseInt(cellRadiusEl.value,10);
+            var cellRadiusKm=cellRadiusMi*1.60934;
+            var projectedPoint=turf.point([projected.lon,projected.lat]);
+            geoToBuffer=turf.buffer(projectedPoint,cellRadiusKm,{units:'kilometers'});
+            h._projected={lat:projected.lat,lon:projected.lon,driveTimeMin:driveTimeToStormMin};
+          }
+        }catch(e){
+          console.warn('[Nav] Predictive projection failed for',h.id,e);
+        }
+      }
       try{
-        var buffered=turf.buffer(h.geojson,bufKm,{units:'kilometers'});
-        return {event:h.event,id:h.id,geojson:buffered,isTornado:isTornado};
+        var buffered=turf.buffer(geoToBuffer,bufKm,{units:'kilometers'});
+        return {event:h.event,id:h.id,geojson:buffered,isTornado:isTornado,isStormCell:h.isStormCell,originalGeojson:h.geojson,projected:h._projected};
       }catch(e){
         console.warn('[Nav] Buffer failed for',h.id,e);
         return null;
@@ -14476,11 +14530,20 @@ async function navCalculate(){
 
     if(intersectingHazards.length===0){
       /* Buffered polygons exist but don't intersect the route — safe */
+      var safeDist2=navHaversineMi(start.lat,start.lon,dest.lat,dest.lon);
+      var driveEtaMin2=navComputeDriveEta(safeDist2,driveSpeedMph);
+      var stormEtaInfo2=navComputeStormEta(start,dest,driveSpeedMph);
       navCurrentRoute={
         start:start,dest:dest,waypoints:[],hazards:hazards,
         status:'safe',
-        straightDistMi:navHaversineMi(start.lat,start.lon,dest.lat,dest.lon),
-        safeDistMi:navHaversineMi(start.lat,start.lon,dest.lat,dest.lon)
+        straightDistMi:safeDist2,
+        safeDistMi:safeDist2,
+        driveSpeedMph:driveSpeedMph,
+        driveEtaMin:driveEtaMin2,
+        stormEtaMin:stormEtaInfo2?stormEtaInfo2.stormEtaMin:null,
+        stormEtaMovingToward:stormEtaInfo2?stormEtaInfo2.movingToward:false,
+        stormBeatsDriver:stormEtaInfo2&&stormEtaInfo2.stormEtaMin!==null&&
+          stormEtaInfo2.stormEtaMin<driveEtaMin2&&stormEtaInfo2.movingToward
       };
       navRenderPreview();
       navShowResults();
@@ -14529,6 +14592,15 @@ async function navCalculate(){
     var straightDistMi=navHaversineMi(start.lat,start.lon,dest.lat,dest.lon);
     var detourPct=((safeDistMi-straightDistMi)/straightDistMi)*100;
 
+    /* Step 7b: Compute Drive ETA (drive time along the safe route at the
+       user's selected drive speed) and Storm ETA (when the nearest tracked
+       storm will reach the destination). Compare them to warn the user if
+       the storm arrives before they do. */
+    var driveEtaMin=navComputeDriveEta(safeDistMi,driveSpeedMph);
+    var stormEtaInfo=navComputeStormEta(start,dest,driveSpeedMph);
+    var stormBeatsDriver=stormEtaInfo&&stormEtaInfo.stormEtaMin!==null&&
+      stormEtaInfo.stormEtaMin<driveEtaMin&&stormEtaInfo.movingToward;
+
     /* Step 8: Decide — safe route, rerouted, or wait-it-out */
     if(waypoints.length===0||detourPct>50||intersectingHazards.length>MAX_WAYPOINTS){
       /* Too many hazards or absurd detour — suggest waiting */
@@ -14538,6 +14610,10 @@ async function navCalculate(){
         straightDistMi:straightDistMi,
         safeDistMi:safeDistMi,
         detourPct:detourPct,
+        driveSpeedMph:driveSpeedMph,
+        driveEtaMin:driveEtaMin,
+        stormEtaMin:stormEtaInfo?stormEtaInfo.stormEtaMin:null,
+        stormBeatsDriver:stormBeatsDriver,
         reason:waypoints.length===0?'No safe waypoint could be computed':
                 detourPct>50?'Detour would add '+Math.round(detourPct)+'% to distance':
                 'Too many active warnings ('+intersectingHazards.length+') to route around'
@@ -14554,11 +14630,20 @@ async function navCalculate(){
       status:'rerouted',
       straightDistMi:straightDistMi,
       safeDistMi:safeDistMi,
-      detourPct:detourPct
+      detourPct:detourPct,
+      driveSpeedMph:driveSpeedMph,
+      driveEtaMin:driveEtaMin,
+      stormEtaMin:stormEtaInfo?stormEtaInfo.stormEtaMin:null,
+      stormEtaMovingToward:stormEtaInfo?stormEtaInfo.movingToward:false,
+      stormBeatsDriver:stormBeatsDriver
     };
     navRenderPreview();
     navShowResults();
-    navShowStatus('Safe route calculated — '+waypoints.length+' waypoint(s), +'+Math.round(detourPct)+'% detour','success');
+    var statusMsg='Safe route calculated — '+waypoints.length+' waypoint(s), +'+Math.round(detourPct)+'% detour';
+    if(stormBeatsDriver){
+      statusMsg+=' | ⚠️ Storm arrives '+Math.round(driveEtaMin-stormEtaInfo.stormEtaMin)+' min before you';
+    }
+    navShowStatus(statusMsg,stormBeatsDriver?'warn':'success');
   }catch(e){
     console.error('[Nav] Calculation failed:',e);
     navShowStatus('Calculation failed: '+(e.message||e),'error');
@@ -14689,6 +14774,73 @@ function navHaversineMi(lat1,lon1,lat2,lon2){
     Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*
     Math.sin(dLon/2)*Math.sin(dLon/2);
   return 2*R*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));
+}
+
+/* Compute drive ETA in minutes given distance in miles and speed in mph. */
+function navComputeDriveEta(distMi,speedMph){
+  if(!speedMph||speedMph<=0)return Infinity;
+  return (distMi/speedMph)*60;
+}
+
+/* Compute Storm ETA — when the nearest tracked storm will reach the
+   destination. Returns {stormEtaMin, movingToward, stormEvent, stormSpeedMph,
+   stormBearing, distMi} or null if no tracked storms with motion data.
+
+   The ETA is a straight-line estimate: distance from the storm's current
+   centroid to the destination, divided by the storm's speed. We also check
+   if the storm is actually moving toward the destination (bearing within
+   90° of the storm→dest direction) — if not, the storm will never reach
+   the destination and we return movingToward=false. */
+function navComputeStormEta(start,dest,driveSpeedMph){
+  if(!stormTracks||Object.keys(stormTracks).length===0)return null;
+  var nearestStorm=null,nearestDist=Infinity;
+  Object.keys(stormTracks).forEach(function(id){
+    var track=stormTracks[id];
+    if(!track.motion||track.motion.speedKt<5)return;
+    if(!track.centroids||track.centroids.length===0)return;
+    var origin=track.centroids[track.centroids.length-1];
+    var dist=navHaversineMi(origin.lat,origin.lon,dest.lat,dest.lon);
+    if(dist<nearestDist){
+      nearestDist=dist;
+      nearestStorm=track;
+    }
+  });
+  if(!nearestStorm)return null;
+  var origin=nearestStorm.centroids[nearestStorm.centroids.length-1];
+  var speedMph=nearestStorm.motion.speedKt*1.15078;
+  var distMi=nearestDist;
+  /* Check if the storm is moving toward the destination */
+  var stormToDestBearing=navBearing(origin.lat,origin.lon,dest.lat,dest.lon);
+  var bearingDiff=Math.abs(((stormToDestBearing-nearestStorm.motion.bearing+540)%360)-180);
+  var movingToward=bearingDiff<90;
+  /* ETA = distance / speed * 60 (minutes) */
+  var stormEtaMin=speedMph>0?(distMi/speedMph)*60:Infinity;
+  return {
+    stormEtaMin:stormEtaMin,
+    movingToward:movingToward,
+    stormEvent:nearestStorm.event||'Storm',
+    stormSpeedMph:Math.round(speedMph),
+    stormBearing:Math.round(nearestStorm.motion.bearing),
+    distMi:distMi
+  };
+}
+
+/* Format minutes as a human-readable duration string.
+   - < 60 min: "45 min"
+   - 1-24 hrs: "2h 15min"
+   - > 24 hrs: "1d 5h" */
+function navFormatDuration(min){
+  if(min===Infinity||isNaN(min))return '—';
+  if(min<60)return Math.round(min)+' min';
+  var hrs=min/60;
+  if(hrs<24){
+    var h=Math.floor(hrs);
+    var m=Math.round((hrs-h)*60);
+    return m>0?(h+'h '+m+'min'):(h+'h');
+  }
+  var d=Math.floor(hrs/24);
+  var h=Math.round(hrs%24);
+  return d+'d '+h+'h';
 }
 
 /* Bearing from point 1 to point 2, in degrees clockwise from north. */
@@ -14855,7 +15007,7 @@ function navShowResults(){
   var html='';
   if(r.status==='safe'){
     html+='<div style="color:#39d353;font-weight:700;margin-bottom:4px"><i class="fas fa-check-circle"></i> Route is safe</div>';
-    html+='No active warnings along your straight-line route.';
+    html+='No active warnings along your straight-line route.<br>';
   }else if(r.status==='rerouted'){
     html+='<div style="color:#39d353;font-weight:700;margin-bottom:4px"><i class="fas fa-route"></i> Safe route calculated</div>';
     html+='Waypoints: <b>'+r.waypoints.length+'</b><br>';
@@ -14864,12 +15016,39 @@ function navShowResults(){
       html+=' <span style="color:#ff7300;font-size:8px">('+stormCellCount+' storm cell'+(stormCellCount===1?'':'s')+' tracked'+(nwsCount>0?', '+nwsCount+' NWS polygon'+(nwsCount===1?'':'s'):'')+')</span>';
     }
     html+='<br>';
-    html+='Detour: <b>+'+Math.round(r.detourPct)+'%</b> ('+r.straightDistMi.toFixed(0)+' → '+r.safeDistMi.toFixed(0)+' mi)';
+    html+='Detour: <b>+'+Math.round(r.detourPct)+'%</b> ('+r.straightDistMi.toFixed(0)+' → '+r.safeDistMi.toFixed(0)+' mi)<br>';
   }else if(r.status==='wait'){
     html+='<div style="color:#ffd60a;font-weight:700;margin-bottom:4px"><i class="fas fa-clock"></i> Suggest waiting</div>';
     html+=r.reason||'No safe route available.<br>';
     html+='Active warnings: <b>'+r.hazards.length+'</b><br>';
-    html+='Try again in 30 minutes when storms may have cleared.';
+    html+='Try again in 30 minutes when storms may have cleared.<br>';
+  }
+  /* ETA comparison section — shown for all statuses when we have drive ETA */
+  if(r.driveEtaMin!==undefined&&r.driveEtaMin!==null){
+    html+='<div style="margin-top:6px;padding-top:6px;border-top:1px solid var(--bdr-a);font-size:9px;line-height:1.6">';
+    html+='<div style="color:var(--t3);font-size:8px;text-transform:uppercase;letter-spacing:.04em;margin-bottom:2px">ETA Comparison</div>';
+    html+='🚗 Drive time: <b style="color:#39d353">'+navFormatDuration(r.driveEtaMin)+'</b>';
+    if(r.driveSpeedMph)html+=' <span style="color:var(--t3);font-size:8px">@ '+r.driveSpeedMph+' mph</span>';
+    html+='<br>';
+    if(r.stormEtaMin!==null&&r.stormEtaMin!==undefined){
+      var stormColor=r.stormBeatsDriver?'#ff5a5a':'#39d353';
+      var stormIcon=r.stormBeatsDriver?'⚠️':'🌪️';
+      html+=stormIcon+' Storm arrival: <b style="color:'+stormColor+'">'+navFormatDuration(r.stormEtaMin)+'</b>';
+      if(!r.stormEtaMovingToward){
+        html+=' <span style="color:var(--t3);font-size:8px">(not approaching)</span>';
+      }
+      html+='<br>';
+      if(r.stormBeatsDriver){
+        var diff=Math.round(r.driveEtaMin-r.stormEtaMin);
+        html+='<div style="color:#ff5a5a;font-weight:700;margin-top:2px"><i class="fas fa-triangle-exclamation"></i> Storm arrives '+diff+' min before you — consider waiting or alternate route</div>';
+      }else if(r.stormEtaMovingToward){
+        var diff2=Math.round(r.stormEtaMin-r.driveEtaMin);
+        html+='<div style="color:#39d353;margin-top:2px"><i class="fas fa-check"></i> You arrive '+diff2+' min before the storm</div>';
+      }
+    }else{
+      html+='🌪️ Storm arrival: <span style="color:var(--t3)">no tracked storms with motion data</span><br>';
+    }
+    html+='</div>';
   }
   textEl.innerHTML=html;
   resultsEl.style.display='block';
