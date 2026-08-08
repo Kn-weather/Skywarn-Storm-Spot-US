@@ -14512,6 +14512,12 @@ async function screenshotStormETA(){
     var mapTargetH=panelH;
     var mapScale=mapTargetH/mapCanvas.height;
     var mapTargetW=Math.floor(mapCanvas.width*mapScale);
+    /* Enforce 50/50 split: map width must be at least equal to panel width */
+    if(mapTargetW<panelW){
+      mapTargetW=panelW;
+      mapScale=mapTargetW/mapCanvas.width;
+      mapTargetH=Math.floor(mapCanvas.height*mapScale);
+    }
     var compositeW=panelW+gap+mapTargetW;
     var compositeH=panelH;
     var footerH=90;
@@ -14728,6 +14734,12 @@ async function screenshotGenericPopup(title,infoHtml,lat,lon,accentColor){
     var mapW=mapCanvasZoomedIn.width;
     var mapScale=mapTargetH/mapCanvasZoomedIn.height;
     var mapTargetW=Math.floor(mapW*mapScale);
+    /* Enforce 50/50 split: map width must be at least equal to panel width */
+    if(mapTargetW<panelW){
+      mapTargetW=panelW;
+      mapScale=mapTargetW/mapW;
+      mapTargetH=Math.floor(mapCanvasZoomedIn.height*mapScale);
+    }
     var compositeW=panelW+gap+mapTargetW;
     var compositeH=panelH;
     var footerH=90;
@@ -14952,6 +14964,12 @@ async function screenshotMD(centerLat,centerLng,mdNumber){
     var mapW=mapCanvasZoomedIn.width;
     var mapScale=mapTargetH/mapCanvasZoomedIn.height;
     var mapTargetW=Math.floor(mapW*mapScale);
+    /* Enforce 50/50 split: map width must be at least equal to panel width */
+    if(mapTargetW<panelW){
+      mapTargetW=panelW;
+      mapScale=mapTargetW/mapW;
+      mapTargetH=Math.floor(mapCanvasZoomedIn.height*mapScale);
+    }
     var compositeW=panelW+gap+mapTargetW;
     var compositeH=panelH;
     var footerH=90;
