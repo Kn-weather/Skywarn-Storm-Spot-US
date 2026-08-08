@@ -14764,30 +14764,6 @@ async function screenshotMD(centerLat,centerLng,mdNumber){
     alert('Screenshot library not loaded');
     return;
   }
-  /* Get the current popup content */
-  var popup=alertMapInstance._popup;
-  if(!popup){alert('No MD popup open');return}
-  var popupEl=popup.getElement();
-  if(!popupEl){alert('Popup element not found');return}
-  /* Get the popup content (the inner div) */
-  var contentDiv=popupEl.querySelector('.leaflet-popup-content');
-  if(!contentDiv){alert('Popup content not found');return}
-  mdLastPopupContent=contentDiv.innerHTML;
-  
-  /* Find the MD polygon on the map to get its bounds */
-  var mdPolyBounds=null;
-  if(mdLayer){
-    mdLayer.eachLayer(function(l){
-      if(l.getBounds&&l.getBounds().isValid()){
-        if(!mdPolyBounds){
-          mdPolyBounds=l.getBounds();
-        }else{
-          mdPolyBounds.extend(l.getBounds());
-        }
-      }
-    });
-  }
-  
   currentScreenshotType='Mesoscale Discussion #'+mdNumber;
   currentScreenshotAlertCoords={lat:centerLat,lon:centerLng};
   currentScreenshotAlertMeta={
@@ -14795,11 +14771,42 @@ async function screenshotMD(centerLat,centerLng,mdNumber){
     areaDesc:'',
     headline:'Mesoscale Discussion #'+mdNumber
   };
-  
   /* Close the popup so it doesn't appear in the map capture */
   alertMapInstance.closePopup();
-  
-  /* Helper: wait for map tiles to load */
+
+  /* Find the MD polygon that matches this centerLat/centerLng to get
+     the correct bounds. We stored _mdBounds on each layer when creating
+     the popup. Find the layer whose center is closest to the clicked
+     center. */
+  var mdPolyBounds=null;
+  var mdPopupHtml=null;
+  var mdData=null;
+  if(mdLayer){
+    mdLayer.eachLayer(function(l){
+      if(l._mdBounds&&l._mdBounds.isValid()){
+        var lCenter=l._mdBounds.getCenter();
+        /* Check if this layer's center matches the clicked center
+           (within 0.01 degrees to handle floating point) */
+        if(Math.abs(lCenter.lat-centerLat)<0.01&&Math.abs(lCenter.lng-centerLng)<0.01){
+          mdPolyBounds=l._mdBounds;
+          mdPopupHtml=l._mdPopupHtml;
+          mdData=l._mdData;
+        }
+      }
+    });
+  }
+  /* Fallback: if no exact match, use the first MD polygon's bounds */
+  if(!mdPolyBounds&&mdLayer){
+    mdLayer.eachLayer(function(l){
+      if(l._mdBounds&&l._mdBounds.isValid()&&!mdPolyBounds){
+        mdPolyBounds=l._mdBounds;
+        mdPopupHtml=l._mdPopupHtml;
+        mdData=l._mdData;
+      }
+    });
+  }
+
+  /* Helper: wait for map tiles to load after a zoom/pan change. */
   function waitForMapLoad(){
     return new Promise(function(resolve){
       var done=false;
@@ -14809,7 +14816,7 @@ async function screenshotMD(centerLat,centerLng,mdNumber){
       setTimeout(finish,1800);
     });
   }
-  /* Helper: capture the current map view */
+  /* Helper: capture the current map view. */
   async function captureMap(){
     var mapEl=document.getElementById('alertMap');
     var dpr=window.devicePixelRatio||1;
@@ -14822,46 +14829,70 @@ async function screenshotMD(centerLat,centerLng,mdNumber){
       x:0,y:0,scrollX:0,scrollY:0
     });
   }
-  
-  var mapCanvas=null;
+
+  var mapCanvasZoomedIn=null;
+  var mapCanvasZoomedOut=null;
   try{
-    /* STEP 1: Zoom to the MD polygon bounds */
+    /* STEP 1: Zoom IN on the polygon (tight bounds, streets visible) */
     if(mdPolyBounds&&mdPolyBounds.isValid()){
       alertMapInstance.fitBounds(mdPolyBounds,{padding:[40,40],maxZoom:11});
     }
     await waitForMapLoad();
     document.body.classList.add('capturing');
-    /* Expand the full discussion div (remove max-height) for screenshot */
     await new Promise(function(r){requestAnimationFrame(function(){requestAnimationFrame(r)})});
-    mapCanvas=await captureMap();
+    mapCanvasZoomedIn=await captureMap();
     document.body.classList.remove('capturing');
-    if(!mapCanvas)throw new Error('Map capture failed');
-    
-    /* STEP 2: Build the info panel from the popup content */
+    if(!mapCanvasZoomedIn)throw new Error('Zoomed-in map capture failed');
+
+    /* STEP 2: Zoom OUT for state context (large padding) */
+    if(mdPolyBounds&&mdPolyBounds.isValid()){
+      alertMapInstance.fitBounds(mdPolyBounds,{padding:[150,150],maxZoom:7});
+    }
+    await waitForMapLoad();
+    document.body.classList.add('capturing');
+    await new Promise(function(r){requestAnimationFrame(function(){requestAnimationFrame(r)})});
+    mapCanvasZoomedOut=await captureMap();
+    document.body.classList.remove('capturing');
+    if(!mapCanvasZoomedOut)throw new Error('Zoomed-out map capture failed');
+
+    /* STEP 3: Build the MD info panel (LEFT side) */
     var panel=document.createElement('div');
     panel.style.cssText='position:absolute;left:-9999px;top:0;width:300px;background:#0a0a0a;border:1px solid #ffd60a;border-radius:8px;padding:16px;font-family:Inter,sans-serif;font-size:11px;color:#f0f0f0;line-height:1.5;box-shadow:0 4px 20px rgba(0,0,0,.5)';
-    var ph='<div style="background:#ffd60a;margin:-16px -16px 12px -16px;padding:12px 16px;border-radius:7px 7px 0 0;font-size:14px;font-weight:700;color:#000"><i class="fas fa-comment-dots"></i> Mesoscale Discussion</div>';
-    /* Insert the popup content, but remove the "View full discussion" link
-       (hidden by .md-screenshot-only CSS during capturing) and the screenshot
-       button. Also expand the full discussion div (remove max-height). */
-    var cleanedContent=mdLastPopupContent
-      .replace(/class="md-screenshot-only"[^>]*>.*?<\/div>/g,'')
-      .replace(/<button[^>]*>.*?<\/button>/g,'')
-      .replace(/max-height:200px;overflow-y:auto;/g,'max-height:none;');
-    ph+='<div style="font-size:10px;color:#f0f0f0">'+cleanedContent+'</div>';
+    var ph='<div style="background:#ffd60a;margin:-16px -16px 12px -16px;padding:12px 16px;border-radius:7px 7px 0 0;font-size:14px;font-weight:700;color:#000"><i class="fas fa-comment-dots"></i> Mesoscale Discussion #'+mdNumber+'</div>';
+    /* Build info from mdData if available, otherwise from popup HTML */
+    if(mdData){
+      ph+='<div style="font-size:10px;color:#a0a0a0;margin-bottom:10px">'+(mdData.concerning||'')+'</div>';
+      ph+='<div style="margin-bottom:10px"><div style="font-size:9px;color:#ffd60a;text-transform:uppercase;letter-spacing:.04em;margin-bottom:4px;font-weight:700"><i class="fas fa-map-marker-alt"></i> Areas</div><div style="font-size:10px;color:#a0a0a0;line-height:1.5">'+(mdData.areas||'N/A')+'</div></div>';
+      ph+='<div style="margin-bottom:10px"><div style="font-size:9px;color:#ffd60a;text-transform:uppercase;letter-spacing:.04em;margin-bottom:4px;font-weight:700"><i class="fas fa-clock"></i> Valid</div><div style="font-size:10px;color:#a0a0a0">'+(mdData.valid||'N/A')+'</div></div>';
+      if(mdData.probability)ph+='<div style="margin-bottom:10px"><div style="font-size:9px;color:#ffd60a;text-transform:uppercase;letter-spacing:.04em;margin-bottom:4px;font-weight:700">Watch Probability</div><div style="font-size:10px;color:#ffd60a">'+mdData.probability+'</div></div>';
+      if(mdData.summary)ph+='<div style="margin-bottom:10px"><div style="font-size:9px;color:#ffd60a;text-transform:uppercase;letter-spacing:.04em;margin-bottom:4px;font-weight:700">Summary</div><div style="font-size:10px;color:#f0f0f0;background:rgba(0,0,0,.3);padding:8px 10px;border-radius:4px;border:1px solid rgba(255,213,10,.18);white-space:pre-wrap">'+mdData.summary+'</div></div>';
+      if(mdData.fullDiscussion)ph+='<div style="margin-bottom:10px"><div style="font-size:9px;color:#ffd60a;text-transform:uppercase;letter-spacing:.04em;margin-bottom:4px;font-weight:700">Full Discussion</div><div style="font-size:10px;color:#f0f0f0;background:rgba(0,0,0,.3);padding:8px 10px;border-radius:4px;border:1px solid rgba(255,213,10,.18);white-space:pre-wrap;line-height:1.6">'+mdData.fullDiscussion+'</div></div>';
+    }else if(mdPopupHtml){
+      /* Fallback: clean the popup HTML */
+      var cleaned=mdPopupHtml
+        .replace(/class="md-screenshot-only"[^>]*>.*?<\/div>/g,'')
+        .replace(/<button[^>]*>.*?<\/button>/g,'')
+        .replace(/max-height:200px;overflow-y:auto;/g,'max-height:none;');
+      ph+='<div style="font-size:10px;color:#f0f0f0">'+cleaned+'</div>';
+    }
     panel.innerHTML=ph;
     document.body.appendChild(panel);
     var panelCanvas=await html2canvas(panel,{backgroundColor:null,scale:window.devicePixelRatio||1,logging:false});
     document.body.removeChild(panel);
-    
-    /* STEP 3: Composite info panel + map + branding */
+
+    /* STEP 4: Composite all three panels together.
+       Layout (same as screenshotAlert):
+       - LEFT: MD info panel (full height)
+       - RIGHT-TOP: zoomed-in map (polygon detail, streets)
+       - RIGHT-BOTTOM: zoomed-out map (state context) */
     await preloadLogoDataUrl();
     var panelW=panelCanvas.width;
     var panelH=panelCanvas.height;
     var gap=10;
-    var mapTargetH=panelH;
-    var mapScale=mapTargetH/mapCanvas.height;
-    var mapTargetW=Math.floor(mapCanvas.width*mapScale);
+    var mapTargetH=Math.floor((panelH-gap)/2);
+    var mapW=mapCanvasZoomedIn.width;
+    var mapScale=mapTargetH/mapCanvasZoomedIn.height;
+    var mapTargetW=Math.floor(mapW*mapScale);
     var compositeW=panelW+gap+mapTargetW;
     var compositeH=panelH;
     var footerH=90;
@@ -14873,11 +14904,16 @@ async function screenshotMD(centerLat,centerLng,mdNumber){
     fctx.fillRect(0,0,finalCanvas.width,finalCanvas.height);
     fctx.drawImage(panelCanvas,0,0);
     var mapX=panelW+gap;
-    fctx.drawImage(mapCanvas,0,0,mapCanvas.width,mapCanvas.height,mapX,0,mapTargetW,mapTargetH);
+    fctx.drawImage(mapCanvasZoomedIn,0,0,mapCanvasZoomedIn.width,mapCanvasZoomedIn.height,mapX,0,mapTargetW,mapTargetH);
+    fctx.drawImage(mapCanvasZoomedOut,0,0,mapCanvasZoomedOut.width,mapCanvasZoomedOut.height,mapX,mapTargetH+gap,mapTargetW,mapTargetH);
     fctx.fillStyle='rgba(255,213,10,.8)';
     fctx.font='bold 10px Inter,sans-serif';
     fctx.textBaseline='top';
-    fctx.fillText('MD Polygon Map',mapX+4,2);
+    fctx.fillText('MD Polygon Detail',mapX+4,2);
+    fctx.fillText('State Context',mapX+4,mapTargetH+gap+2);
+    fctx.fillStyle='#ffd60a';
+    fctx.fillRect(mapX,mapTargetH+gap/2-1,mapTargetW,1);
+
     /* Draw footer branding */
     var logoSize=72;
     var siteName='Skywarn Storm Spotters & Chasers United States';
@@ -14912,7 +14948,7 @@ async function screenshotMD(centerLat,centerLng,mdNumber){
     fctx.fillStyle='#a0a0a0';
     fctx.font='14px Inter,sans-serif';
     fctx.fillText(stampStr,textX,barY+footerH/2+15);
-    
+
     /* Show preview */
     var dataUrl=finalCanvas.toDataURL('image/png');
     var previewImg=document.getElementById('shotPreviewImg');
@@ -17543,7 +17579,9 @@ async function mdFetch(){
         fillOpacity:0.15,
         dashArray:'5,3'
       });
-      var popupHtml='<div style="font-family:Inter,sans-serif;min-width:240px;max-width:280px">'+
+      /* Store the polygon bounds + popup HTML on the layer so screenshotMD
+         can access the correct polygon's bounds when the user clicks screenshot. */
+      var mdPopupHtml='<div style="font-family:Inter,sans-serif;min-width:240px;max-width:280px">'+
         '<div style="color:#ffd60a;font-weight:700;font-size:12px;margin-bottom:4px">SPC Mesoscale Discussion #'+mdData.number+'</div>'+
         '<div style="font-size:10px;color:var(--t2);margin-bottom:4px"><b>Areas:</b> '+mdData.areas+'</div>'+
         '<div style="font-size:10px;color:var(--t2);margin-bottom:4px"><b>Concerning:</b> '+mdData.concerning+'</div>'+
@@ -17554,7 +17592,10 @@ async function mdFetch(){
         '<div class="md-screenshot-only" style="margin-top:6px"><a href="'+mdUrl+'" target="_blank" rel="noopener" style="color:var(--acc);font-size:10px;text-decoration:none">View full discussion →</a></div>'+
         '<button type="button" onclick="event.stopPropagation();event.preventDefault();screenshotMD('+center.lat+','+center.lng+',\''+mdData.number+'\');return false;" style="display:flex;align-items:center;justify-content:center;gap:4px;width:100%;margin-top:6px;padding:4px 8px;background:rgba(255,213,10,.12);border:1px solid #ffd60a40;color:#ffd60a;border-radius:3px;cursor:pointer;font-family:inherit;font-size:8px;font-weight:600"><i class="fas fa-camera"></i> Screenshot</button>'+
         '</div>';
-      poly.bindPopup(popupHtml,{maxWidth:320});
+      poly._mdBounds=mdBounds;
+      poly._mdPopupHtml=mdPopupHtml;
+      poly._mdData=mdData;
+      poly.bindPopup(mdPopupHtml,{maxWidth:320});
       mdLayer.addLayer(poly);
       /* Add a label marker at the centroid (center already computed above) */
       var labelIcon=L.divIcon({
@@ -17564,7 +17605,10 @@ async function mdFetch(){
         iconAnchor:[25,8]
       });
       var label=L.marker(center,{icon:labelIcon});
-      label.bindPopup(popupHtml,{maxWidth:320});
+      label._mdBounds=mdBounds;
+      label._mdPopupHtml=mdPopupHtml;
+      label._mdData=mdData;
+      label.bindPopup(mdPopupHtml,{maxWidth:320});
       mdLayer.addLayer(label);
       mdCount++;
     }
