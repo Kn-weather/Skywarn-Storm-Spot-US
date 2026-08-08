@@ -4891,18 +4891,19 @@ async function fAlertMap(){
   }
 
   try{
-    /* NOTE: The state filter is intentionally NOT applied to the NWS
-       alerts URL. The state filter is only for surface observations
-       and the color gradient — alerts (warnings, watches, advisories)
-       should always be shown nationwide. This was previously filtering
-       alerts by state, which hid warnings in neighboring states.
+    /* Reverted: the state filter IS applied to the NWS alerts URL.
+       When a state is selected, only that state's alerts are fetched
+       (small payload, fast, reliable). When no state is selected, all
+       nationwide alerts are fetched (larger payload but works).
        
        We use direct fetch() with a 15s timeout (not fP) because:
        1. The NWS API has proper CORS headers (Access-Control-Allow-Origin: *)
-       2. The nationwide alerts response is ~1MB — fP's 6s timeout may be too short
-       3. fP's CORS proxy fallbacks (allorigins, corsproxy.io) are broken/paid
-       4. Direct fetch is faster and more reliable for CORS-enabled APIs */
+       2. Direct fetch is faster and more reliable for CORS-enabled APIs
+       3. fP's CORS proxy fallbacks (allorigins, corsproxy.io) are broken/paid */
+    var stateFilter=document.getElementById('amStateFilter');
+    var state=(stateFilter&&stateFilter.value)?stateFilter.value.toUpperCase():'';
     var url='https://api.weather.gov/alerts/active';
+    if(state){url+='?area='+state}
     var txt=null;
     /* Try direct fetch with 15s timeout */
     try{
@@ -4916,7 +4917,7 @@ async function fAlertMap(){
       txt=await Promise.race([fetchPromise,timeoutPromise]);
     }catch(directErr){
       console.warn('[Alerts] Direct fetch failed, trying fP:',directErr.message);
-      /* Fall back to fP (CORS proxy) with its standard 6s timeout */
+      /* Fall back to fP (CORS proxy) with its 15s timeout */
       txt=await fP(url);
     }
     if(!txt){

@@ -13,7 +13,7 @@
    - Map tiles (cartocdn.com, tilecache.rainviewer.com): network-only
      (too many to cache, and they update frequently) */
 
-var CACHE_NAME='skywarn-us-v76';
+var CACHE_NAME='skywarn-us-v77';
 var STATIC_ASSETS=[
   './manifest.json',
   './skywarn-logo.png',
