@@ -2400,7 +2400,7 @@ body.capturing .sat-legend{display:none!important}
           <span>Storm Motion</span><i class="fas fa-chevron-right"></i>
         </div>
         <div class="collapsible-body">
-          <label style="margin:1px 0"><input type="checkbox" id="amStormMotion" onchange="toggleStormMotion()"> Show Storm Motion Arrows</label>
+          <label style="margin:1px 0"><input type="checkbox" id="amStormMotion" onchange="toggleStormMotion()"> Show Warnings Motion Direction</label>
           <div style="font-size:9px;color:var(--t3);line-height:1.4;margin-top:3px">Tracks warned storms and draws motion arrows. Click the map to estimate storm ETA.</div>
           <label style="margin:1px 0;font-size:9px;color:var(--t2)">Arrow length: <select id="amStormMotionHorizon" onchange="stormMotionRender()" style="background:var(--bg);border:1px solid var(--bdr);color:var(--t1);font-family:inherit;font-size:9px;padding:2px 4px;border-radius:3px">
             <option value="15">15 min</option>
@@ -2414,13 +2414,14 @@ body.capturing .sat-legend{display:none!important}
           <div id="obsBoundaryStatus" style="font-size:8px;color:var(--t3);margin-top:2px;display:none"></div>
           <div style="height:1px;background:var(--bdr);margin:6px 0"></div>
           <label style="margin:1px 0;font-size:9px;color:var(--t2)"><input type="checkbox" id="amRadarStorm" onchange="toggleRadarStormCells()" style="accent-color:var(--acc)"> Radar Storm Cell Detection</label>
+          <label style="margin:1px 0;font-size:9px;color:var(--t2)"><input type="checkbox" id="amRadarStormMotion" onchange="radarToggleStormMotion()" style="accent-color:var(--acc)" checked> Show Cell Motion Arrows</label>
           <div style="font-size:8px;color:var(--t3);line-height:1.4;margin-top:2px">Decodes RainViewer radar tiles to dBZ, segments storm cells (≥40 dBZ), renders as colored circles. Auto-refreshes every 5 min.</div>
           <div id="radarStormStatus" style="font-size:8px;color:var(--t3);margin-top:2px"></div>
           <div style="height:1px;background:var(--bdr);margin:6px 0"></div>
           <label style="margin:1px 0;font-size:9px;color:var(--t2)"><input type="checkbox" id="amRadarBoundary" onchange="toggleRadarBoundary()" style="accent-color:var(--acc)"> Radar Outflow Boundaries</label>
           <div style="font-size:8px;color:var(--t3);line-height:1.4;margin-top:2px">Detects fine-line boundaries from radar reflectivity gradients. Separate from storm cell detection.</div>
           <label style="margin:2px 0;font-size:9px">Noise filter: <span id="radarBoundaryNoiseLabel">40</span>
-            <input type="range" id="radarBoundaryNoise" min="0" max="90" value="40" step="5" oninput="document.getElementById('radarBoundaryNoiseLabel').textContent=this.value; if(radarBoundaryActive)radarReRenderBoundaries()" style="width:100%;accent-color:var(--acc);cursor:pointer">
+            <input type="range" id="radarBoundaryNoise" min="0" max="90" value="40" step="5" oninput="document.getElementById('radarBoundaryNoiseLabel').textContent=this.value; radarScheduleReRender()" style="width:100%;accent-color:var(--acc);cursor:pointer">
           </label>
           <div style="font-size:8px;color:var(--t3);margin-top:1px">Higher = fewer boundaries (stricter). Lower = more boundaries (more sensitive).</div>
           <div id="radarBoundaryStatus" style="font-size:8px;color:var(--t3);margin-top:2px"></div>
@@ -15432,6 +15433,8 @@ var radarBoundaryLayer=null;     /* Leaflet layer for radar-detected boundaries 
 var radarBoundaryActive=false;   /* Is the radar boundary layer separately enabled? */
 var radarLastBoundaries=[];      /* Cached boundaries for re-rendering when slider changes */
 var radarLastTileGrids=null;     /* Cached tile grids for boundary re-detection */
+var radarStormMotionEnabled=true; /* Show motion arrows on radar-tracked storm cells */
+var radarReRenderTimer=null;     /* Debounce timer for noise slider re-render */
 
 /* Generate a stable key for a storm cell based on rounded centroid.
    Used to match cells between frames. */
@@ -15811,12 +15814,39 @@ function toggleRadarBoundary(){
 }
 window.toggleRadarBoundary=toggleRadarBoundary;
 
-/* Re-render boundaries with the current slider value (called when slider changes). */
-function radarReRenderBoundaries(){
-  if(!radarBoundaryActive||!radarLastBoundaries)return;
-  radarRenderBoundaries(radarLastBoundaries);
+/* Re-render boundaries with the current slider value.
+   Uses a 500ms debounce so rapid slider dragging doesn't trigger
+   excessive re-renders. */
+function radarScheduleReRender(){
+  if(radarReRenderTimer)clearTimeout(radarReRenderTimer);
+  radarReRenderTimer=setTimeout(function(){
+    radarReRenderTimer=null;
+    if(radarBoundaryActive&&radarLastBoundaries){
+      radarRenderBoundaries(radarLastBoundaries);
+    }
+  },500);
 }
-window.radarReRenderBoundaries=radarReRenderBoundaries;
+window.radarScheduleReRender=radarScheduleReRender;
+
+/* Toggle radar storm cell motion arrows on/off. */
+function radarToggleStormMotion(){
+  var cb=document.getElementById('amRadarStormMotion');
+  if(!cb)return;
+  radarStormMotionEnabled=cb.checked;
+  /* Re-render storm cells + motion if active */
+  if(radarStormActive&&radarStormCells.length>0){
+    /* Clear and re-render the storm layer */
+    if(radarStormLayer){
+      try{alertMapInstance.removeLayer(radarStormLayer)}catch(e){}
+    }
+    radarStormLayer=L.layerGroup().addTo(alertMapInstance);
+    radarRenderStormCells(radarStormCells);
+    if(radarStormMotionEnabled){
+      radarRenderMotion(radarStormCells);
+    }
+  }
+}
+window.radarToggleStormMotion=radarToggleStormMotion;
 
 /* Update the main detection function to include tracking + boundaries */
 var radarDetectStormCellsOriginal=radarDetectStormCells;
@@ -15880,8 +15910,10 @@ async function radarDetectStormCellsV2(){
   /* Render storm cells */
   radarRenderStormCells(cells);
   
-  /* Render motion arrows + projections on tracked cells */
-  radarRenderMotion(cells);
+  /* Render motion arrows + projections on tracked cells (only if enabled) */
+  if(radarStormMotionEnabled){
+    radarRenderMotion(cells);
+  }
   
   /* Detect outflow boundaries from reflectivity gradients — ONLY if
      the boundary checkbox is separately enabled. This is independent
