@@ -2108,7 +2108,8 @@ body.capturing .leaflet-control-zoom,
 body.capturing .leaflet-control-attribution,
 body.capturing .hamburger,
 body.capturing .hamburger-menu,
-body.capturing .sat-legend{display:none!important}
+body.capturing .sat-legend,
+body.capturing .md-screenshot-only{display:none!important}
 </style>
 </head>
 <body>
@@ -14751,6 +14752,189 @@ async function screenshotGenericPopup(title,infoHtml,lat,lon,accentColor){
 }
 window.screenshotGenericPopup=screenshotGenericPopup;
 
+/* Screenshot the Mesoscale Discussion popup + map zoomed to the MD polygon.
+   Similar to screenshotAlert() — zooms to the polygon bounds, captures the
+   map, builds an info panel with the full discussion text (scrollbar expanded),
+   and composites with the Skywarn branding footer. */
+var mdLastPopupContent=null;
+var mdLastPolygonBounds=null;
+
+async function screenshotMD(centerLat,centerLng,mdNumber){
+  if(!alertMapInstance||typeof html2canvas==='undefined'){
+    alert('Screenshot library not loaded');
+    return;
+  }
+  /* Get the current popup content */
+  var popup=alertMapInstance._popup;
+  if(!popup){alert('No MD popup open');return}
+  var popupEl=popup.getElement();
+  if(!popupEl){alert('Popup element not found');return}
+  /* Get the popup content (the inner div) */
+  var contentDiv=popupEl.querySelector('.leaflet-popup-content');
+  if(!contentDiv){alert('Popup content not found');return}
+  mdLastPopupContent=contentDiv.innerHTML;
+  
+  /* Find the MD polygon on the map to get its bounds */
+  var mdPolyBounds=null;
+  if(mdLayer){
+    mdLayer.eachLayer(function(l){
+      if(l.getBounds&&l.getBounds().isValid()){
+        if(!mdPolyBounds){
+          mdPolyBounds=l.getBounds();
+        }else{
+          mdPolyBounds.extend(l.getBounds());
+        }
+      }
+    });
+  }
+  
+  currentScreenshotType='Mesoscale Discussion #'+mdNumber;
+  currentScreenshotAlertCoords={lat:centerLat,lon:centerLng};
+  currentScreenshotAlertMeta={
+    event:'SPC Mesoscale Discussion #'+mdNumber,
+    areaDesc:'',
+    headline:'Mesoscale Discussion #'+mdNumber
+  };
+  
+  /* Close the popup so it doesn't appear in the map capture */
+  alertMapInstance.closePopup();
+  
+  /* Helper: wait for map tiles to load */
+  function waitForMapLoad(){
+    return new Promise(function(resolve){
+      var done=false;
+      function finish(){if(!done){done=true;setTimeout(resolve,400)}}
+      if(!alertMapInstance._loaded){resolve();return}
+      alertMapInstance.once('load',finish);
+      setTimeout(finish,1800);
+    });
+  }
+  /* Helper: capture the current map view */
+  async function captureMap(){
+    var mapEl=document.getElementById('alertMap');
+    var dpr=window.devicePixelRatio||1;
+    var capScale=Math.min(dpr,1.5);
+    return await html2canvas(mapEl,{
+      useCORS:true,allowTaint:true,backgroundColor:'#e0e0e0',scale:capScale,
+      logging:false,imageTimeout:5000,
+      width:mapEl.offsetWidth,height:mapEl.offsetHeight,
+      windowWidth:mapEl.offsetWidth,windowHeight:mapEl.offsetHeight,
+      x:0,y:0,scrollX:0,scrollY:0
+    });
+  }
+  
+  var mapCanvas=null;
+  try{
+    /* STEP 1: Zoom to the MD polygon bounds */
+    if(mdPolyBounds&&mdPolyBounds.isValid()){
+      alertMapInstance.fitBounds(mdPolyBounds,{padding:[40,40],maxZoom:11});
+    }
+    await waitForMapLoad();
+    document.body.classList.add('capturing');
+    /* Expand the full discussion div (remove max-height) for screenshot */
+    await new Promise(function(r){requestAnimationFrame(function(){requestAnimationFrame(r)})});
+    mapCanvas=await captureMap();
+    document.body.classList.remove('capturing');
+    if(!mapCanvas)throw new Error('Map capture failed');
+    
+    /* STEP 2: Build the info panel from the popup content */
+    var panel=document.createElement('div');
+    panel.style.cssText='position:absolute;left:-9999px;top:0;width:300px;background:#0a0a0a;border:1px solid #ffd60a;border-radius:8px;padding:16px;font-family:Inter,sans-serif;font-size:11px;color:#f0f0f0;line-height:1.5;box-shadow:0 4px 20px rgba(0,0,0,.5)';
+    var ph='<div style="background:#ffd60a;margin:-16px -16px 12px -16px;padding:12px 16px;border-radius:7px 7px 0 0;font-size:14px;font-weight:700;color:#000"><i class="fas fa-comment-dots"></i> Mesoscale Discussion</div>';
+    /* Insert the popup content, but remove the "View full discussion" link
+       (hidden by .md-screenshot-only CSS during capturing) and the screenshot
+       button. Also expand the full discussion div (remove max-height). */
+    var cleanedContent=mdLastPopupContent
+      .replace(/class="md-screenshot-only"[^>]*>.*?<\/div>/g,'')
+      .replace(/<button[^>]*>.*?<\/button>/g,'')
+      .replace(/max-height:200px;overflow-y:auto;/g,'max-height:none;');
+    ph+='<div style="font-size:10px;color:#f0f0f0">'+cleanedContent+'</div>';
+    panel.innerHTML=ph;
+    document.body.appendChild(panel);
+    var panelCanvas=await html2canvas(panel,{backgroundColor:null,scale:window.devicePixelRatio||1,logging:false});
+    document.body.removeChild(panel);
+    
+    /* STEP 3: Composite info panel + map + branding */
+    await preloadLogoDataUrl();
+    var panelW=panelCanvas.width;
+    var panelH=panelCanvas.height;
+    var gap=10;
+    var mapTargetH=panelH;
+    var mapScale=mapTargetH/mapCanvas.height;
+    var mapTargetW=Math.floor(mapCanvas.width*mapScale);
+    var compositeW=panelW+gap+mapTargetW;
+    var compositeH=panelH;
+    var footerH=90;
+    var finalCanvas=document.createElement('canvas');
+    finalCanvas.width=compositeW;
+    finalCanvas.height=compositeH+footerH;
+    var fctx=finalCanvas.getContext('2d');
+    fctx.fillStyle='#e0e0e0';
+    fctx.fillRect(0,0,finalCanvas.width,finalCanvas.height);
+    fctx.drawImage(panelCanvas,0,0);
+    var mapX=panelW+gap;
+    fctx.drawImage(mapCanvas,0,0,mapCanvas.width,mapCanvas.height,mapX,0,mapTargetW,mapTargetH);
+    fctx.fillStyle='rgba(255,213,10,.8)';
+    fctx.font='bold 10px Inter,sans-serif';
+    fctx.textBaseline='top';
+    fctx.fillText('MD Polygon Map',mapX+4,2);
+    /* Draw footer branding */
+    var logoSize=72;
+    var siteName='Skywarn Storm Spotters & Chasers United States';
+    var stampStr=new Date().toLocaleString('en-US',{weekday:'short',year:'numeric',month:'short',day:'numeric',hour:'2-digit',minute:'2-digit',hour12:true});
+    fctx.font='bold 22px Inter,sans-serif';
+    var nameW=fctx.measureText(siteName).width;
+    fctx.font='14px Inter,sans-serif';
+    var stampW=fctx.measureText(stampStr).width;
+    var textW=Math.max(nameW,stampW);
+    var contentW=logoSize+16+textW;
+    var barY=compositeH;
+    fctx.fillStyle='rgba(0,0,0,.85)';
+    fctx.fillRect(0,barY,finalCanvas.width,footerH);
+    fctx.fillStyle='#ff7300';
+    fctx.fillRect(0,barY-2,finalCanvas.width,2);
+    var groupX=Math.floor((finalCanvas.width-contentW)/2);
+    var logoX=groupX;
+    var logoY=barY+9;
+    if(LOGO_DATA_URL){
+      var logoImg=new Image();
+      await new Promise(function(resolve){
+        logoImg.onload=function(){try{fctx.drawImage(logoImg,logoX,logoY,logoSize,logoSize)}catch(e){}resolve()};
+        logoImg.onerror=function(){resolve()};
+        logoImg.src=LOGO_DATA_URL;
+      });
+    }
+    var textX=logoX+logoSize+16;
+    fctx.fillStyle='#ff7300';
+    fctx.font='bold 22px Inter,sans-serif';
+    fctx.textBaseline='middle';
+    fctx.fillText(siteName,textX,barY+footerH/2-13);
+    fctx.fillStyle='#a0a0a0';
+    fctx.font='14px Inter,sans-serif';
+    fctx.fillText(stampStr,textX,barY+footerH/2+15);
+    
+    /* Show preview */
+    var dataUrl=finalCanvas.toDataURL('image/png');
+    var previewImg=document.getElementById('shotPreviewImg');
+    var downloadLink=document.getElementById('shotDownloadLink');
+    var infoEl=document.getElementById('shotInfo');
+    if(previewImg)previewImg.src=dataUrl;
+    if(downloadLink){
+      var filename='skywarn-md'+mdNumber+'-'+new Date().toISOString().slice(0,19).replace(/[:T]/g,'-')+'.png';
+      downloadLink.href=dataUrl;
+      downloadLink.download=filename;
+    }
+    if(infoEl)infoEl.textContent=finalCanvas.width+'x'+finalCanvas.height+'px - PNG';
+    document.getElementById('shotModal').classList.add('visible');
+  }catch(e){
+    console.error('[MD] Screenshot failed:',e);
+    alert('Screenshot failed: '+e.message);
+  }finally{
+    document.body.classList.remove('capturing');
+  }
+}
+window.screenshotMD=screenshotMD;
+
 function stormMotionETA(targetLatlng){
   if(!targetLatlng)return;
   var targetLat=targetLatlng.lat,targetLon=targetLatlng.lng;
@@ -17357,15 +17541,16 @@ async function mdFetch(){
         fillOpacity:0.15,
         dashArray:'5,3'
       });
-      var popupHtml='<div style="font-family:Inter,sans-serif;min-width:220px">'+
+      var popupHtml='<div style="font-family:Inter,sans-serif;min-width:240px;max-width:280px">'+
         '<div style="color:#ffd60a;font-weight:700;font-size:12px;margin-bottom:4px">SPC Mesoscale Discussion #'+mdData.number+'</div>'+
         '<div style="font-size:10px;color:var(--t2);margin-bottom:4px"><b>Areas:</b> '+mdData.areas+'</div>'+
         '<div style="font-size:10px;color:var(--t2);margin-bottom:4px"><b>Concerning:</b> '+mdData.concerning+'</div>'+
         '<div style="font-size:10px;color:var(--t2);margin-bottom:4px"><b>Valid:</b> '+mdData.valid+'</div>'+
         (mdData.probability?'<div style="font-size:10px;color:#ffd60a;margin-bottom:4px"><b>Watch Probability:</b> '+mdData.probability+'</div>':'')+
         (mdData.summary?'<div style="font-size:10px;color:var(--t1);margin-top:6px;padding:6px 8px;background:var(--bg2);border-radius:4px;border-left:2px solid #ffd60a">'+mdData.summary+'</div>':'')+
-        '<div style="margin-top:6px"><a href="'+mdUrl+'" target="_blank" rel="noopener" style="color:var(--acc);font-size:10px;text-decoration:none">View full discussion →</a></div>'+
-        '<button type="button" onclick="event.stopPropagation();event.preventDefault();screenshotGenericPopup(\'Mesoscale Discussion\',this.parentElement.outerHTML,'+center.lat+','+center.lng+',\'#ffd60a\');return false;" style="display:flex;align-items:center;justify-content:center;gap:4px;width:100%;margin-top:6px;padding:4px 8px;background:rgba(255,213,10,.12);border:1px solid #ffd60a40;color:#ffd60a;border-radius:3px;cursor:pointer;font-family:inherit;font-size:8px;font-weight:600"><i class="fas fa-camera"></i> Screenshot</button>'+
+        (mdData.fullDiscussion?'<div style="font-size:9px;color:var(--t1);margin-top:6px;padding:6px 8px;background:var(--bg2);border-radius:4px;border-left:2px solid #ffd60a;max-height:200px;overflow-y:auto;line-height:1.5"><b>Full Discussion:</b><br>'+mdData.fullDiscussion+'</div>':'')+
+        '<div class="md-screenshot-only" style="margin-top:6px"><a href="'+mdUrl+'" target="_blank" rel="noopener" style="color:var(--acc);font-size:10px;text-decoration:none">View full discussion →</a></div>'+
+        '<button type="button" onclick="event.stopPropagation();event.preventDefault();screenshotMD('+center.lat+','+center.lng+',\''+mdData.number+'\');return false;" style="display:flex;align-items:center;justify-content:center;gap:4px;width:100%;margin-top:6px;padding:4px 8px;background:rgba(255,213,10,.12);border:1px solid #ffd60a40;color:#ffd60a;border-radius:3px;cursor:pointer;font-family:inherit;font-size:8px;font-weight:600"><i class="fas fa-camera"></i> Screenshot</button>'+
         '</div>';
       poly.bindPopup(popupHtml,{maxWidth:320});
       mdLayer.addLayer(poly);
@@ -17391,7 +17576,7 @@ async function mdFetch(){
 /* Parse SPC MD HTML page to extract polygon + metadata */
 function mdParsePage(html,linkName){
   var text=html.replace(/<[^>]+>/g,'\n').replace(/\n+/g,'\n').replace(/&nbsp;/g,' ').trim();
-  var data={number:'',polygon:[],areas:'',concerning:'',valid:'',probability:'',summary:''};
+  var data={number:'',polygon:[],areas:'',concerning:'',valid:'',probability:'',summary:'',fullDiscussion:''};
   /* Extract MD number from link name (md1840.html → 1840) */
   var numMatch=linkName.match(/md(\d+)\.html/);
   if(numMatch)data.number=numMatch[1];
@@ -17441,6 +17626,13 @@ function mdParsePage(html,linkName){
   /* Parse summary */
   var summaryMatch=text.match(/SUMMARY\.\.\.(.+?)(?:\d{4}|ATTN|FORECAST)/s);
   if(summaryMatch)data.summary=summaryMatch[1].trim().replace(/\n/g,' ').slice(0,300);
+  /* Parse the FULL discussion text (everything after "DISCUSSION..." up to
+     "ATTN..." or "PROBABILITY..." or end). This gives the complete meteorological
+     discussion for the popup and screenshot. */
+  var fullMatch=text.match(/DISCUSSION\.\.\.(.+?)(?:ATTN|PROBABILITY|$$|$)/s);
+  if(fullMatch){
+    data.fullDiscussion=fullMatch[1].trim().replace(/\n/g,' ').slice(0,2000);
+  }
   return data;
 }
 
