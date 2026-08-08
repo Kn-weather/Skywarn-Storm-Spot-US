@@ -2412,6 +2412,10 @@ body.capturing .sat-legend{display:none!important}
           <label style="margin:1px 0;font-size:9px;color:var(--t2)" id="amObsBoundariesLabel"><input type="checkbox" id="amObsBoundaries" onchange="toggleObsBoundaries()" style="accent-color:var(--acc)"> Detect Outflow Boundaries</label>
           <div style="font-size:8px;color:var(--t3);line-height:1.4;margin-top:2px">Detects boundaries within 75 mi of tracked storms. Enable Storm Motion first for best results.</div>
           <div id="obsBoundaryStatus" style="font-size:8px;color:var(--t3);margin-top:2px;display:none"></div>
+          <div style="height:1px;background:var(--bdr);margin:6px 0"></div>
+          <label style="margin:1px 0;font-size:9px;color:var(--t2)"><input type="checkbox" id="amRadarStorm" onchange="toggleRadarStormCells()" style="accent-color:var(--acc)"> Radar Storm Cell Detection</label>
+          <div style="font-size:8px;color:var(--t3);line-height:1.4;margin-top:2px">Decodes RainViewer radar tiles to dBZ, segments storm cells (≥40 dBZ), renders as colored circles. Auto-refreshes every 5 min.</div>
+          <div id="radarStormStatus" style="font-size:8px;color:var(--t3);margin-top:2px"></div>
         </div>
       </div>
 
@@ -14942,6 +14946,427 @@ async function stormMotionETAReverseGeocode(lat,lon){
      changed when the town name was filled in. */
   stormMotionETAPositionBelow();
 }
+
+/* ════════════════════════════════════════════════════════════════════════
+   Radar-Based Storm Cell Detection Engine
+   ────────────────────────────────────────────────────────────────────────
+   Processes RainViewer radar tiles to extract storm cells using
+   reflectivity (dBZ) analysis. Runs entirely client-side — no external
+   APIs needed beyond RainViewer's tile server (which supports CORS).
+
+   Pipeline:
+   1. Load RainViewer PNG tiles for the visible map area
+   2. Read pixel data via canvas getImageData (CORS-enabled)
+   3. Convert RGB → dBZ using RainViewer color scheme 4 lookup
+   4. Segment connected regions where dBZ >= 40 (storm cells)
+   5. Compute centroid, radius, max dBZ, severity for each cell
+   6. Render as colored circles on the map with popups
+
+   Dependencies: RainViewer tiles (CORS-enabled), Leaflet, turf.js
+   ════════════════════════════════════════════════════════════════════════ */
+
+var radarStormLayer=null;         /* Leaflet layerGroup for storm cell markers */
+var radarStormActive=false;       /* Is the radar storm cell layer on? */
+var radarStormCells=[];           /* Current detected storm cells */
+var radarStormTimer=null;         /* Auto-refresh timer */
+
+/* RainViewer color scheme 4 (Meteored) RGB → dBZ lookup.
+   Built from empirical sampling of actual RainViewer tiles.
+   The scheme uses distinct colors at A=255 (fully opaque) and
+   semi-transparent edge pixels at A < 255. */
+function radarRgbToDbz(r,g,b,a){
+  if(a<5)return null;  /* transparent = no data */
+  
+  /* For fully opaque pixels (a >= 250), use exact color matching.
+     The Meteored scheme goes: dark blue → cyan → blue → yellow →
+     orange → red → magenta → white */
+  if(a>=250){
+    /* Blue family (low dBZ: 5-30) */
+    if(r<60&&b>100){
+      if(g>180)return 10;   /* cyan (108,209,235 / 54,186,229) */
+      if(g>150)return 15;   /* light blue (0,163,224) */
+      if(g>120)return 20;   /* blue (0,136,191) */
+      if(g>90)return 25;    /* medium blue (0,112,163) */
+      return 30;             /* dark blue (0,78,120) */
+    }
+    /* Yellow/Orange (medium dBZ: 30-45) */
+    if(r>240&&g>200&&b<30)return 30;   /* yellow (255,224,0) */
+    if(r>250&&g>170&&b<30)return 35;   /* yellow-orange (255,183,0) */
+    if(r>250&&g>120&&b<30)return 40;   /* orange (255,139,0) */
+    /* Red (high dBZ: 45-55) */
+    if(r>230&&g<80&&b<30)return 50;    /* red (242,54,0) */
+    if(r>200&&g<50&&b<30)return 55;    /* dark red */
+    /* Magenta (very high dBZ: 55+) */
+    if(r>200&&g<50&&b>100)return 60;   /* magenta */
+    if(r>150&&g<50&&b>100)return 65;   /* dark magenta */
+    /* White (extreme) */
+    if(r>240&&g>240&&b>240)return 65;  /* white */
+    /* Fallback for unknown opaque colors */
+    return 15;
+  }
+  
+  /* For semi-transparent pixels (a < 250), these are smoothing/edge
+     pixels. The alpha correlates with echo intensity — higher alpha
+     means closer to the echo center. Estimate dBZ from alpha. */
+  /* Map alpha 5-250 to dBZ 5-45 (rough linear approximation) */
+  var dbz=Math.round(5+(a-5)/(250-5)*(45-5));
+  /* Clamp to reasonable range */
+  if(dbz<5)dbz=5;
+  if(dbz>45)dbz=45;
+  return dbz;
+}
+
+/* Convert tile pixel coordinates to lat/lon.
+   Uses the Web Mercator projection. */
+function radarTilePixelToLatLon(tileX,tileY,zoom,pixelX,pixelY){
+  var lon=(tileX+pixelX/256)/Math.pow(2,zoom)*360-180;
+  var n=Math.PI-2*Math.PI*(tileY+pixelY/256)/Math.pow(2,zoom);
+  var lat=180/Math.PI*Math.atan(0.5*(Math.exp(n)-Math.exp(-n)));
+  return{lat:lat,lon:lon};
+}
+
+/* Get the list of visible tiles for the current map view.
+   Returns [{x, y, z}] for each tile that intersects the map bounds. */
+function radarGetVisibleTiles(){
+  if(!alertMapInstance)return[];
+  var zoom=Math.min(Math.floor(alertMapInstance.getZoom()),7);  /* cap at z7 */
+  if(zoom<3)zoom=3;  /* min z3 for meaningful resolution */
+  var bounds=alertMapInstance.getBounds();
+  var north=bounds.getNorth(),south=bounds.getSouth();
+  var west=bounds.getWest(),east=bounds.getEast();
+  
+  /* Clamp lat to valid Mercator range */
+  if(north>85)north=85;
+  if(south<-85)south=-85;
+  
+  /* Convert lat/lon to tile coordinates */
+  var minTileX=Math.floor((west+180)/360*Math.pow(2,zoom));
+  var maxTileX=Math.floor((east+180)/360*Math.pow(2,zoom));
+  var minTileY=Math.floor((1-Math.log(Math.tan(north*Math.PI/180)+1/Math.cos(north*Math.PI/180))/Math.PI)/2*Math.pow(2,zoom));
+  var maxTileY=Math.floor((1-Math.log(Math.tan(south*Math.PI/180)+1/Math.cos(south*Math.PI/180))/Math.PI)/2*Math.pow(2,zoom));
+  
+  /* Handle world wrap */
+  var maxTile=Math.pow(2,zoom)-1;
+  if(minTileX<0)minTileX=0;
+  if(maxTileX>maxTile)maxTileX=maxTile;
+  if(minTileY<0)minTileY=0;
+  if(maxTileY>maxTile)maxTileY=maxTile;
+  
+  var tiles=[];
+  for(var x=minTileX;x<=maxTileX;x++){
+    for(var y=minTileY;y<=maxTileY;y++){
+      tiles.push({x:x,y:y,z:zoom});
+    }
+  }
+  return tiles;
+}
+
+/* Load a single RainViewer tile and return its dBZ grid.
+   Returns {dbzGrid, tileX, tileY, zoom} or null on failure. */
+async function radarDecodeTile(tileUrl,tileX,tileY,zoom){
+  try{
+    var img=new Image();
+    img.crossOrigin='anonymous';
+    
+    await new Promise(function(resolve,reject){
+      img.onload=function(){resolve()};
+      img.onerror=function(){reject(new Error('Image load failed'))};
+      img.src=tileUrl;
+      setTimeout(function(){reject(new Error('Timeout'))},10000);
+    });
+    
+    var canvas=document.createElement('canvas');
+    canvas.width=256;
+    canvas.height=256;
+    var ctx=canvas.getContext('2d');
+    ctx.drawImage(img,0,0);
+    var imageData=ctx.getImageData(0,0,256,256);
+    var pixels=imageData.data;
+    
+    /* Build dBZ grid (256x256) */
+    var dbzGrid=new Array(256);
+    for(var y=0;y<256;y++){
+      dbzGrid[y]=new Array(256);
+      for(var x=0;x<256;x++){
+        var idx=(y*256+x)*4;
+        dbzGrid[y][x]=radarRgbToDbz(pixels[idx],pixels[idx+1],pixels[idx+2],pixels[idx+3]);
+      }
+    }
+    
+    return{dbzGrid:dbzGrid,tileX:tileX,tileY:tileY,zoom:zoom};
+  }catch(e){
+    return null;
+  }
+}
+
+/* Segment storm cells from a combined dBZ grid using connected-component
+   labeling (8-way flood fill). Identifies regions where dBZ >= threshold.
+   Returns array of {centroidLat, centroidLon, radiusMi, maxDbz, pixelCount, severity}. */
+function radarSegmentStormCells(tileGrids,threshold){
+  /* Build a combined grid from all tiles. Each tile is 256x256.
+     We process each tile independently for simplicity. */
+  var cells=[];
+  var MIN_CELL_PIXELS=10;  /* filter out tiny noise clusters */
+  var labelCounter=0;
+  
+  tileGrids.forEach(function(tile){
+    var dbzGrid=tile.dbzGrid;
+    var tileX=tile.tileX,tileY=tile.tileY,zoom=tile.zoom;
+    var labels=new Array(256);
+    for(var y=0;y<256;y++){
+      labels[y]=new Array(256).fill(0);
+    }
+    
+    /* 8-way connected-component labeling (iterative flood fill) */
+    for(var y=0;y<256;y++){
+      for(var x=0;x<256;x++){
+        if(dbzGrid[y][x]==null)continue;
+        if(dbzGrid[y][x]<threshold)continue;
+        if(labels[y][x]!==0)continue;
+        
+        /* Start a new component */
+        labelCounter++;
+        var stack=[[y,x]];
+        var pixels=[];
+        var sumLat=0,sumLon=0,maxDbz=0;
+        
+        while(stack.length>0){
+          var pos=stack.pop();
+          var py=pos[0],px=pos[1];
+          if(py<0||py>=256||px<0||px>=256)continue;
+          if(labels[py][px]!==0)continue;
+          if(dbzGrid[py][px]==null||dbzGrid[py][px]<threshold)continue;
+          
+          labels[py][px]=labelCounter;
+          var ll=radarTilePixelToLatLon(tileX,tileY,zoom,px,py);
+          sumLat+=ll.lat;
+          sumLon+=ll.lon;
+          if(dbzGrid[py][px]>maxDbz)maxDbz=dbzGrid[py][px];
+          pixels.push({lat:ll.lat,lon:ll.lon,dbz:dbzGrid[py][px]});
+          
+          /* 8-way neighbors */
+          stack.push([py-1,px-1],[py-1,px],[py-1,px+1],
+                     [py,px-1],            [py,px+1],
+                     [py+1,px-1],[py+1,px],[py+1,px+1]);
+        }
+        
+        if(pixels.length<MIN_CELL_PIXELS)continue;
+        
+        /* Compute centroid */
+        var centroidLat=sumLat/pixels.length;
+        var centroidLon=sumLon/pixels.length;
+        
+        /* Compute radius (max distance from centroid) */
+        var maxDistMi=0;
+        pixels.forEach(function(p){
+          var d=haversineMi(centroidLat,centroidLon,p.lat,p.lon);
+          if(d>maxDistMi)maxDistMi=d;
+        });
+        
+        /* Severity category */
+        var severity='moderate';
+        if(maxDbz>=65)severity='extreme';
+        else if(maxDbz>=60)severity='severe';
+        else if(maxDbz>=50)severity='strong';
+        
+        cells.push({
+          centroidLat:centroidLat,
+          centroidLon:centroidLon,
+          radiusMi:maxDistMi,
+          maxDbz:maxDbz,
+          pixelCount:pixels.length,
+          severity:severity
+        });
+      }
+    }
+  });
+  
+  /* Merge cells that overlap (within 5 miles of each other) — this
+     handles cells that span multiple tiles. */
+  var merged=[];
+  var used=new Array(cells.length).fill(false);
+  for(var i=0;i<cells.length;i++){
+    if(used[i])continue;
+    var group=[cells[i]];
+    used[i]=true;
+    for(var j=i+1;j<cells.length;j++){
+      if(used[j])continue;
+      var d=haversineMi(cells[i].centroidLat,cells[i].centroidLon,cells[j].centroidLat,cells[j].centroidLon);
+      if(d<5){
+        group.push(cells[j]);
+        used[j]=true;
+      }
+    }
+    /* Merge group into a single cell */
+    if(group.length===1){
+      merged.push(group[0]);
+    }else{
+      var sumLat=0,sumLon=0,maxDbz=0,totalPixels=0,maxR=0;
+      group.forEach(function(c){
+        sumLat+=c.centroidLat;
+        sumLon+=c.centroidLon;
+        if(c.maxDbz>maxDbz)maxDbz=c.maxDbz;
+        totalPixels+=c.pixelCount;
+        if(c.radiusMi>maxR)maxR=c.radiusMi;
+      });
+      var sev='moderate';
+      if(maxDbz>=65)sev='extreme';
+      else if(maxDbz>=60)sev='severe';
+      else if(maxDbz>=50)sev='strong';
+      merged.push({
+        centroidLat:sumLat/group.length,
+        centroidLon:sumLon/group.length,
+        radiusMi:maxR,
+        maxDbz:maxDbz,
+        pixelCount:totalPixels,
+        severity:sev
+      });
+    }
+  }
+  
+  return merged;
+}
+
+/* Render storm cells on the map as colored circles with popups. */
+function radarRenderStormCells(cells){
+  if(!alertMapInstance)return;
+  if(radarStormLayer){
+    try{alertMapInstance.removeLayer(radarStormLayer)}catch(e){}
+  }
+  radarStormLayer=L.layerGroup().addTo(alertMapInstance);
+  
+  var severityColors={
+    moderate:'#ffd60a',   /* yellow (40-49 dBZ) */
+    strong:'#ff7300',     /* orange (50-59 dBZ) */
+    severe:'#ff0000',     /* red (60-64 dBZ) */
+    extreme:'#ff00ff'     /* magenta (65+ dBZ) */
+  };
+  var severityIcons={
+    moderate:'fa-cloud',
+    strong:'fa-cloud-bolt',
+    severe:'fa-tornado',
+    extreme:'fa-tornado'
+  };
+  
+  cells.forEach(function(cell){
+    var color=severityColors[cell.severity]||'#ffd60a';
+    var radiusM=cell.radiusMi*1609.34;  /* miles to meters */
+    /* Minimum visual radius */
+    if(radiusM<2000)radiusM=2000;
+    
+    var circle=L.circle([cell.centroidLat,cell.centroidLon],{
+      radius:radiusM,
+      color:color,
+      weight:2,
+      fillColor:color,
+      fillOpacity:0.15,
+      dashArray:'4,2'
+    });
+    
+    var popupHtml=
+      '<div style="font-family:Inter,sans-serif;min-width:180px">'+
+        '<div style="color:'+color+';font-weight:700;font-size:12px;margin-bottom:4px">'+
+          '<i class="fas '+severityIcons[cell.severity]+'"></i> Storm Cell ('+cell.severity+')'+
+        '</div>'+
+        '<div style="font-size:10px;color:var(--t2);line-height:1.5">'+
+          'Max dBZ: <b style="color:'+color+'">'+cell.maxDbz+'</b><br>'+
+          'Radius: <b>'+cell.radiusMi.toFixed(1)+' mi</b><br>'+
+          'Centroid: <b>'+cell.centroidLat.toFixed(4)+', '+cell.centroidLon.toFixed(4)+'</b><br>'+
+          'Source: RainViewer radar (color scheme 4)'+
+        '</div>'+
+        '<button type="button" onclick="event.stopPropagation();event.preventDefault();screenshotGenericPopup(\'Storm Cell\',this.parentElement.outerHTML,'+cell.centroidLat+','+cell.centroidLon+',\''+color+'\');return false;" style="display:flex;align-items:center;justify-content:center;gap:4px;width:100%;margin-top:6px;padding:4px 8px;background:rgba(255,115,0,.12);border:1px solid var(--bdr-a);color:var(--acc);border-radius:3px;cursor:pointer;font-family:inherit;font-size:8px;font-weight:600"><i class="fas fa-camera"></i> Screenshot</button>'+
+      '</div>';
+    
+    circle.bindPopup(popupHtml,{maxWidth:240});
+    circle.addTo(radarStormLayer);
+  });
+  
+  console.log('[RadarStorm] Rendered '+cells.length+' storm cells');
+}
+
+/* Main function: detect and render storm cells from current radar. */
+async function radarDetectStormCells(){
+  if(!radarStormActive||!alertMapInstance)return;
+  
+  /* Get the current RainViewer radar path */
+  var radarPath=null;
+  try{
+    var resp=await fetch('https://api.rainviewer.com/public/weather-maps.json');
+    var data=await resp.json();
+    if(data&&data.radar&&data.radar.past&&data.radar.past.length>0){
+      radarPath=data.radar.past[data.radar.past.length-1].path;
+    }
+  }catch(e){
+    console.warn('[RadarStorm] Failed to get RainViewer path:',e);
+    return;
+  }
+  if(!radarPath)return;
+  
+  /* Get visible tiles */
+  var tiles=radarGetVisibleTiles();
+  if(tiles.length===0)return;
+  console.log('[RadarStorm] Processing '+tiles.length+' tiles at z'+tiles[0].z);
+  
+  /* Decode each tile to dBZ grid */
+  var tileGrids=[];
+  var batchSize=4;  /* process 4 tiles at a time to avoid overwhelming */
+  for(var i=0;i<tiles.length;i+=batchSize){
+    var batch=tiles.slice(i,i+batchSize);
+    var results=await Promise.all(batch.map(function(t){
+      var url='https://tilecache.rainviewer.com'+radarPath+'/256/'+t.z+'/'+t.x+'/'+t.y+'/4/1_1.png';
+      return radarDecodeTile(url,t.x,t.y,t.z);
+    }));
+    results.forEach(function(g){if(g)tileGrids.push(g)});
+  }
+  
+  if(tileGrids.length===0){
+    console.warn('[RadarStorm] No tiles decoded');
+    return;
+  }
+  
+  /* Segment storm cells (dBZ >= 40) */
+  var STORM_THRESHOLD_DBZ=40;
+  var cells=radarSegmentStormCells(tileGrids,STORM_THRESHOLD_DBZ);
+  radarStormCells=cells;
+  
+  /* Render on map */
+  radarRenderStormCells(cells);
+  
+  /* Update status */
+  var statusEl=document.getElementById('radarStormStatus');
+  if(statusEl){
+    statusEl.textContent=cells.length+' storm cell'+(cells.length===1?'':'s')+' detected ('+tileGrids.length+' tiles)';
+  }
+  
+  console.log('[RadarStorm] Detected '+cells.length+' storm cells from '+tileGrids.length+' tiles');
+}
+
+/* Toggle the radar storm cell detection on/off. */
+function toggleRadarStormCells(){
+  var cb=document.getElementById('amRadarStorm');
+  if(!cb)return;
+  if(cb.checked){
+    radarStormActive=true;
+    if(!radarStormLayer&&alertMapInstance){
+      radarStormLayer=L.layerGroup().addTo(alertMapInstance);
+    }
+    radarDetectStormCells();
+    /* Auto-refresh every 5 minutes */
+    if(radarStormTimer)clearInterval(radarStormTimer);
+    radarStormTimer=setInterval(radarDetectStormCells,5*60*1000);
+  }else{
+    radarStormActive=false;
+    if(radarStormTimer){clearInterval(radarStormTimer);radarStormTimer=null}
+    if(radarStormLayer){
+      try{alertMapInstance.removeLayer(radarStormLayer)}catch(e){}
+      radarStormLayer=null;
+    }
+    radarStormCells=[];
+    var statusEl=document.getElementById('radarStormStatus');
+    if(statusEl)statusEl.textContent='';
+  }
+}
+window.toggleRadarStormCells=toggleRadarStormCells;
 
 /* ════════════════════════════════════════════════════════════════════════
    Storm-Safe Navigation
