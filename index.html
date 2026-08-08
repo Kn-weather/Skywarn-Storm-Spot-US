@@ -2336,9 +2336,6 @@ body.capturing .sat-legend{display:none!important}
             <input type="range" class="radar-anim-timeline" id="amRadarTimeline" min="0" max="0" value="0" oninput="radarSeekTo(this.value)" style="width:100%">
             <div class="radar-anim-time-display" id="amRadarTimeDisplay">—</div>
           </div>
-          <div style="height:1px;background:var(--bdr);margin:6px 0"></div>
-          <label style="margin:1px 0;font-size:9px;color:var(--t2)" id="amObsBoundariesLabel"><input type="checkbox" id="amObsBoundaries" onchange="toggleObsBoundaries()" style="accent-color:var(--acc)"> Detect Outflow Boundaries</label>
-          <div id="obsBoundaryStatus" style="font-size:8px;color:var(--t3);margin-top:2px;display:none"></div>
         </div>
       </div>
 
@@ -2411,6 +2408,10 @@ body.capturing .sat-legend{display:none!important}
             <option value="60">60 min</option>
           </select></label>
           <div style="font-size:8px;color:var(--t3);margin-top:4px" id="stormMotionStatus"></div>
+          <div style="height:1px;background:var(--bdr);margin:6px 0"></div>
+          <label style="margin:1px 0;font-size:9px;color:var(--t2)" id="amObsBoundariesLabel"><input type="checkbox" id="amObsBoundaries" onchange="toggleObsBoundaries()" style="accent-color:var(--acc)"> Detect Outflow Boundaries</label>
+          <div style="font-size:8px;color:var(--t3);line-height:1.4;margin-top:2px">Detects boundaries within 75 mi of tracked storms. Enable Storm Motion first for best results.</div>
+          <div id="obsBoundaryStatus" style="font-size:8px;color:var(--t3);margin-top:2px;display:none"></div>
         </div>
       </div>
 
@@ -13569,15 +13570,50 @@ function obsDetectBoundaries(){
     return;
   }
 
+  /* Collect storm motion centroids — if we have tracked storms, we
+     limit boundary detection to station pairs within 75 miles of any
+     tracked storm. This dramatically reduces noise and false positives
+     since outflow boundaries are most relevant near active storms. */
+  var stormCentroids=[];
+  if(typeof stormTracks!=='undefined'){
+    Object.keys(stormTracks).forEach(function(id){
+      var track=stormTracks[id];
+      if(!track.centroids||track.centroids.length===0)return;
+      var latest=track.centroids[track.centroids.length-1];
+      stormCentroids.push({lat:latest.lat,lon:latest.lon});
+    });
+  }
+  var BOUNDARY_STORM_RADIUS_MI=75;
+  var hasStorms=stormCentroids.length>0;
+
+  /* Helper: check if a lat/lon is within 75 miles of any tracked storm */
+  function isNearStorm(lat,lon){
+    if(!hasStorms)return true;  /* No storms → don't filter (nationwide) */
+    for(var s=0;s<stormCentroids.length;s++){
+      var d=haversineMi(lat,lon,stormCentroids[s].lat,stormCentroids[s].lon);
+      if(d<=BOUNDARY_STORM_RADIUS_MI)return true;
+    }
+    return false;
+  }
+
   /* Step 1: Find all station pairs that meet the outflow boundary
      thresholds. For each pair, we compute the gradient and check
      whether ΔT, ΔTd, and wind shift all exceed their thresholds.
+     If storm motion tracking is active, we only consider pairs where
+     BOTH stations are within 75 miles of a tracked storm.
      We store the gradient direction (the bearing from the cold/dry
      side to the warm/moist side) — boundaries are perpendicular to
      this direction. */
   var boundaryPairs=[];
+  var totalPairsChecked=0;
+  var pairsFilteredByStorm=0;
   for(var i=0;i<validStations.length;i++){
+    /* If we have tracked storms, skip stations that aren't near any storm */
+    if(hasStorms&&!isNearStorm(validStations[i].lat,validStations[i].lon))continue;
     for(var j=i+1;j<validStations.length;j++){
+      /* Both stations must be near a storm (if storm filtering is active) */
+      if(hasStorms&&!isNearStorm(validStations[j].lat,validStations[j].lon))continue;
+      totalPairsChecked++;
       var a=validStations[i];
       var b=validStations[j];
       var dist=haversineMi(a.lat,a.lon,b.lat,b.lon);
@@ -13718,7 +13754,11 @@ function obsDetectBoundaries(){
   });
   var totalBoundaries=clusters.length;
   var totalPairs=boundaryPairs.length;
-  obsShowBoundaryStatus(totalBoundaries+' boundary '+(totalBoundaries===1?'line':'lines')+' detected ('+totalPairs+' station pairs)');
+  var statusMsg=totalBoundaries+' boundary '+(totalBoundaries===1?'line':'lines')+' detected ('+totalPairs+' pairs)';
+  if(hasStorms){
+    statusMsg+=' within 75mi of '+stormCentroids.length+' storm'+(stormCentroids.length===1?'':'s');
+  }
+  obsShowBoundaryStatus(statusMsg);
   console.log('[ObsBoundary] Detected '+totalBoundaries+' boundaries from '+totalPairs+' pairs');
 }
 
