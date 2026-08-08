@@ -14691,33 +14691,21 @@ async function screenshotGenericPopup(title,infoHtml,lat,lon,accentColor){
     document.body.classList.remove('capturing');
     if(!mapCanvasZoomedOut)throw new Error('Zoomed-out map capture failed');
 
-    /* STEP 3: Build the info panel (LEFT side) — same width as screenshotAlert (320px)
-       and cap content height so the map area isn't squished. */
+    /* STEP 3: Build the info panel (LEFT side) — same width and style as
+       screenshotAlert (320px). Insert popup content as-is, only removing
+       the screenshot button and expanding scrollbars. */
     var panel=document.createElement('div');
     panel.style.cssText='position:absolute;left:-9999px;top:0;width:320px;background:#0a0a0a;border:1px solid '+acc+';border-radius:8px;padding:16px;font-family:Inter,sans-serif;font-size:11px;color:#f0f0f0;line-height:1.5;box-shadow:0 4px 20px rgba(0,0,0,.5)';
-    var ph='<div style="background:'+acc+';margin:-16px -16px 12px -16px;padding:12px 16px;border-radius:7px 7px 0 0;font-size:14px;font-weight:700;color:#000"><i class="fas fa-camera"></i> '+title+'</div>';
-    /* Clean the popup HTML: remove screenshot buttons, expand scrollbars,
-       remove outer div wrappers that add extra padding/min-width. */
+    var ph='<div style="background:'+acc+';margin:-16px -16px 12px -16px;padding:12px 16px;border-radius:7px 7px 0 0;font-size:14px;font-weight:700;color:#000">'+title+'</div>';
+    /* Only remove the screenshot button and expand scrollbars — keep
+       everything else as-is to match the popup exactly. */
     var cleanedHtml=infoHtml
-      .replace(/<button[^>]*onclick="[^"]*screenshot[^"]*"[^>]*>.*?<\/button>/g,'')
-      .replace(/class="md-screenshot-only"[^>]*>.*?<\/div>/g,'')
-      .replace(/max-height:200px;overflow-y:auto;/g,'max-height:none;')
-      .replace(/<div style="font-family:Inter,sans-serif;[^"]*">/,'<div>')  /* strip outer div styling */
-      .replace(/min-width:\s*\d+px;?/g,'')  /* remove min-width constraints */
-      .replace(/max-width:\s*\d+px;?/g,''); /* remove max-width constraints */
+      .replace(/<button[^>]*onclick="[^"]*screenshot[^"]*"[^>]*>[\s\S]*?<\/button>/g,'')
+      .replace(/class="md-screenshot-only"[\s\S]*?<\/div>/g,'')
+      .replace(/max-height:200px;overflow-y:auto;/g,'');
     ph+='<div style="font-size:10px;color:#f0f0f0">'+cleanedHtml+'</div>';
     panel.innerHTML=ph;
     document.body.appendChild(panel);
-    /* Cap panel height to roughly 600px so the map section gets enough space.
-       If the panel is taller, the map gets squished. 600px gives a good
-       balance for 3-panel layout. */
-    var panelHeight=panel.offsetHeight;
-    var MAX_PANEL_HEIGHT=600;
-    if(panelHeight>MAX_PANEL_HEIGHT){
-      /* Add a scrollable div to cap the height */
-      panel.style.maxHeight=MAX_PANEL_HEIGHT+'px';
-      panel.style.overflow='hidden';
-    }
     var panelCanvas=await html2canvas(panel,{backgroundColor:null,scale:window.devicePixelRatio||1,logging:false});
     document.body.removeChild(panel);
 
