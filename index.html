@@ -4884,9 +4884,30 @@ async function fAlertMap(){
        alerts URL. The state filter is only for surface observations
        and the color gradient — alerts (warnings, watches, advisories)
        should always be shown nationwide. This was previously filtering
-       alerts by state, which hid warnings in neighboring states. */
+       alerts by state, which hid warnings in neighboring states.
+       
+       We use direct fetch() with a 15s timeout (not fP) because:
+       1. The NWS API has proper CORS headers (Access-Control-Allow-Origin: *)
+       2. The nationwide alerts response is ~1MB — fP's 6s timeout may be too short
+       3. fP's CORS proxy fallbacks (allorigins, corsproxy.io) are broken/paid
+       4. Direct fetch is faster and more reliable for CORS-enabled APIs */
     var url='https://api.weather.gov/alerts/active';
-    var txt=await fP(url);
+    var txt=null;
+    /* Try direct fetch with 15s timeout */
+    try{
+      var fetchPromise=fetch(url).then(function(r){
+        if(!r.ok)throw new Error('HTTP '+r.status);
+        return r.text();
+      });
+      var timeoutPromise=new Promise(function(_,reject){
+        setTimeout(function(){reject(new Error('Timeout'))},15000);
+      });
+      txt=await Promise.race([fetchPromise,timeoutPromise]);
+    }catch(directErr){
+      console.warn('[Alerts] Direct fetch failed, trying fP:',directErr.message);
+      /* Fall back to fP (CORS proxy) with its standard 6s timeout */
+      txt=await fP(url);
+    }
     if(!txt){
       if(countEl)countEl.innerHTML='<i class="fas fa-circle-exclamation"></i> Alerts unavailable';
       hideLoading();
@@ -12200,16 +12221,21 @@ async function obsEnable(forcedState){
   /* Get the current state filter value (or use forcedState from caller) */
   var stateFilter=document.getElementById('amStateFilter');
   var state=forcedState||((stateFilter&&stateFilter.value)?stateFilter.value.toUpperCase():'');
-  /* DEFENSE-IN-DEPTH: refuse to load all-US observations. Even though
-     obsUpdateStateGate() should prevent the user from enabling obs
-     without a state, this function could be called from other code
-     paths (animation restore, etc.). Refusing here guarantees we never
-     trigger the slow ~2000-station fetch. */
+  /* If no state is selected but boundary detection is active, allow
+     loading all CONUS stations. This is slower (~2000 stations) but
+     needed for nationwide boundary detection. Otherwise, refuse to
+     load all-US to prevent the slow fetch when the user just wants
+     to see the map. */
   if(!state){
-    console.warn('[Obs] obsEnable called without a state filter — refusing to load all US stations');
-    return;
+    if(obsBoundariesActive){
+      console.log('[Obs] Loading all CONUS stations for nationwide boundary detection');
+      /* Continue — load all CONUS stations */
+    }else{
+      console.warn('[Obs] obsEnable called without a state filter — refusing to load all US stations');
+      return;
+    }
   }
-  /* Load stations for the selected state only */
+  /* Load stations for the selected state only (or all CONUS if no state) */
   obsStationsLoaded=false;  /* Force reload when state changes */
   await obsLoadStations(state);
   /* Create the layer group for pin markers (only if pins are enabled) */
@@ -13461,16 +13487,15 @@ function toggleObsBoundaries(){
   var cb=document.getElementById('amObsBoundaries');
   if(!cb)return;
   if(cb.checked){
-    /* DEFENSE-IN-DEPTH: refuse without a state filter */
+    /* Outflow boundary detection can now run nationwide (no state required).
+       If a state is selected, we use it for station loading (faster).
+       If no state is selected, we load all CONUS stations (slower but
+       works for nationwide boundary detection). */
+    obsBoundariesActive=true;
     var stateFilter=document.getElementById('amStateFilter');
     var state=(stateFilter&&stateFilter.value)?stateFilter.value.toUpperCase():'';
-    if(!state){
-      cb.checked=false;
-      console.warn('[ObsBoundary] Cannot enable boundary detection without a state filter');
-      return;
-    }
-    obsBoundariesActive=true;
-    /* If obs data isn't loaded yet, load it first */
+    /* If obs data isn't loaded yet, load it first.
+       obsEnable() will use the state if available, or load all CONUS if not. */
     if(!obsStationsLoaded){
       obsEnable(state);
     }else if(Object.keys(obsData).length===0){
