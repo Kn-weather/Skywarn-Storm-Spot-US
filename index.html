@@ -16479,35 +16479,47 @@ async function navCalculate(){
       var isTornado=h.event.toLowerCase().indexOf('tornado')>=0;
       var bufKm=(isTornado?bufferMi*1.5:bufferMi)*1.60934;
       var geoToBuffer=h.geojson;
-      /* Predictive avoidance: if this is a storm cell with motion data,
-         project it forward by the drive time from start to the storm's
-         current centroid. This estimates where the storm will be when
-         the driver arrives. */
-      if(usePredictive&&h.id&&stormTracks[h.id]&&stormTracks[h.id].motion&&stormTracks[h.id].centroids&&stormTracks[h.id].centroids.length>0){
+      /* Predictive avoidance: project storm forward by drive time.
+         Supports TWO motion data sources:
+         1. Radar storm cell motion (h.isRadarCell + h.motion)
+         2. NWS warning-based stormTracks (h.id matches stormTracks key) */
+      var motionData=null;
+      var motionLat=null,motionLon=null;
+      
+      /* Source 1: Radar cell motion (attached directly to the hazard) */
+      if(usePredictive&&h.isRadarCell&&h.motion&&h.motion.speedKt>0){
+        motionData=h.motion;
         try{
-          var centroids=stormTracks[h.id].centroids;
-          var latest=centroids[centroids.length-1];
-          var motion=stormTracks[h.id].motion;
-          if(motion.speedKt>0){
-            /* Distance from start to storm's current position (miles) */
-            var distToStormMi=navHaversineMi(start.lat,start.lon,latest.lat,latest.lon);
-            /* Drive time to reach the storm's current position (minutes) */
-            var driveTimeToStormMin=navComputeDriveEta(distToStormMi,driveSpeedMph);
-            /* Project the storm forward by that drive time.
-               speedKt → miles per minute: 1 kt = 1.15078 mph, /60 min/hr */
-            var stormMph=motion.speedKt*1.15078;
-            var stormMiTraveled=stormMph*(driveTimeToStormMin/60);
-            var stormTraveledKm=stormMiTraveled*1.60934;
-            var projected=navDestinationPoint(latest.lat,latest.lon,stormTraveledKm,motion.bearing);
-            /* Create a new storm cell polygon at the projected position */
-            var cellRadiusMi=4;
-            var cellRadiusEl=document.getElementById('navCellRadius');
-            if(cellRadiusEl)cellRadiusMi=parseInt(cellRadiusEl.value,10);
-            var cellRadiusKm=cellRadiusMi*1.60934;
-            var projectedPoint=turf.point([projected.lon,projected.lat]);
-            geoToBuffer=turf.buffer(projectedPoint,cellRadiusKm,{units:'kilometers'});
-            h._projected={lat:projected.lat,lon:projected.lon,driveTimeMin:driveTimeToStormMin};
-          }
+          var centroid=turf.centroid(h.geojson);
+          motionLat=centroid.geometry.coordinates[1];
+          motionLon=centroid.geometry.coordinates[0];
+        }catch(e){}
+      }
+      
+      /* Source 2: NWS warning-based stormTracks */
+      if(usePredictive&&!motionData&&h.id&&stormTracks[h.id]&&stormTracks[h.id].motion&&stormTracks[h.id].centroids&&stormTracks[h.id].centroids.length>0){
+        var centroids=stormTracks[h.id].centroids;
+        var latest=centroids[centroids.length-1];
+        motionData=stormTracks[h.id].motion;
+        motionLat=latest.lat;
+        motionLon=latest.lon;
+      }
+      
+      if(motionData&&motionData.speedKt>0&&motionLat!==null){
+        try{
+          var distToStormMi=navHaversineMi(start.lat,start.lon,motionLat,motionLon);
+          var driveTimeToStormMin=navComputeDriveEta(distToStormMi,driveSpeedMph);
+          var stormMph=motionData.speedKt*1.15078;
+          var stormMiTraveled=stormMph*(driveTimeToStormMin/60);
+          var stormTraveledKm=stormMiTraveled*1.60934;
+          var projected=navDestinationPoint(motionLat,motionLon,stormTraveledKm,motionData.bearing);
+          var cellRadiusMi=4;
+          var cellRadiusEl=document.getElementById('navCellRadius');
+          if(cellRadiusEl)cellRadiusMi=parseInt(cellRadiusEl.value,10);
+          var cellRadiusKm=cellRadiusMi*1.60934;
+          var projectedPoint=turf.point([projected.lon,projected.lat]);
+          geoToBuffer=turf.buffer(projectedPoint,cellRadiusKm,{units:'kilometers'});
+          h._projected={lat:projected.lat,lon:projected.lon,driveTimeMin:driveTimeToStormMin};
         }catch(e){
           console.warn('[Nav] Predictive projection failed for',h.id,e);
         }
@@ -16666,68 +16678,98 @@ async function navCalculate(){
 /* Collect active warning polygons from drawnAlerts matching the hazard level. */
 function navCollectHazards(level){
   var hazards=[];
-  if(!drawnAlerts||drawnAlerts.length===0)return hazards;
   /* Check if storm cell tracking is enabled */
   var useStormCellCb=document.getElementById('navUseStormCell');
   var useStormCell=useStormCellCb?useStormCellCb.checked:true;
   var cellRadiusMi=4;
   var cellRadiusEl=document.getElementById('navCellRadius');
   if(cellRadiusEl)cellRadiusMi=parseInt(cellRadiusEl.value,10);
-  drawnAlerts.forEach(function(a){
-    if(!a.event||!a.geoms||a.geoms.length===0)return;
-    if(a.cat!=='warnings')return;
-    var ev=a.event.toLowerCase();
-    var isTornado=ev.indexOf('tornado')>=0;
-    var isSevere=ev.indexOf('severe thunderstorm')>=0||ev.indexOf('severe tstorm')>=0;
-    if(level==='tornado_only'&&!isTornado)return;
-    if(level==='tornado_severe'&&!isTornado&&!isSevere)return;
-    /* 'all_warnings' includes everything in the warnings category */
-    /* Check if we have storm motion tracking data for this alert.
-       If so, create a tight "storm cell" polygon (buffered point) around
-       the latest centroid instead of using the full NWS warning polygon.
-       This gives much shorter, more practical detours since the NWS
-       polygon often covers an entire county while the actual storm cell
-       is much smaller (5-15 miles across). */
-    var stormCellGeojson=null;
-    if(useStormCell&&a.id&&stormTracks[a.id]&&stormTracks[a.id].centroids&&stormTracks[a.id].centroids.length>0){
-      var centroids=stormTracks[a.id].centroids;
-      var latest=centroids[centroids.length-1];
-      /* Buffer the latest centroid by the cell radius to create a circle
-         representing the storm cell. turf.buffer takes kilometers. */
-      var cellRadiusKm=cellRadiusMi*1.60934;
+
+  /* ── Priority 1: Radar-detected storm cells ──
+     If radar storm cell detection is active (radarStormCells populated),
+     use those as the primary hazard source. These are actual storm cells
+     from radar reflectivity (dBZ >= 40) at ~1km resolution — much more
+     accurate than NWS polygon centroids.
+     
+     Each radar storm cell has: centroidLat, centroidLon, radiusMi,
+     maxDbz, severity, and optionally motion (bearing, speedKt) if tracked
+     across frames. We buffer the centroid by the cell radius to create
+     a tight polygon, then use the nav buffer slider on top of that. */
+  if(useStormCell&&typeof radarStormCells!=='undefined'&&radarStormCells.length>0){
+    radarStormCells.forEach(function(cell){
       try{
-        var pointFeature=turf.point([latest.lon,latest.lat]);
-        stormCellGeojson=turf.buffer(pointFeature,cellRadiusKm,{units:'kilometers'});
+        /* Skip cells weaker than 50 dBZ for navigation — only route around
+           strong+ cells (50+ dBZ = strong/severe/extreme) */
+        if(cell.maxDbz<50)return;
+        var cellRadiusKm=Math.max(cell.radiusMi,cellRadiusMi)*1.60934;
+        var pointFeature=turf.point([cell.centroidLon,cell.centroidLat]);
+        var cellGeojson=turf.buffer(pointFeature,cellRadiusKm,{units:'kilometers'});
+        var eventLabel='Radar Storm Cell ('+cell.severity+', '+cell.maxDbz+' dBZ)';
+        if(cell.motion){
+          eventLabel+=' - moving '+stormMotionBearingToDir(cell.motion.bearing)+' @ '+Math.round(cell.motion.speedMph)+'mph';
+        }
+        hazards.push({
+          event:eventLabel,
+          id:'radar-cell-'+cell.centroidLat.toFixed(4)+'-'+cell.centroidLon.toFixed(4),
+          geojson:cellGeojson,
+          isStormCell:true,
+          isRadarCell:true,
+          motion:cell.motion||null
+        });
       }catch(e){
-        console.warn('[Nav] Storm cell buffer failed for',a.id,e);
+        console.warn('[Nav] Radar cell buffer failed:',e);
       }
-    }
-    /* Convert each geometry to a turf-compatible GeoJSON Feature.
-       If we have a storm cell polygon, use it INSTEAD of the NWS polygon. */
-    var geomToUse=stormCellGeojson;
-    if(!geomToUse){
-      /* Fall back to the NWS warning polygon */
-      a.geoms.forEach(function(g){
+    });
+    console.log('[Nav] Using '+hazards.length+' radar storm cells as hazards');
+  }
+
+  /* ── Priority 2: NWS warning polygons (with stormTracks) ──
+     Only add NWS warning hazards if we DON'T have radar storm cells,
+     or if the user wants both (useStormCell is on but no radar cells).
+     This provides a fallback when radar detection isn't active. */
+  if(hazards.length===0&&drawnAlerts&&drawnAlerts.length>0){
+    drawnAlerts.forEach(function(a){
+      if(!a.event||!a.geoms||a.geoms.length===0)return;
+      if(a.cat!=='warnings')return;
+      var ev=a.event.toLowerCase();
+      var isTornado=ev.indexOf('tornado')>=0;
+      var isSevere=ev.indexOf('severe thunderstorm')>=0||ev.indexOf('severe tstorm')>=0;
+      if(level==='tornado_only'&&!isTornado)return;
+      if(level==='tornado_severe'&&!isTornado&&!isSevere)return;
+
+      /* Check if we have NWS warning-based storm motion tracking data */
+      var stormCellGeojson=null;
+      if(useStormCell&&a.id&&stormTracks[a.id]&&stormTracks[a.id].centroids&&stormTracks[a.id].centroids.length>0){
+        var centroids=stormTracks[a.id].centroids;
+        var latest=centroids[centroids.length-1];
+        var cellRadiusKm=cellRadiusMi*1.60934;
         try{
-          var feature={type:'Feature',geometry:g,properties:{}};
-          hazards.push({event:a.event,id:a.id||'',geojson:feature,isStormCell:false});
-        }catch(e){/* skip invalid geoms */}
-      });
-    }else{
-      hazards.push({event:a.event,id:a.id||'',geojson:stormCellGeojson,isStormCell:true});
-    }
-  });
-  /* Add user-drawn custom no-go zones as hazards. These are treated the
-     same as NWS warning polygons — buffered by the buffer slider, routed
-     around with the same waypoint computation. Marked with isNoGoZone=true
-     so the renderer can draw them in purple instead of red. */
+          var pointFeature=turf.point([latest.lon,latest.lat]);
+          stormCellGeojson=turf.buffer(pointFeature,cellRadiusKm,{units:'kilometers'});
+        }catch(e){
+          console.warn('[Nav] Storm cell buffer failed for',a.id,e);
+        }
+      }
+
+      var geomToUse=stormCellGeojson;
+      if(!geomToUse){
+        a.geoms.forEach(function(g){
+          try{
+            var feature={type:'Feature',geometry:g,properties:{}};
+            hazards.push({event:a.event,id:a.id||'',geojson:feature,isStormCell:false});
+          }catch(e){/* skip invalid geoms */}
+        });
+      }else{
+        hazards.push({event:a.event,id:a.id||'',geojson:stormCellGeojson,isStormCell:true});
+      }
+    });
+  }
+
+  /* ── Custom no-go zones ── */
   if(typeof navNoGoZones!=='undefined'&&navNoGoZones.length>0){
     navNoGoZones.forEach(function(zone){
       try{
-        /* Convert [[lat,lon],...] to GeoJSON Polygon: coordinates must be
-           [lon,lat] and the ring must be closed (first point = last point). */
         var coords=zone.latlngs.map(function(ll){return[ll[1],ll[0]]});
-        /* Close the ring if not already closed */
         if(coords.length>0){
           var first=coords[0];
           var last=coords[coords.length-1];
@@ -16776,9 +16818,13 @@ function navComputeSafeWaypoint(hazard,start,dest,bufferMi){
     });
     /* Add the buffer to the bounding radius, plus 10% safety margin */
     var radiusKm=maxDistKm+(bufferMi*1.60934*0.5)+5;
-    /* Determine storm motion for this hazard (if we have it) */
+    /* Determine storm motion for this hazard.
+       Source 1: Radar cell motion (attached directly to the hazard)
+       Source 2: NWS warning-based stormTracks */
     var motionBearing=null;
-    if(hazard.id&&stormTracks[hazard.id]&&stormTracks[hazard.id].motion){
+    if(hazard.isRadarCell&&hazard.motion){
+      motionBearing=hazard.motion.bearing;
+    }else if(hazard.id&&stormTracks[hazard.id]&&stormTracks[hazard.id].motion){
       motionBearing=stormTracks[hazard.id].motion.bearing;
     }
     /* Compute the "axis" we want to go perpendicular to.
@@ -16958,13 +17004,16 @@ function navRenderPreview(){
           buffered=turf.buffer(feat,bufKm,{units:'kilometers'});
         }
         if(buffered){
-          /* Storm cell polygons: orange solid. NWS polygons: red hatched.
-             Custom no-go zones: purple hatched. */
+          /* Radar storm cells: cyan solid. NWS storm cells: orange solid.
+             NWS polygons: red hatched. Custom no-go zones: purple hatched. */
           var isStormCell=h.isStormCell===true;
+          var isRadarCell=h.isRadarCell===true;
           var isNoGoZone=h.isNoGoZone===true;
           var style;
           if(isNoGoZone){
             style={color:'#bb55ff',weight:1,dashArray:'4,3',fillColor:'#bb55ff',fillOpacity:0.08,className:'nav-nogo-buffer'};
+          }else if(isRadarCell){
+            style={color:'#00ffff',weight:2,fillColor:'#00ffff',fillOpacity:0.15,className:'nav-hazard-buffer'};
           }else if(isStormCell){
             style={color:'#ff7300',weight:2,fillColor:'#ff7300',fillOpacity:0.18,className:'nav-hazard-buffer'};
           }else{
@@ -16973,7 +17022,11 @@ function navRenderPreview(){
           L.geoJSON(buffered,{style:style}).addTo(navHazardBufferLayer);
           /* Also draw the storm cell polygon itself (without buffer) so the
              user can see the actual cell vs the buffer zone */
-          if(isStormCell){
+          if(isRadarCell){
+            L.geoJSON(h.geojson,{
+              style:{color:'#00ffff',weight:2,fillColor:'#00ffff',fillOpacity:0.3}
+            }).addTo(navHazardBufferLayer);
+          }else if(isStormCell){
             L.geoJSON(h.geojson,{
               style:{color:'#ff7300',weight:2,fillColor:'#ff7300',fillOpacity:0.3}
             }).addTo(navHazardBufferLayer);
