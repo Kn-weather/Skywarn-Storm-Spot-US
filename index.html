@@ -3197,12 +3197,18 @@ body.capturing .sat-legend{display:none!important}
 function tms(){return new Date().toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit',hour12:true})}
 function to(ms){return new Promise(function(_,r){setTimeout(function(){r(new Error('Timeout'))},ms)})}
 async function fP(u){
-  try{return await Promise.race([fetch(u).then(function(r){if(r.ok)return r.text();throw 0}),to(6e3)])}catch(e){}
+  /* Direct fetch with 15s timeout — most APIs (NWS, SPC) have CORS headers
+     and respond quickly. The longer timeout handles large responses (e.g.,
+     nationwide NWS alerts ~1MB) on slower connections. */
+  try{return await Promise.race([fetch(u).then(function(r){if(r.ok)return r.text();throw 0}),to(15e3)])}catch(e){}
+  /* Fallback: allorigins.win raw (6s timeout) */
   try{return await Promise.race([fetch('https://api.allorigins.win/raw?url='+encodeURIComponent(u)).then(function(r){if(r.ok)return r.text();throw 0}),to(6e3)])}catch(e2){}
+  /* Fallback: allorigins.win get (6s timeout) */
   try{
     var res=await Promise.race([fetch('https://api.allorigins.win/get?url='+encodeURIComponent(u)).then(function(r){if(r.ok)return r.json();throw 0}),to(6e3)]);
     if(res&&res.contents)return res.contents;
   }catch(e3){}
+  /* Fallback: corsproxy.io (6s timeout) */
   try{return await Promise.race([fetch('https://corsproxy.io/?url='+encodeURIComponent(u)).then(function(r){if(r.ok)return r.text();throw 0}),to(6e3)])}catch(e4){}
   return null;
 }
@@ -13459,7 +13465,8 @@ var BOUNDARY_THRESHOLDS={
   windShiftDeg:30,        /* Wind direction change ≥ 30° */
   clusterGapMi:15,        /* Midpoints within 15 mi are clustered together */
   clusterDirTolDeg:30,    /* Gradient directions within ±30° are clustered */
-  minClusterPairs:2       /* Need at least 2 pairs to form a boundary line */
+  minClusterPairs:2,      /* Need at least 2 pairs to form a boundary line */
+  maxClusterPairs:15      /* Clusters with >15 pairs are noise (exclude) */
 };
 
 /* Great-circle distance in miles between two lat/lon points (Haversine). */
@@ -13642,7 +13649,7 @@ function obsDetectBoundaries(){
         queue.push(k);
       }
     }
-    if(cluster.length>=BOUNDARY_THRESHOLDS.minClusterPairs){
+    if(cluster.length>=BOUNDARY_THRESHOLDS.minClusterPairs&&cluster.length<=BOUNDARY_THRESHOLDS.maxClusterPairs){
       clusters.push(cluster);
     }
   }
