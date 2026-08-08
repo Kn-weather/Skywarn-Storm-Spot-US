@@ -13580,18 +13580,35 @@ function obsDetectBoundaries(){
       var track=stormTracks[id];
       if(!track.centroids||track.centroids.length===0)return;
       var latest=track.centroids[track.centroids.length-1];
-      stormCentroids.push({lat:latest.lat,lon:latest.lon});
+      var bearing=track.motion?track.motion.bearing:null;
+      var speedKt=track.motion?track.motion.speedKt:0;
+      stormCentroids.push({lat:latest.lat,lon:latest.lon,bearing:bearing,speedKt:speedKt});
     });
   }
   var BOUNDARY_STORM_RADIUS_MI=75;
+  var BOUNDARY_DIR_TOLERANCE_DEG=70;  /* ±70° from storm bearing = forward hemisphere */
   var hasStorms=stormCentroids.length>0;
+  var hasStormMotion=hasStorms&&stormCentroids.some(function(s){return s.bearing!==null&&s.speedKt>0});
 
-  /* Helper: check if a lat/lon is within 75 miles of any tracked storm */
+  /* Helper: check if a lat/lon is within 75 miles of any tracked storm,
+     AND (if we have storm motion data) in the forward direction of the
+     storm's movement. Outflow boundaries form AHEAD of the storm, so
+     we only consider stations in the forward hemisphere (within ±70°
+     of the storm's bearing). */
   function isNearStorm(lat,lon){
     if(!hasStorms)return true;  /* No storms → don't filter (nationwide) */
     for(var s=0;s<stormCentroids.length;s++){
       var d=haversineMi(lat,lon,stormCentroids[s].lat,stormCentroids[s].lon);
-      if(d<=BOUNDARY_STORM_RADIUS_MI)return true;
+      if(d>BOUNDARY_STORM_RADIUS_MI)continue;
+      /* If we have storm motion, check that this station is in the
+         forward direction (ahead of the storm). Outflow boundaries
+         form ahead of the storm, not behind it. */
+      if(hasStormMotion&&stormCentroids[s].bearing!==null){
+        var stationBearing=bearingDeg(stormCentroids[s].lat,stormCentroids[s].lon,lat,lon);
+        var dirDiff=windDirDiff(stationBearing,stormCentroids[s].bearing);
+        if(dirDiff>BOUNDARY_DIR_TOLERANCE_DEG)continue;  /* Behind/side of storm */
+      }
+      return true;
     }
     return false;
   }
@@ -13689,13 +13706,19 @@ function obsDetectBoundaries(){
       clusters.push(cluster);
     }
   }
-  if(clusters.length===0){
-    /* No clusters met the minimum size — show single-pair "boundary hints"
-       as small markers instead of polylines, so users still get a signal. */
-    boundaryPairs.forEach(function(pair){
-      obsRenderBoundaryHint(pair);
-    });
-    obsShowBoundaryStatus(boundaryPairs.length+' boundary hints (need '+BOUNDARY_THRESHOLDS.minClusterPairs+'+ pairs to draw lines)');
+  /* Minimum 2 clusters required to render boundary lines. A single
+     cluster is considered noise — outflow boundaries typically produce
+     multiple clusters of station pairs along their length. If only 1
+     cluster is found, it's likely a false positive from a localized
+     gradient (e.g., a single station reading error, a microscale
+     feature, or a data anomaly). */
+  var MIN_CLUSTERS_TO_RENDER=2;
+  if(clusters.length<MIN_CLUSTERS_TO_RENDER){
+    if(clusters.length===0){
+      obsShowBoundaryStatus('No outflow boundaries detected');
+    }else{
+      obsShowBoundaryStatus(clusters.length+' cluster found — need '+MIN_CLUSTERS_TO_RENDER+'+ clusters to render (filtered as noise)');
+    }
     return;
   }
 
@@ -13757,6 +13780,9 @@ function obsDetectBoundaries(){
   var statusMsg=totalBoundaries+' boundary '+(totalBoundaries===1?'line':'lines')+' detected ('+totalPairs+' pairs)';
   if(hasStorms){
     statusMsg+=' within 75mi of '+stormCentroids.length+' storm'+(stormCentroids.length===1?'':'s');
+    if(hasStormMotion){
+      statusMsg+=' (forward direction filtered)';
+    }
   }
   obsShowBoundaryStatus(statusMsg);
   console.log('[ObsBoundary] Detected '+totalBoundaries+' boundaries from '+totalPairs+' pairs');
