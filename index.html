@@ -2416,6 +2416,14 @@ body.capturing .sat-legend{display:none!important}
           <label style="margin:1px 0;font-size:9px;color:var(--t2)"><input type="checkbox" id="amRadarStorm" onchange="toggleRadarStormCells()" style="accent-color:var(--acc)"> Radar Storm Cell Detection</label>
           <div style="font-size:8px;color:var(--t3);line-height:1.4;margin-top:2px">Decodes RainViewer radar tiles to dBZ, segments storm cells (≥40 dBZ), renders as colored circles. Auto-refreshes every 5 min.</div>
           <div id="radarStormStatus" style="font-size:8px;color:var(--t3);margin-top:2px"></div>
+          <div style="height:1px;background:var(--bdr);margin:6px 0"></div>
+          <label style="margin:1px 0;font-size:9px;color:var(--t2)"><input type="checkbox" id="amRadarBoundary" onchange="toggleRadarBoundary()" style="accent-color:var(--acc)"> Radar Outflow Boundaries</label>
+          <div style="font-size:8px;color:var(--t3);line-height:1.4;margin-top:2px">Detects fine-line boundaries from radar reflectivity gradients. Separate from storm cell detection.</div>
+          <label style="margin:2px 0;font-size:9px">Noise filter: <span id="radarBoundaryNoiseLabel">40</span>
+            <input type="range" id="radarBoundaryNoise" min="0" max="90" value="40" step="5" oninput="document.getElementById('radarBoundaryNoiseLabel').textContent=this.value; if(radarBoundaryActive)radarReRenderBoundaries()" style="width:100%;accent-color:var(--acc);cursor:pointer">
+          </label>
+          <div style="font-size:8px;color:var(--t3);margin-top:1px">Higher = fewer boundaries (stricter). Lower = more boundaries (more sensitive).</div>
+          <div id="radarBoundaryStatus" style="font-size:8px;color:var(--t3);margin-top:2px"></div>
         </div>
       </div>
 
@@ -15385,7 +15393,14 @@ function toggleRadarStormCells(){
       try{alertMapInstance.removeLayer(radarStormLayer)}catch(e){}
       radarStormLayer=null;
     }
+    /* Also remove boundary layer if it exists */
+    if(radarBoundaryLayer){
+      try{alertMapInstance.removeLayer(radarBoundaryLayer)}catch(e){}
+      radarBoundaryLayer=null;
+    }
     radarStormCells=[];
+    radarLastTileGrids=null;
+    radarLastBoundaries=[];
     var statusEl=document.getElementById('radarStormStatus');
     if(statusEl)statusEl.textContent='';
   }
@@ -15414,6 +15429,9 @@ var radarPrevCells=[];           /* Previous frame's storm cells (for tracking) 
 var radarPrevFrameTime=null;     /* Timestamp of previous frame */
 var radarStormTracks={};         /* cellKey -> {centroids:[{lat,lon,time}], motion:{bearing,speedKt}} */
 var radarBoundaryLayer=null;     /* Leaflet layer for radar-detected boundaries */
+var radarBoundaryActive=false;   /* Is the radar boundary layer separately enabled? */
+var radarLastBoundaries=[];      /* Cached boundaries for re-rendering when slider changes */
+var radarLastTileGrids=null;     /* Cached tile grids for boundary re-detection */
 
 /* Generate a stable key for a storm cell based on rounded centroid.
    Used to match cells between frames. */
@@ -15711,7 +15729,8 @@ function radarDetectBoundaries(tileGrids){
   return boundaries;
 }
 
-/* Render radar-detected outflow boundaries on the map. */
+/* Render radar-detected outflow boundaries on the map.
+   Uses the noise filter slider to control the minimum confidence threshold. */
 function radarRenderBoundaries(boundaries){
   if(!alertMapInstance)return;
   if(radarBoundaryLayer){
@@ -15719,11 +15738,16 @@ function radarRenderBoundaries(boundaries){
   }
   if(boundaries.length===0)return;
   
+  /* Read the noise filter slider value (0-90, default 40) */
+  var noiseSlider=document.getElementById('radarBoundaryNoise');
+  var minConfidence=noiseSlider?parseInt(noiseSlider.value,10):40;
+  
   radarBoundaryLayer=L.layerGroup().addTo(alertMapInstance);
+  var renderedCount=0;
   
   boundaries.forEach(function(b){
-    /* Only render boundaries with confidence > 40 and length > 5km */
-    if(b.confidence<40||b.lengthKm<5)return;
+    /* Only render boundaries with confidence >= slider value AND length > 5km */
+    if(b.confidence<minConfidence||b.lengthKm<5)return;
     
     var polyline=L.polyline(b.latlngs,{
       color:'#00ffff',
@@ -15750,10 +15774,49 @@ function radarRenderBoundaries(boundaries){
     
     polyline.bindPopup(popupHtml,{className:'obs-boundary-popup',maxWidth:240});
     polyline.addTo(radarBoundaryLayer);
+    renderedCount++;
   });
   
-  console.log('[RadarStorm] Rendered '+boundaries.length+' radar boundaries');
+  var statusEl=document.getElementById('radarBoundaryStatus');
+  if(statusEl){
+    statusEl.textContent=renderedCount+' boundary'+(renderedCount===1?'':'ies')+' rendered (of '+boundaries.length+' detected, filter ≥'+minConfidence+')';
+  }
+  console.log('[RadarStorm] Rendered '+renderedCount+' of '+boundaries.length+' radar boundaries (filter ≥'+minConfidence+')');
 }
+
+/* Toggle radar boundary detection on/off (separate from storm cells). */
+function toggleRadarBoundary(){
+  var cb=document.getElementById('amRadarBoundary');
+  if(!cb)return;
+  if(cb.checked){
+    radarBoundaryActive=true;
+    /* If we have cached tile grids, detect + render boundaries immediately */
+    if(radarLastTileGrids){
+      var boundaries=radarDetectBoundaries(radarLastTileGrids);
+      radarLastBoundaries=boundaries;
+      radarRenderBoundaries(boundaries);
+    }else{
+      var statusEl=document.getElementById('radarBoundaryStatus');
+      if(statusEl)statusEl.textContent='Enable Radar Storm Cell Detection first to load tiles, or wait for next detection cycle.';
+    }
+  }else{
+    radarBoundaryActive=false;
+    if(radarBoundaryLayer){
+      try{alertMapInstance.removeLayer(radarBoundaryLayer)}catch(e){}
+      radarBoundaryLayer=null;
+    }
+    var statusEl2=document.getElementById('radarBoundaryStatus');
+    if(statusEl2)statusEl2.textContent='';
+  }
+}
+window.toggleRadarBoundary=toggleRadarBoundary;
+
+/* Re-render boundaries with the current slider value (called when slider changes). */
+function radarReRenderBoundaries(){
+  if(!radarBoundaryActive||!radarLastBoundaries)return;
+  radarRenderBoundaries(radarLastBoundaries);
+}
+window.radarReRenderBoundaries=radarReRenderBoundaries;
 
 /* Update the main detection function to include tracking + boundaries */
 var radarDetectStormCellsOriginal=radarDetectStormCells;
@@ -15820,9 +15883,18 @@ async function radarDetectStormCellsV2(){
   /* Render motion arrows + projections on tracked cells */
   radarRenderMotion(cells);
   
-  /* Detect outflow boundaries from reflectivity gradients */
-  var boundaries=radarDetectBoundaries(tileGrids);
-  radarRenderBoundaries(boundaries);
+  /* Detect outflow boundaries from reflectivity gradients — ONLY if
+     the boundary checkbox is separately enabled. This is independent
+     from storm cell detection. */
+  var boundaries=[];
+  if(radarBoundaryActive){
+    boundaries=radarDetectBoundaries(tileGrids);
+    radarLastBoundaries=boundaries;
+    radarRenderBoundaries(boundaries);
+  }
+  /* Always cache tile grids so boundaries can be detected later if the
+     user enables the boundary checkbox after storm cell detection. */
+  radarLastTileGrids=tileGrids;
   
   /* Update status */
   var statusEl=document.getElementById('radarStormStatus');
