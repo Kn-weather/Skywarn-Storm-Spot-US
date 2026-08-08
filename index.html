@@ -17592,11 +17592,13 @@ function mdParsePage(html,linkName){
       if(p.length<8)continue;
       var lat,lon;
       if(p.length===8){
-        /* 4+4: DDMM DDMM */
+        /* 4+4: DDMM DDMM — longitude is < 100°W (no leading 1).
+           Do NOT add 100 to longitude (that was the bug — it pushed
+           polygons to -178° in the Pacific Ocean). */
         var latDeg=parseInt(p.substring(0,2));
         var latMin=parseInt(p.substring(2,4));
         lat=latDeg+latMin/60;
-        var lonDeg=parseInt(p.substring(4,6))+100;
+        var lonDeg=parseInt(p.substring(4,6));
         var lonMin=parseInt(p.substring(6,8));
         lon=lonDeg+lonMin/60;
       }else if(p.length===9){
