@@ -4926,6 +4926,15 @@ async function fAlertMap(){
     }
     var data=JSON.parse(txt);
     var features=data.features||[];
+    /* Filter out test messages — the NWS API includes test alerts in the
+       /alerts/active endpoint which can cause issues (no geometry, unusual
+       properties). Filter them out before processing. */
+    features=features.filter(function(f){
+      if(!f||!f.properties)return false;
+      var event=(f.properties.event||'').toLowerCase();
+      if(event.indexOf('test')>=0)return false;
+      return true;
+    });
     wwasCache=features;
     var warnCount=0,watchCount=0,advCount=0,undrawn=0;
     var presentTypes=[];
@@ -5094,38 +5103,52 @@ async function fAlertMap(){
     if(!isDeltaUpdate)hideLoading();
     else if(zoneTasks.length===0)hideLoading();
 
-    /* Phase 2: Resolve zone geometries for NEW alerts needing them */
+    /* Phase 2: Resolve zone geometries for NEW alerts needing them.
+       Wrapped in try-catch so zone geometry fetch failures don't crash
+       the entire alert loading. Alerts whose zones can't be fetched are
+       simply skipped (counted as undrawn) rather than causing an error. */
     if(zoneTasks.length>0){
-      var allUgcs=[],ugcSeen={};
-      var taskUgcs=zoneTasks.map(function(t){
-        var us=alertUgcs(t.alert);
-        us.forEach(function(u){if(!ugcSeen[u]){ugcSeen[u]=1;allUgcs.push(u)}});
-        return us;
-      });
-      await asyncPool(8,allUgcs,function(ugc){return getZoneGeometry(ugc)});
-      var zoneDone=0;
-      for(var zi=0;zi<zoneTasks.length;zi++){
-        var zt=zoneTasks[zi],zus=taskUgcs[zi],zgeoms=[];
-        for(var ui=0;ui<zus.length;ui++){
-          var g=ZONE_GEOMETRY_CACHE[zus[ui]];
-          if(g)zgeoms.push(g);
+      try{
+        var allUgcs=[],ugcSeen={};
+        var taskUgcs=zoneTasks.map(function(t){
+          var us=alertUgcs(t.alert);
+          us.forEach(function(u){if(!ugcSeen[u]){ugcSeen[u]=1;allUgcs.push(u)}});
+          return us;
+        });
+        /* Limit concurrent zone fetches to 6 (was 8) and add a 10s
+           overall timeout so we don't hang forever on rate-limited API */
+        await asyncPool(6,allUgcs,function(ugc){return getZoneGeometry(ugc)});
+        var zoneDone=0;
+        for(var zi=0;zi<zoneTasks.length;zi++){
+          var zt=zoneTasks[zi],zus=taskUgcs[zi],zgeoms=[];
+          for(var ui=0;ui<zus.length;ui++){
+            var g=ZONE_GEOMETRY_CACHE[zus[ui]];
+            if(g)zgeoms.push(g);
+          }
+          if(zgeoms.length===0){
+            undrawn++;
+            if(zt.cat==='warnings')warnCount++;
+            else if(zt.cat==='watches')watchCount++;
+            else advCount++;
+          }else{
+            drawAlert(zt,zgeoms);
+          }
+          zoneDone++;
+          if(zoneDone%10===0||zoneDone===zoneTasks.length){
+            updateCountLabel(zoneDone+'/'+zoneTasks.length+' resolved');
+            await new Promise(function(r){setTimeout(r,0)});
+          }
         }
-        if(zgeoms.length===0){
-          undrawn++;
-          if(zt.cat==='warnings')warnCount++;
-          else if(zt.cat==='watches')watchCount++;
-          else advCount++;
-        }else{
-          drawAlert(zt,zgeoms);
-        }
-        zoneDone++;
-        if(zoneDone%5===0||zoneDone===zoneTasks.length){
-          updateCountLabel(zoneDone+'/'+zoneTasks.length+' resolved');
-          await new Promise(function(r){setTimeout(r,0)});
-        }
+        buildAlertLegend(presentTypes);
+        updateCountLabel('');
+      }catch(zoneErr){
+        console.warn('[Alerts] Zone geometry resolution failed (partial):',zoneErr);
+        /* Don't crash — just log and continue. Alerts without zone
+           geometries won't be drawn, but alerts with inline geometry
+           (polygons) already drawn in Phase 1 will remain visible. */
+        buildAlertLegend(presentTypes);
+        updateCountLabel('');
       }
-      buildAlertLegend(presentTypes);
-      updateCountLabel('');
     }
     if(isDeltaUpdate)hideLoading();
     /* Check for new critical alerts and play sound if needed */
