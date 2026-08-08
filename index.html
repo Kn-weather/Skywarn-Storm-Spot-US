@@ -15369,6 +15369,454 @@ function toggleRadarStormCells(){
 window.toggleRadarStormCells=toggleRadarStormCells;
 
 /* ════════════════════════════════════════════════════════════════════════
+   Radar Storm Motion Tracking (Session 2)
+   ────────────────────────────────────────────────────────────────────────
+   Compares storm cells between consecutive radar frames to compute
+   motion (bearing + speed). Then projects future positions.
+
+   Also includes radar-based outflow boundary detection using
+   reflectivity gradients (fine-line detection).
+
+   Pipeline additions:
+   1. Store previous frame's storm cells
+   2. On new detection, match cells by nearest centroid (within 10km)
+   3. Compute bearing + speed from position delta + time delta
+   4. Render motion arrows on tracked cells
+   5. Project +10/+20/+30 min positions as faded circles
+   6. Detect outflow boundaries via reflectivity gradient magnitude
+   ════════════════════════════════════════════════════════════════════════ */
+
+var radarPrevCells=[];           /* Previous frame's storm cells (for tracking) */
+var radarPrevFrameTime=null;     /* Timestamp of previous frame */
+var radarStormTracks={};         /* cellKey -> {centroids:[{lat,lon,time}], motion:{bearing,speedKt}} */
+var radarBoundaryLayer=null;     /* Leaflet layer for radar-detected boundaries */
+
+/* Generate a stable key for a storm cell based on rounded centroid.
+   Used to match cells between frames. */
+function radarCellKey(cell){
+  return Math.round(cell.centroidLat*100)+'_'+Math.round(cell.centroidLon*100);
+}
+
+/* Match current cells to previous cells by nearest centroid within 10km.
+   Returns the cells with motion data attached. */
+function radarTrackStormMotion(currentCells,prevCells,prevTime){
+  if(!prevCells||prevCells.length===0||!prevTime){
+    /* First frame — no tracking data yet */
+    currentCells.forEach(function(c){
+      c.motion=null;
+      c.tracked=false;
+    });
+    return currentCells;
+  }
+  
+  var currentTime=Date.now();
+  var timeDeltaSec=(currentTime-prevTime)/1000;
+  if(timeDeltaSec<60){
+    /* Too soon between frames — skip tracking */
+    currentCells.forEach(function(c){
+      c.motion=null;
+      c.tracked=false;
+    });
+    return currentCells;
+  }
+  
+  /* For each current cell, find the nearest previous cell within 10km */
+  currentCells.forEach(function(c){
+    var bestMatch=null;
+    var bestDist=Infinity;
+    prevCells.forEach(function(p){
+      var dKm=haversineMi(c.centroidLat,c.centroidLon,p.centroidLat,p.centroidLon)*1.60934;
+      if(dKm<bestDist){
+        bestDist=dKm;
+        bestMatch=p;
+      }
+    });
+    
+    if(bestMatch&&bestDist<=10){
+      /* Matched! Compute motion */
+      c.tracked=true;
+      c.prevLat=bestMatch.centroidLat;
+      c.prevLon=bestMatch.centroidLon;
+      
+      /* Bearing from previous to current */
+      var bearing=navBearing(bestMatch.centroidLat,bestMatch.centroidLon,c.centroidLat,c.centroidLon);
+      
+      /* Speed = distance / time */
+      var distMi=haversineMi(bestMatch.centroidLat,bestMatch.centroidLon,c.centroidLat,c.centroidLon);
+      var speedMph=distMi/(timeDeltaSec/3600);
+      var speedKt=speedMph/1.15078;
+      
+      c.motion={
+        bearing:bearing,
+        speedKt:speedKt,
+        speedMph:speedMph,
+        timeDeltaSec:timeDeltaSec
+      };
+      
+      /* Update persistent track */
+      var key=radarCellKey(bestMatch);
+      if(!radarStormTracks[key]){
+        radarStormTracks[key]={centroids:[],motion:null};
+      }
+      radarStormTracks[key].centroids.push({lat:c.centroidLat,lon:c.centroidLon,time:currentTime});
+      /* Keep only last 10 centroids */
+      if(radarStormTracks[key].centroids.length>10){
+        radarStormTracks[key].centroids.shift();
+      }
+      radarStormTracks[key].motion=c.motion;
+      c.trackKey=key;
+    }else{
+      c.tracked=false;
+      c.motion=null;
+    }
+  });
+  
+  return currentCells;
+}
+
+/* Project a storm cell's future position using its motion data.
+   Returns [{lat,lon,minOffset}] for +10, +20, +30 minutes. */
+function radarProjectCell(cell,minutes){
+  if(!cell.motion||cell.motion.speedKt<1)return null;
+  var speedMs=cell.motion.speedKt*0.51444;
+  var distanceM=speedMs*minutes*60;
+  var projected=stormMotionDestinationPoint(cell.centroidLat,cell.centroidLon,distanceM,cell.motion.bearing);
+  return projected;
+}
+
+/* Render storm motion arrows and projected positions on tracked cells. */
+function radarRenderMotion(cells){
+  if(!radarStormLayer)return;
+  
+  cells.forEach(function(cell){
+    if(!cell.tracked||!cell.motion||cell.motion.speedKt<1)return;
+    
+    var color='#00ffff';  /* cyan for radar-tracked motion */
+    if(cell.severity==='strong')color='#ff7300';
+    else if(cell.severity==='severe')color='#ff0000';
+    else if(cell.severity==='extreme')color='#ff00ff';
+    
+    /* Draw motion arrow (30-min projection) */
+    var projected=radarProjectCell(cell,30);
+    if(projected){
+      var arrow=L.polyline([
+        [cell.centroidLat,cell.centroidLon],
+        [projected.lat,projected.lon]
+      ],{
+        color:color,weight:2,opacity:0.7,dashArray:'6,3'
+      });
+      arrow.addTo(radarStormLayer);
+      
+      /* Label at origin */
+      var speedMph=Math.round(cell.motion.speedMph);
+      var dirStr=stormMotionBearingToDir(cell.motion.bearing);
+      var labelIcon=L.divIcon({
+        className:'',
+        html:'<div class="storm-motion-label" style="border-color:'+color+';color:'+color+'">'+dirStr+' @ '+speedMph+'mph</div>',
+        iconSize:[80,16],iconAnchor:[4,8]
+      });
+      var label=L.marker([cell.centroidLat,cell.centroidLon],{icon:labelIcon,interactive:false});
+      label.addTo(radarStormLayer);
+      
+      /* Projected position circles (+10, +20, +30 min) */
+      [10,20,30].forEach(function(min){
+        var proj=radarProjectCell(cell,min);
+        if(proj){
+          var projCircle=L.circle([proj.lat,proj.lon],{
+            radius:cell.radiusMi*1609.34*0.8,
+            color:color,weight:1,fillColor:color,fillOpacity:0.05,
+            dashArray:'2,4',opacity:0.4
+          });
+          projCircle.bindTooltip('+'+min+' min projection',{permanent:false});
+          projCircle.addTo(radarStormLayer);
+        }
+      });
+    }
+  });
+}
+
+/* Detect outflow boundaries from radar reflectivity gradients.
+   Computes horizontal and vertical dBZ gradients, thresholds by
+   magnitude (>=8 dBZ), and extracts linear features using
+   connected-component labeling + PCA line fit.
+
+   This is the radar-based equivalent of the ASOS-based boundary
+   detection, but at ~1km resolution instead of ~30-50mi. */
+function radarDetectBoundaries(tileGrids){
+  var GRAD_THRESHOLD=8;  /* dBZ gradient magnitude threshold */
+  var MIN_BOUNDARY_PIXELS=15;  /* min pixels for a valid boundary */
+  var boundaries=[];
+  
+  tileGrids.forEach(function(tile){
+    var dbzGrid=tile.dbzGrid;
+    var tileX=tile.tileX,tileY=tile.tileY,zoom=tile.zoom;
+    
+    /* Compute gradient magnitude at each pixel */
+    var gradGrid=new Array(256);
+    for(var y=0;y<256;y++){
+      gradGrid[y]=new Array(256).fill(0);
+    }
+    
+    for(var y=1;y<255;y++){
+      for(var x=1;x<255;x++){
+        if(dbzGrid[y][x]==null)continue;
+        /* Horizontal gradient */
+        var left=dbzGrid[y][x-1];
+        var right=dbzGrid[y][x+1];
+        var up=dbzGrid[y-1][x];
+        var down=dbzGrid[y+1][x];
+        if(left==null||right==null||up==null||down==null)continue;
+        
+        var gradX=right-left;
+        var gradY=down-up;
+        var mag=Math.sqrt(gradX*gradX+gradY*gradY);
+        
+        if(mag>=GRAD_THRESHOLD){
+          gradGrid[y][x]=mag;
+        }
+      }
+    }
+    
+    /* Connected-component labeling on boundary pixels */
+    var labels=new Array(256);
+    for(var y=0;y<256;y++)labels[y]=new Array(256).fill(0);
+    var labelCounter=0;
+    
+    for(var y=0;y<256;y++){
+      for(var x=0;x<256;x++){
+        if(gradGrid[y][x]===0||labels[y][x]!==0)continue;
+        
+        labelCounter++;
+        var stack=[[y,x]];
+        var pixels=[];
+        var sumLat=0,sumLon=0,sumGradMag=0;
+        
+        while(stack.length>0){
+          var pos=stack.pop();
+          var py=pos[0],px=pos[1];
+          if(py<0||py>=256||px<0||px>=256)continue;
+          if(labels[py][px]!==0)continue;
+          if(gradGrid[py][px]===0)continue;
+          
+          labels[py][px]=labelCounter;
+          var ll=radarTilePixelToLatLon(tileX,tileY,zoom,px,py);
+          sumLat+=ll.lat;
+          sumLon+=ll.lon;
+          sumGradMag+=gradGrid[py][px];
+          pixels.push({lat:ll.lat,lon:ll.lon,x:px,y:py,mag:gradGrid[py][px]});
+          
+          /* 8-way neighbors */
+          stack.push([py-1,px-1],[py-1,px],[py-1,px+1],
+                     [py,px-1],            [py,px+1],
+                     [py+1,px-1],[py+1,px],[py+1,px+1]);
+        }
+        
+        if(pixels.length<MIN_BOUNDARY_PIXELS)continue;
+        
+        /* PCA line fit to determine orientation */
+        var centroidLat=sumLat/pixels.length;
+        var centroidLon=sumLon/pixels.length;
+        var sxx=0,syy=0,sxy=0;
+        pixels.forEach(function(p){
+          var dx=p.lon-centroidLon;
+          var dy=p.lat-centroidLat;
+          sxx+=dx*dx;
+          syy+=dy*dy;
+          sxy+=dx*dy;
+        });
+        sxx/=pixels.length;syy/=pixels.length;sxy/=pixels.length;
+        var angle=Math.atan2(2*sxy,sxx-syy)/2;
+        
+        /* Eigenvalue ratio (linearity — higher = more linear) */
+        var trace=sxx+syy;
+        var det=sxx*syy-sxy*sxy;
+        var disc=Math.sqrt(Math.max(0,trace*trace/4-det));
+        var lambda1=trace/2+disc;
+        var lambda2=trace/2-disc;
+        var linearity=trace>0?lambda1/trace:0;
+        
+        /* Sort pixels along principal axis and build polyline */
+        var dirX=Math.cos(angle);
+        var dirY=Math.sin(angle);
+        pixels.sort(function(a,b){
+          var pa=(a.lon-centroidLon)*dirX+(a.lat-centroidLat)*dirY;
+          var pb=(b.lon-centroidLon)*dirX+(b.lat-centroidLat)*dirY;
+          return pa-pb;
+        });
+        
+        /* Simplify: take every Nth pixel to reduce polyline points */
+        var step=Math.max(1,Math.floor(pixels.length/20));
+        var latlngs=[];
+        for(var i=0;i<pixels.length;i+=step){
+          latlngs.push([pixels[i].lat,pixels[i].lon]);
+        }
+        /* Add last point */
+        if(latlngs.length>0&&pixels.length>0){
+          var last=pixels[pixels.length-1];
+          latlngs.push([last.lat,last.lon]);
+        }
+        
+        if(latlngs.length<2)continue;
+        
+        /* Compute boundary length (km) */
+        var lengthKm=0;
+        for(var i=1;i<latlngs.length;i++){
+          lengthKm+=haversineMi(latlngs[i-1][0],latlngs[i-1][1],latlngs[i][0],latlngs[i][1])*1.60934;
+        }
+        
+        /* Orientation bearing */
+        var orientation=navBearing(latlngs[0][0],latlngs[0][1],latlngs[latlngs.length-1][0],latlngs[latlngs.length-1][1]);
+        
+        /* Confidence: based on gradient magnitude + linearity */
+        var avgGrad=sumGradMag/pixels.length;
+        var confidence=Math.round(Math.min(100,avgGrad*5+linearity*50));
+        
+        boundaries.push({
+          latlngs:latlngs,
+          lengthKm:lengthKm,
+          orientation:orientation,
+          confidence:confidence,
+          avgGradient:avgGrad,
+          linearity:linearity,
+          pixelCount:pixels.length
+        });
+      }
+    }
+  });
+  
+  return boundaries;
+}
+
+/* Render radar-detected outflow boundaries on the map. */
+function radarRenderBoundaries(boundaries){
+  if(!alertMapInstance)return;
+  if(radarBoundaryLayer){
+    try{alertMapInstance.removeLayer(radarBoundaryLayer)}catch(e){}
+  }
+  if(boundaries.length===0)return;
+  
+  radarBoundaryLayer=L.layerGroup().addTo(alertMapInstance);
+  
+  boundaries.forEach(function(b){
+    /* Only render boundaries with confidence > 40 and length > 5km */
+    if(b.confidence<40||b.lengthKm<5)return;
+    
+    var polyline=L.polyline(b.latlngs,{
+      color:'#00ffff',
+      weight:2.5,
+      opacity:0.8,
+      dashArray:'8,5',
+      lineCap:'round',
+      lineJoin:'round'
+    });
+    
+    var popupHtml=
+      '<div style="font-family:Inter,sans-serif;min-width:180px">'+
+        '<div style="color:#00ffff;font-weight:700;font-size:11px;margin-bottom:4px">Radar Outflow Boundary</div>'+
+        '<div style="font-size:10px;color:#fff;margin-bottom:6px">Confidence: <b>'+b.confidence+'%</b></div>'+
+        '<div style="font-size:9px;color:#ccc;line-height:1.5">'+
+          '<div>Length: <b>'+b.lengthKm.toFixed(1)+' km ('+(b.lengthKm*0.621371).toFixed(1)+' mi)</b></div>'+
+          '<div>Orientation: <b>'+Math.round(b.orientation)+'°</b></div>'+
+          '<div>Avg gradient: <b>'+b.avgGradient.toFixed(1)+' dBZ</b></div>'+
+          '<div>Linearity: <b>'+(b.linearity*100).toFixed(0)+'%</b></div>'+
+          '<div>Source: RainViewer radar reflectivity gradient</div>'+
+        '</div>'+
+        '<button type="button" onclick="event.stopPropagation();event.preventDefault();screenshotGenericPopup(\'Radar Boundary\',this.parentElement.outerHTML,'+b.latlngs[0][0]+','+b.latlngs[0][1]+',\'#00ffff\');return false;" style="display:flex;align-items:center;justify-content:center;gap:4px;width:100%;margin-top:6px;padding:4px 8px;background:rgba(0,255,255,.12);border:1px solid #00ffff40;color:#00ffff;border-radius:3px;cursor:pointer;font-family:inherit;font-size:8px;font-weight:600"><i class="fas fa-camera"></i> Screenshot</button>'+
+      '</div>';
+    
+    polyline.bindPopup(popupHtml,{className:'obs-boundary-popup',maxWidth:240});
+    polyline.addTo(radarBoundaryLayer);
+  });
+  
+  console.log('[RadarStorm] Rendered '+boundaries.length+' radar boundaries');
+}
+
+/* Update the main detection function to include tracking + boundaries */
+var radarDetectStormCellsOriginal=radarDetectStormCells;
+async function radarDetectStormCellsV2(){
+  if(!radarStormActive||!alertMapInstance)return;
+  
+  /* Get the current RainViewer radar path */
+  var radarPath=null;
+  var frameTime=null;
+  try{
+    var resp=await fetch('https://api.rainviewer.com/public/weather-maps.json');
+    var data=await resp.json();
+    if(data&&data.radar&&data.radar.past&&data.radar.past.length>0){
+      var latest=data.radar.past[data.radar.past.length-1];
+      radarPath=latest.path;
+      frameTime=latest.time*1000;  /* convert to ms */
+    }
+  }catch(e){
+    console.warn('[RadarStorm] Failed to get RainViewer path:',e);
+    return;
+  }
+  if(!radarPath)return;
+  
+  /* Get visible tiles */
+  var tiles=radarGetVisibleTiles();
+  if(tiles.length===0)return;
+  console.log('[RadarStorm] Processing '+tiles.length+' tiles at z'+tiles[0].z);
+  
+  /* Decode each tile to dBZ grid */
+  var tileGrids=[];
+  var batchSize=4;
+  for(var i=0;i<tiles.length;i+=batchSize){
+    var batch=tiles.slice(i,i+batchSize);
+    var results=await Promise.all(batch.map(function(t){
+      var url='https://tilecache.rainviewer.com'+radarPath+'/256/'+t.z+'/'+t.x+'/'+t.y+'/4/1_1.png';
+      return radarDecodeTile(url,t.x,t.y,t.z);
+    }));
+    results.forEach(function(g){if(g)tileGrids.push(g)});
+  }
+  
+  if(tileGrids.length===0){
+    console.warn('[RadarStorm] No tiles decoded');
+    return;
+  }
+  
+  /* Segment storm cells (dBZ >= 40) */
+  var STORM_THRESHOLD_DBZ=40;
+  var cells=radarSegmentStormCells(tileGrids,STORM_THRESHOLD_DBZ);
+  
+  /* Track motion (compare with previous frame) */
+  cells=radarTrackStormMotion(cells,radarPrevCells,radarPrevFrameTime);
+  
+  /* Store for next frame */
+  radarPrevCells=cells.map(function(c){
+    return{centroidLat:c.centroidLat,centroidLon:c.centroidLon,maxDbz:c.maxDbz,severity:c.severity};
+  });
+  radarPrevFrameTime=frameTime||Date.now();
+  
+  radarStormCells=cells;
+  
+  /* Render storm cells */
+  radarRenderStormCells(cells);
+  
+  /* Render motion arrows + projections on tracked cells */
+  radarRenderMotion(cells);
+  
+  /* Detect outflow boundaries from reflectivity gradients */
+  var boundaries=radarDetectBoundaries(tileGrids);
+  radarRenderBoundaries(boundaries);
+  
+  /* Update status */
+  var statusEl=document.getElementById('radarStormStatus');
+  if(statusEl){
+    var trackedCount=cells.filter(function(c){return c.tracked}).length;
+    var statusMsg=cells.length+' cell'+(cells.length===1?'':'s')+' ('+tileGrids.length+' tiles)';
+    if(trackedCount>0)statusMsg+=' | '+trackedCount+' tracked';
+    if(boundaries.length>0)statusMsg+=' | '+boundaries.length+' boundary'+(boundaries.length===1?'':'ies');
+    statusEl.textContent=statusMsg;
+  }
+  
+  console.log('[RadarStorm] Detected '+cells.length+' cells ('+cells.filter(function(c){return c.tracked}).length+' tracked), '+boundaries.length+' boundaries');
+}
+
+/* Replace the original function */
+radarDetectStormCells=radarDetectStormCellsV2;
+
+/* ════════════════════════════════════════════════════════════════════════
    Storm-Safe Navigation
    ────────────────────────────────────────────────────────────────────────
    Calculates a driving route from a start point to a destination that
