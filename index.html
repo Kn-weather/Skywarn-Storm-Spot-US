@@ -17507,8 +17507,10 @@ async function mdFetch(){
     while((match=linkRegex.exec(resp))!==null){
       mdLinks.push(match[1]);
     }
-    /* Also check if "No Mesoscale Discussions" is in the page */
-    if(resp.indexOf('No Mesoscale Discussions')>=0&&mdLinks.length===0){
+    /* Check if "No Mesoscale Discussions are currently in effect" is on the page.
+       If so, there are NO active MDs — the links on the page are to EXPIRED MDs.
+       We must NOT draw them. This check takes priority over the link count. */
+    if(resp.indexOf('No Mesoscale Discussions')>=0){
       mdLayer.clearLayers();
       if(st)st.textContent='No active MDs';
       return;
