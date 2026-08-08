@@ -2248,8 +2248,6 @@ body.capturing .sat-legend{display:none!important}
             <div class="section-label" style="margin-top:8px">Surface Observations</div>
             <label style="margin:1px 0" id="amObsEnableLabel"><input type="checkbox" id="amObsEnable" onchange="toggleObsLayer()"> Show Surface Obs</label>
             <label style="margin:1px 0;font-size:9px;color:var(--t2)" id="amObsGradientLabel"><input type="checkbox" id="amObsGradient" onchange="toggleObsGradient()" style="accent-color:var(--acc)"> Color Gradient Overlay</label>
-            <label style="margin:1px 0;font-size:9px;color:var(--t2)" id="amObsBoundariesLabel"><input type="checkbox" id="amObsBoundaries" onchange="toggleObsBoundaries()" style="accent-color:var(--acc)"> Detect Outflow Boundaries</label>
-            <div id="obsBoundaryStatus" style="font-size:8px;color:var(--t3);margin-top:2px;display:none"></div>
             <div id="obsAnimControls" style="display:none;margin-top:6px;padding:6px;background:var(--bg);border:1px solid var(--bdr);border-radius:4px">
               <div style="font-size:8px;color:var(--t3);text-transform:uppercase;letter-spacing:.04em;margin-bottom:4px">Animation (stored history)</div>
               <div class="radar-anim-controls">
@@ -2338,6 +2336,9 @@ body.capturing .sat-legend{display:none!important}
             <input type="range" class="radar-anim-timeline" id="amRadarTimeline" min="0" max="0" value="0" oninput="radarSeekTo(this.value)" style="width:100%">
             <div class="radar-anim-time-display" id="amRadarTimeDisplay">—</div>
           </div>
+          <div style="height:1px;background:var(--bdr);margin:6px 0"></div>
+          <label style="margin:1px 0;font-size:9px;color:var(--t2)" id="amObsBoundariesLabel"><input type="checkbox" id="amObsBoundaries" onchange="toggleObsBoundaries()" style="accent-color:var(--acc)"> Detect Outflow Boundaries</label>
+          <div id="obsBoundaryStatus" style="font-size:8px;color:var(--t3);margin-top:2px;display:none"></div>
         </div>
       </div>
 
@@ -4879,10 +4880,12 @@ async function fAlertMap(){
   }
 
   try{
-    var stateFilter=document.getElementById('amStateFilter');
-    var state=(stateFilter&&stateFilter.value)?stateFilter.value.toUpperCase():'';
+    /* NOTE: The state filter is intentionally NOT applied to the NWS
+       alerts URL. The state filter is only for surface observations
+       and the color gradient — alerts (warnings, watches, advisories)
+       should always be shown nationwide. This was previously filtering
+       alerts by state, which hid warnings in neighboring states. */
     var url='https://api.weather.gov/alerts/active';
-    if(state){url+='?area='+state}
     var txt=await fP(url);
     if(!txt){
       if(countEl)countEl.innerHTML='<i class="fas fa-circle-exclamation"></i> Alerts unavailable';
@@ -16188,6 +16191,12 @@ async function mdFetch(){
       if(!mdResp)continue;
       var mdData=mdParsePage(mdResp,mdLinks[i]);
       if(!mdData||!mdData.polygon||mdData.polygon.length<3)continue;
+      /* Compute the centroid BEFORE building the popup HTML so we can
+         use it in the screenshot button's onclick handler. Previously
+         center was used before it was defined, causing a ReferenceError
+         that crashed the entire mdFetch() function. */
+      var mdBounds=L.latLngBounds(mdData.polygon);
+      var center=mdBounds.getCenter();
       /* Draw the polygon */
       var poly=L.polygon(mdData.polygon,{
         color:'#ffd60a',
@@ -16208,9 +16217,7 @@ async function mdFetch(){
         '</div>';
       poly.bindPopup(popupHtml,{maxWidth:320});
       mdLayer.addLayer(poly);
-      /* Add a label marker at the centroid */
-      var bounds=L.latLngBounds(mdData.polygon);
-      var center=bounds.getCenter();
+      /* Add a label marker at the centroid (center already computed above) */
       var labelIcon=L.divIcon({
         className:'',
         html:'<div style="background:rgba(10,10,10,.9);border:1px solid #ffd60a;border-radius:4px;padding:2px 6px;font-size:9px;font-weight:700;font-family:Inter,sans-serif;color:#ffd60a;white-space:nowrap">MD#'+mdData.number+'</div>',
