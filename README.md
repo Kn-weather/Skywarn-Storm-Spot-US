@@ -1,34 +1,38 @@
 # Skywarn Storm Spotters & Chasers United States
 
-A comprehensive weather monitoring PWA for storm spotters and chasers, featuring live NWS alert polygons, SPC outlooks, radar animation, soundings, surface observations, and a spotting journal with Supabase backend.
+A comprehensive weather monitoring PWA for storm spotters and chasers, featuring live NWS alert polygons, SPC outlooks, radar animation, satellite imagery, soundings, surface observations, outflow boundary detection, radar-based storm cell tracking, storm-safe navigation, and a spotting journal with Supabase backend.
 
 **Live Site:** [https://kn-weather.github.io/Skywarn-Storm-Spot-US/](https://kn-weather.github.io/Skywarn-Storm-Spot-US/)
 
 ## Features
 
 ### Polygon Map (Main Tab)
-- **Live NWS Alert Polygons** — Tornado Warnings, Severe Thunderstorm Warnings, Watches, Advisories with delta updates (only adds/removes changed alerts)
+- **Live NWS Alert Polygons** — Tornado Warnings, Severe Thunderstorm Warnings, Watches, Advisories with delta updates (only adds/removes changed alerts). State-filtered for fast loading; nationwide when no state selected
 - **Alert Attributes** — Hail size, tornado detection, max wind markers on warning polygons (in Alert Categories section)
-- **SPC Information** — Day 1-3 convective outlooks (categorical + tornado/hail/wind probability layers) + Mesoscale Discussion polygons with auto-refresh every 5 min
+- **SPC Information** — Day 1-3 convective outlooks (categorical + tornado/hail/wind probability layers) + Mesoscale Discussion polygons with full discussion text, auto-refresh every 5 min, zoom-to-polygon screenshots
 - **Radar Overlay** — RainViewer API with 3-layer rolling buffer for smooth animation, play/pause/step controls, dBZ legend
 - **Satellite Layers** — NASA GIBS GOES-East/West ABI imagery (GeoColor, Infrared Band 13, Visible Band 2, Air Mass, Dust) with 24-frame 3-layer rolling buffer animation (last 4 hours, 10-min intervals), opacity control, brightness-temperature legend for IR/Air Mass, auto-refresh every 10 minutes. Two-dropdown UI (Satellite + View Type) for compact panel
-- **Surface Observations** — NWS ASOS station data with 9 weather variables (temp, dewpoint, wind, pressure, visibility, RH, precip), color-coded markers, and IDW gradient heatmap overlay with NWS-standard color ramps. State-filtered for performance (controls hidden until state selected)
-- **Outflow Boundary Detection** — Detects surface outflow boundaries from ASOS observation gradients (ΔT ≥ 4°F, ΔTd ≥ 3°F, wind shift ≥ 30°). Piecewise-linear cyan dashed polylines with confidence scores, PCA-based clustering, and popups with gradient details
+- **Surface Observations** — NWS ASOS station data with 9 weather variables (temp, dewpoint, wind, pressure, visibility, RH, precip), color-coded markers, and IDW gradient heatmap overlay with NWS-standard color ramps. State-filtered for performance (controls hidden until state selected). Gradient clipped to state bounding box
+- **Outflow Boundary Detection (ASOS-based)** — Detects surface outflow boundaries from ASOS observation gradients (ΔT ≥ 4°F, ΔTd ≥ 3°F, wind shift ≥ 30°). Limited to 75mi radius of tracked storms, forward-direction filtered, minimum 2 clusters, max 15 pairs per cluster (noise filter). Piecewise-linear cyan dashed polylines with confidence scores, PCA-based clustering
 - **Observation Animation** — Play through stored observation snapshots (Supabase-backed) with speed control, pin + gradient animation
-- **Storm Motion Vectors** — Tracks warned storms and draws motion arrows with semi-transparent labels at the origin (beginning of arrow). Click the map for Storm ETA popup with nearest town (reverse-geocoded), positioned below the clicked point with a pin marker
-- **Storm-Safe Navigation** — Calculates driving routes that avoid active NWS warning polygons. Features:
-  - Storm cell tracking (tight polygon around tracked storm vs full NWS polygon)
-  - Predictive avoidance (projects storm forward by drive time)
+- **Warnings Motion Direction** — Tracks warned storms (NWS polygon centroids) and draws motion arrows with semi-transparent labels at the origin. Click the map for Storm ETA popup with nearest town (NWS /points API reverse geocoded), positioned below the clicked point with a pin marker. 5-second timeout on reverse geocode
+- **Radar Storm Cell Detection** — Client-side radar processing pipeline: decodes RainViewer PNG tiles to dBZ via canvas getImageData (CORS-enabled), segments storm cells (≥40 dBZ) using 8-way connected-component labeling, computes centroid/radius/max dBZ/severity. Renders as colored circles (yellow/orange/red/magenta by severity). Motion tracking across radar frames with projected positions (+10/+20/+30 min). Auto-refreshes every 5 min
+- **Radar Outflow Boundaries** — Detects fine-line boundaries from radar reflectivity gradients (gradX/gradY magnitude ≥ 8 dBZ). Connected-component labeling + PCA line fit + Douglas-Peucker simplification. Cyan dashed polylines with confidence scores. Separate toggle from storm cell detection. Adjustable noise filter slider (0-90, 500ms debounce)
+- **Storm-Safe Navigation** — Calculates driving routes that avoid active storm cells and warning polygons. Features:
+  - Radar storm cell integration (uses radar-detected cells ≥50 dBZ as primary hazard source, NWS polygons as fallback)
+  - Predictive avoidance (projects storm forward by drive time using radar motion data)
   - Drive ETA + Storm ETA comparison with "storm arrives before you" warnings
   - Custom no-go zone drawing (user-drawn purple polygons)
-  - Pick-on-map for start/destination points
+  - Pick-on-map for start/destination points (pin buttons + GPS)
   - Google Maps + Apple Maps deep link generation with safe waypoints
   - Buffer slider (3-15 mi), storm cell radius (2-50 mi), drive speed (35-75 mph)
+  - Color-coded hazard rendering: cyan (radar cells), orange (NWS storm cells), red (NWS polygons), purple (no-go zones)
 - **Sounding Station Pins** — 68 NWS upper-air sites with click-to-view skew-T popups
 - **Tornado Tracker Mode** — Auto-zoom to newly issued Tornado Warnings (Settings)
-- **Screenshots** — Every popup type has a screenshot button (alert polygons, Storm ETA, Mesoscale Discussions, SPC outlooks, surface observations, outflow boundaries). Composites info panel + map + Skywarn branding footer. Download, share to Facebook/Discord, or add to journal
+- **Screenshots** — Every popup type has a screenshot button: alert polygons (zoom-to-polygon), Storm ETA (with pin visible), Mesoscale Discussions (zoom-to-polygon, full discussion text expanded), SPC outlooks, surface observations, outflow boundaries, radar storm cells, radar boundaries. Composites info panel + map + Skywarn branding footer. Download, share to Facebook/Discord, or add to journal
+- **App Version Display** — Shows current version (from sw.js CACHE_NAME) + latest commit info from GitHub API in Settings. Yellow update banner when new version detected
 - **Share** — Facebook, Discord, native Web Share API
-- **Collapsible Layers Panel** — All layer sections collapsible with persisted state. Reorganized: Alert Categories, Surface Obs, SPC Information, Radar Overlay, Satellite Layers, Sounding Stations, Storm Motion, Storm-Safe Navigation
+- **Collapsible Layers Panel** — All layer sections collapsible with persisted state. Sections: Alert Categories, Surface Obs, SPC Information, Radar Overlay, Satellite Layers, Sounding Stations, Storm Motion (Warnings Motion Direction, Outflow Boundaries, Radar Storm Cell Detection, Radar Outflow Boundaries), Storm-Safe Navigation
 - **Collapsible Alert Legend** — Active alerts grouped by category (Warnings/Watches/Advisories)
 
 ### Soundings Tab
@@ -88,6 +92,7 @@ A comprehensive weather monitoring PWA for storm spotters and chasers, featuring
 - User Account (Google/Facebook OAuth, magic link, sign out)
 - Tornado Tracker Mode toggle
 - Alert sounds (Tornado Warning/Watch)
+- App version display + update notification banner
 - Update log / console
 - Hard refresh / app update
 
@@ -95,17 +100,18 @@ A comprehensive weather monitoring PWA for storm spotters and chasers, featuring
 
 | Component | Technology |
 |-----------|-----------|
-| Frontend | Single HTML file (~14,000+ lines), vanilla JavaScript |
+| Frontend | Single HTML file (~16,000+ lines), vanilla JavaScript |
 | Map | Leaflet.js 1.9.4 with CARTO Voyager basemap |
-| Radar | RainViewer API with 3-layer rolling buffer |
+| Radar | RainViewer API with 3-layer rolling buffer + canvas pixel decoding |
 | Satellite | NASA GIBS WMTS (GOES-East/West ABI imagery) |
 | Geospatial | turf.js 7.0.0 (polygon buffering, intersection detection, routing) |
-| Alerts | NWS API (api.weather.gov) with CORS proxy fallback |
+| Alerts | NWS API (api.weather.gov) with direct fetch + CORS proxy fallback |
 | Soundings | Iowa Environmental Mesonet (Iowa State University) RAOB JSON API |
 | SPC Outlooks | spc.noaa.gov GeoJSON API |
-| SPC Mesoscale Discussions | spc.noaa.gov HTML parsing |
+| SPC Mesoscale Discussions | spc.noaa.gov HTML parsing (LAT...LON coordinate decoding) |
 | Observations | NWS ASOS stations via api.weather.gov |
-| Reverse Geocoding | OpenStreetMap Nominatim (nearest town for Storm ETA) |
+| Reverse Geocoding | NWS /points API (nearest city/state for Storm ETA) |
+| Radar Processing | Canvas getImageData on RainViewer tiles (CORS-enabled) |
 | Backend | Supabase (PostgreSQL, Auth, Storage, Realtime) |
 | Auth | Supabase Auth (Google OAuth, Facebook OAuth, magic link) |
 | PWA | manifest.json, service worker (network-first HTML, cache-first static) |
@@ -119,6 +125,7 @@ A comprehensive weather monitoring PWA for storm spotters and chasers, featuring
 - Offline-capable (cached assets, offline fallback page)
 - Safe-area insets for notched devices
 - Cache versioning for seamless updates
+- App version display + update notification in Settings
 
 ## Database Schema
 
@@ -167,13 +174,13 @@ Just visit the [live site](https://kn-weather.github.io/Skywarn-Storm-Spot-US/).
 
 ## Data Sources
 
-- [NWS API](https://www.weather.gov/documentation/services-web-api) — Alerts, observations, station data
+- [NWS API](https://www.weather.gov/documentation/services-web-api) — Alerts, observations, station data, reverse geocoding
 - [Iowa Environmental Mesonet](https://mesonet.agron.iastate.edu/) — RAOB soundings
 - [SPC](https://www.spc.noaa.gov/) — Convective outlooks, Mesoscale Discussions
-- [RainViewer](https://www.rainviewer.com/) — Radar tiles
+- [RainViewer](https://www.rainviewer.com/) — Radar tiles (CORS-enabled for pixel decoding)
 - [NASA GIBS](https://earthdata.nasa.gov/gibs) — GOES-East/West satellite imagery (WMTS)
 - [CARTO](https://carto.com/) — Basemap tiles
-- [OpenStreetMap Nominatim](https://nominatim.openstreetmap.org/) — Geocoding + reverse geocoding (nearest town)
+- [OpenStreetMap Nominatim](https://nominatim.openstreetmap.org/) — Geocoding (journal location lookup)
 - [turf.js](https://turfjs.org/) — Geospatial analysis (polygon buffering, intersection detection, routing)
 - [TwisterData](http://www.twisterdata.com/) — Forecast soundings (embedded)
 
