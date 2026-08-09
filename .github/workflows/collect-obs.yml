@@ -15,10 +15,12 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
+          cache: 'npm'   # Cache npm deps for faster runs
       - name: Install dependencies
-        run: npm install @supabase/supabase-js ws
+        run: npm ci        # Use lockfile for reproducible installs (requires package-lock.json)
       - name: Run observation collection
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
         run: node scripts/collect-obs.mjs
+
