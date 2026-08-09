@@ -4,6 +4,54 @@ This file documents all significant bugs found and fixed during development.
 
 ---
 
+## v94 — Radar Boundary Noise Slider Not Working + Zig-Zag Cleanup
+
+**Date:** Aug 9, 2026
+**Severity:** High (slider appeared non-functional, boundaries were a zig-zag mess)
+
+### Root Cause
+Three bugs combined to make the noise slider appear non-functional:
+
+1. **Hardcoded detection thresholds** — `radarDetectBoundaries()` used hardcoded `GRAD_THRESHOLD=8` and `MIN_BOUNDARY_PIXELS=15` that never changed with the slider.
+
+2. **Confidence formula clustered at 80-100** — `confidence = min(100, avgGrad*5 + linearity*50)`. Since `avgGrad` is typically 8-30 (because GRAD_THRESHOLD=8), `avgGrad*5` = 40-150. So confidence was almost always 80-100 (capped). The slider (0-90) filtered by confidence, but almost everything passed even at slider=90.
+
+3. **`radarScheduleReRender()` didn't re-detect** — It only re-filtered cached boundaries from `radarLastBoundaries` instead of re-running `radarDetectBoundaries()` with new thresholds.
+
+4. **No linearity filter** — Short/non-linear clusters (zig-zags) were rendered because there was no `MIN_LINEARITY` threshold.
+
+5. **Poor polyline simplification** — Just "take every Nth pixel" (`step = floor(pixels.length/20)`) instead of proper Douglas-Peucker smoothing.
+
+### Fix
+**Slider now controls real detection thresholds:**
+- `GRAD_THRESHOLD`: 8 (slider=0) → 28 (slider=90) dBZ gradient
+- `MIN_BOUNDARY_PIXELS`: 10 (slider=0) → 80 (slider=90) pixels
+- `MIN_LINEARITY`: 0.0 (slider=0) → 0.65 (slider=90) — filters zig-zag clusters
+- `MIN_LENGTH_KM`: 2 (slider=0) → 30 (slider=90) km
+
+**`radarScheduleReRender()` now re-runs `radarDetectBoundaries()`** with the new slider thresholds (not just re-filtering cached results), so the slider actually changes detection sensitivity in real-time.
+
+**Added Douglas-Peucker simplification** (`radarDouglasPeucker` + `radarPerpDistance`) to smooth out zig-zags. Tolerance scales with slider: 0.005° (slider=0) → 0.020° (slider=90), approximately 0.3-1.5 km.
+
+**Fixed confidence formula** to span 0-100 meaningfully:
+- `avgGrad*2` (0-60) + `linearity*30` (0-30) + `lengthScore*10` (0-10)
+- No longer clustered at 80-100
+
+### Slider Behavior (0-90)
+- **0** = most sensitive: lowest thresholds, most boundaries (including noise/zig-zags)
+- **40** (default) = balanced: moderate filtering
+- **90** = least sensitive: only strong, long, highly-linear boundaries
+
+### Files Changed
+- `nws_us_alert_map.html`:
+  - `radarDetectBoundaries()`: reads slider, maps to 4 thresholds, adds linearity filter, uses Douglas-Peucker, fixed confidence formula
+  - New: `radarDouglasPeucker()` — recursive polyline simplification
+  - New: `radarPerpDistance()` — geographic perpendicular distance
+  - `radarScheduleReRender()`: now re-runs detection (not just re-filter)
+- `sw.js`: Bumped CACHE_NAME to `v94`
+
+---
+
 ## v93 — Pixel-Based Blank Frame Detection for Satellite Animation
 
 **Date:** Aug 9, 2026
