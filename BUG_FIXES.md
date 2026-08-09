@@ -17,7 +17,7 @@ For 8-digit SPC LAT...LON coordinates (format `DDMMDDMM`), the code was adding +
 lonDeg = parseInt(p.substring(4,6)) + 100;
 ```
 
-The +100 was intended for 9-digit coordinates where the leading "1" in the 5-digit longitude indicates 100°+ west. But for 8-digit coordinates, the longitude is < 100° (no leading "1"), so the +100 should NOT be applied.
+The +100 was intended for 9-digit coordinates where the leading "1" in the 5-digit longitude indicates 100°+ west. But for 8-digit coordinates where the longitude is < 100° (no leading "1"), the +100 pushed them to the Pacific Ocean.
 
 ### Example
 MD 1862 coordinates `39217785`:
@@ -26,6 +26,42 @@ MD 1862 coordinates `39217785`:
 
 ### Fix
 Removed the `+100` from the 8-digit coordinate parsing in `mdParsePage()`.
+
+### Note
+This fix was incomplete — it fixed longitudes < 100°W but broke longitudes >= 100°W (see v91 below). The SPC 8-digit format drops the leading "1" for >= 100°W longitudes, which requires conditional +100 (fixed in v91).
+
+---
+
+## v91 — MD Polygon Longitude for >= 100°W (Conditional +100)
+
+**Date:** Aug 9, 2026
+**Commit:** `6eaf109`
+**Severity:** High (MD polygons in central US rendered in Atlantic Ocean)
+
+### Root Cause
+The v83 fix removed `+100` entirely from 8-digit coordinates. But the SPC format drops the leading "1" from longitudes >= 100°W in 8-digit format, making them look like 4-digit values. Without conditional `+100`, coordinates in the central US (ND, SD, etc. at ~-100 to -104°) were rendered at -1 to -2° (Atlantic Ocean near Africa).
+
+### How It Differs from v83
+| Version | +100 Applied To | < 100°W (e.g., Virginia) | >= 100°W (e.g., North Dakota) |
+|---------|----------------|--------------------------|-------------------------------|
+| Original (pre-v83) | ALL 8-digit | ❌ Pushed to Pacific (-178°) | ❌ Pushed to Pacific (-198°) |
+| v83 fix | NONE | ✅ Correct (-78°) | ❌ Atlantic Ocean (-1°) |
+| v91 fix | Only when lon < 10° | ✅ Correct (-78°) | ✅ Correct (-101°) |
+
+### The SPC 8-digit Format
+The SPC uses 9-digit coordinates (DDMM + DDDMM) where the 5-digit longitude starts with "1" for >= 100°W. In 8-digit format, the leading "1" is **dropped** for >= 100°W longitudes:
+- `45389890` → lat=4538, lon=9890 → 98+90/60 = 99.5° → **≥ 10° → no add** → -99.5° (western ND)
+- `45610075` → lat=4561, lon=0075 → 00+75/60 = 1.25° → **< 10° → add 100** → -101.25° (central ND)
+
+### Fix
+After parsing the 8-digit longitude, if the result is < 10° (Atlantic Ocean), add 100:
+```js
+if (lon < 10) lon += 100;  // Leading "1" was dropped for >= 100°W
+```
+
+### Verified
+- MD 1872 (North Dakota): all coordinates in -99 to -102 range ✅
+- MD 1862 (Virginia): all coordinates in -75 to -78 range (no add needed) ✅
 
 ---
 
