@@ -1,0 +1,50 @@
+{
+  "name": "@kn-weather/skywarn-storm-spot-us",
+  "version": "0.91.0",
+  "description": "A field-grade Progressive Web App for storm spotters and chasers, featuring live NWS alert polygons, SPC outlooks, radar animation, satellite imagery, soundings, surface observations, outflow boundary detection, radar-based storm cell tracking, storm-safe navigation, and a spotting journal with Supabase backend.",
+  "type": "module",
+  "main": "scripts/collect-obs.mjs",
+  "bin": {
+    "skywarn-collect-obs": "scripts/collect-obs.mjs"
+  },
+  "scripts": {
+    "collect": "node scripts/collect-obs.mjs",
+    "collect:obs": "node scripts/collect-obs.mjs",
+    "deploy:function": "supabase functions deploy collect-obs --no-verify-jwt"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Kn-weather/Skywarn-Storm-Spot-US.git",
+    "directory": "."
+  },
+  "homepage": "https://kn-weather.github.io/Skywarn-Storm-Spot-US/",
+  "bugs": {
+    "url": "https://github.com/Kn-weather/Skywarn-Storm-Spot-US/issues"
+  },
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.45.0",
+    "ws": "^8.18.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "license": "UNLICENSED",
+  "private": false,
+  "keywords": [
+    "skywarn",
+    "storm-spotter",
+    "weather",
+    "pwa",
+    "nws",
+    "severe-weather",
+    "storm-chasing",
+    "radar",
+    "supabase",
+    "leaflet",
+    "progressive-web-app"
+  ],
+  "author": "Kn-weather"
+}
