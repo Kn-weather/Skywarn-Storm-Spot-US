@@ -14,7 +14,7 @@
 [![Data Collection](https://img.shields.io/github/actions/workflow/status/Kn-weather/Skywarn-Storm-Spot-US/collect-obs.yml?label=Data%20Collection&style=flat-square)](https://github.com/Kn-weather/Skywarn-Storm-Spot-US/actions/workflows/collect-obs.yml)
 [![Last Commit](https://img.shields.io/github/last-commit/Kn-weather/Skywarn-Storm-Spot-US?label=Last%20Commit&style=flat-square&color=blue)](https://github.com/Kn-weather/Skywarn-Storm-Spot-US/commits/main)
 [![Repo Size](https://img.shields.io/github/repo-size/Kn-weather/Skywarn-Storm-Spot-US?label=Repo%20Size&style=flat-square&color=blueviolet)](https://github.com/Kn-weather/Skywarn-Storm-Spot-US)
-[![License](https://img.shields.io/badge/License-Proprietary-blue?style=flat-square)](https://github.com/Kn-weather/Skywarn-Storm-Spot-US/blob/main/README.md#license)
+[![License](https://img.shields.io/badge/License-All%20Rights%20Reserved-blue?style=flat-square)](https://github.com/Kn-weather/Skywarn-Storm-Spot-US/blob/main/LICENSE)
 
 [![PWA](https://img.shields.io/badge/PWA-Offline%20Ready-success?style=flat-square)](https://github.com/Kn-weather/Skywarn-Storm-Spot-US#why-the-pwa-architecture-matters-for-storm-spotters)
 [![Backend](https://img.shields.io/badge/Backend-Supabase-3ECF8E?style=flat-square)](https://supabase.com/)
@@ -251,6 +251,8 @@ Skywarn-Storm-Spot-US/
 ├── BUG_FIXES.md                  # Bug fix log with root cause analysis
 ├── CHANGELOG.md                  # Version history with feature highlights
 ├── PLANNED_FEATURES.md           # Detailed plans for upcoming features
+├── LICENSE                       # All Rights Reserved proprietary license
+├── .gitignore                    # Git ignore rules (deps, secrets, OS/IDE files)
 ├── README.md                     # This file
 ├── .github/
 │   └── workflows/
@@ -479,7 +481,14 @@ This project would not be possible without the incredible work of the meteorolog
 
 ## License
 
-Weather data is provided by NOAA/NWS (public domain). Application code is proprietary.
+This software is proprietary. See the [LICENSE](LICENSE) file for the full "All Rights Reserved" license terms.
+
+**Summary:**
+- **Application code** — Copyright © 2026 Kn-weather. All Rights Reserved. No use, modification, or distribution without written permission.
+- **Weather data** — Provided by NOAA/NWS (public domain), NASA GIBS, SPC, Iowa Mesonet, and RainViewer under their respective terms.
+- **Contributions** — Welcome but require a Contributor License Agreement (see [Contributing](#contributing) and the [LICENSE](LICENSE) file).
+
+For licensing inquiries, open an [issue](https://github.com/Kn-weather/Skywarn-Storm-Spot-US/issues).
 
 ## Repository
 
