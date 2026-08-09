@@ -6340,39 +6340,315 @@ function satCreateLayer(key,timeIdx){
   return layer;
 }
 
-/* Check if a satellite layer's frame is "blank" (mostly failed tiles).
-   Returns true if the frame should be skipped during animation.
-   - Requires at least 4 tiles to have been requested (loaded + errored)
-   - Returns true if >60% of tiles errored (404'd → transparent)
-   - Returns false if not enough data yet (don't skip — might be valid) */
-function satIsLayerBlank(layer){
-  if(!layer||!layer._satStats)return false;
-  var s=layer._satStats;
-  var total=s.loaded+s.errored;
-  if(total<4)return false;           /* not enough data to judge */
-  return(s.errored/total)>0.6;       /* >60% errors = blank frame */
+/* ═══════════════════════════════════════════════════════════════════════
+   PIXEL-BASED BLANK FRAME DETECTION (v92+)
+   ───────────────────────────────────────────────────────────────────────
+   The tile error tracking above catches 404s, but GIBS sometimes serves
+   "blank-looking" tiles that load successfully (200 OK) but contain no
+   actual imagery — transparent, uniformly black, or near-uniform fill.
+   These slip past the error tracker and still cause flashing.
+
+   This system mirrors the radar pixel analysis pipeline:
+   1. Fetch a few sample tiles per frame (not all — just enough to judge)
+   2. Decode via canvas getImageData (CORS-enabled via crossOrigin:true)
+   3. Compute a "content score": ratio of non-transparent, non-uniform pixels
+   4. Compare against the loop's median score — frames significantly below
+      median are flagged as blank
+   5. Cache results per (layerKey, timeIdx) so we only analyze each frame once
+
+   The loop-wide comparison is key: if ALL frames are uniformly dark (e.g.,
+   nighttime visible imagery), the median is low but no frame is "blank"
+   relative to its peers. Only frames that deviate significantly from the
+   loop's baseline get skipped. */
+
+/* Cache: satContentScores[key] = { [timeIdx]: {score, analyzed, timestamp} } */
+var satContentScores={};
+
+/* Background analysis state */
+var satAnalysisActive=false;
+var satAnalysisTimer=null;
+
+/* Analyze a single satellite frame's tile content via pixel sampling.
+   Fetches up to 4 sample tiles from the frame's center region, decodes them
+   via canvas, and returns a content score (0.0 = blank, 1.0 = full content).
+   
+   Content score = average across sampled tiles of:
+     (non-transparent pixel ratio) × (color variance factor)
+   
+   - Non-transparent ratio: fraction of pixels with alpha > 10 (out of 255)
+   - Color variance factor: 1.0 if the tile has meaningful color variation,
+     reduced if the tile is nearly uniform (e.g., all-black nighttime IR)
+   
+   Returns a promise that resolves to {score, tileCount, error}. */
+function satAnalyzeFramePixels(key,timeIdx){
+  return new Promise(function(resolve){
+    var cfg=SAT_LAYERS[key];
+    if(!cfg||!satFrames[timeIdx]){resolve({score:-1,tileCount:0,error:'no config'});return;}
+    var time=satFormatTime(satFrames[timeIdx]);
+    /* Sample 4 tiles near the center of CONUS at the native TMS zoom level.
+       Center CONUS is roughly tile (x=15, y=25) at zoom 6, (x=31, y=51) at zoom 7.
+       We sample a 2x2 block to get spatial coverage without too many requests. */
+    var z=cfg.tms;
+    var baseX=(z===6)?15:31;
+    var baseY=(z===6)?25:51;
+    var sampleTiles=[
+      {x:baseX,   y:baseY},
+      {x:baseX+1, y:baseY},
+      {x:baseX,   y:baseY+1},
+      {x:baseX+1, y:baseY+1}
+    ];
+    var scores=[];
+    var completed=0;
+    var total=sampleTiles.length;
+    
+    sampleTiles.forEach(function(t){
+      var tileUrl='https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/'+cfg.id+
+        '/default/'+time+'/GoogleMapsCompatible_Level'+cfg.tms+'/'+z+'/'+t.y+'/'+t.x+'.jpg';
+      
+      var img=new Image();
+      img.crossOrigin='anonymous';
+      var done=false;
+      
+      function finish(score){
+        if(done)return;done=true;
+        scores.push(score);
+        completed++;
+        if(completed>=total){
+          /* Average the scores, ignoring -1 (failed tiles) */
+          var validScores=scores.filter(function(s){return s>=0;});
+          if(validScores.length===0){
+            resolve({score:-1,tileCount:0,error:'all tiles failed'});
+          }else{
+            var avg=validScores.reduce(function(a,b){return a+b;},0)/validScores.length;
+            resolve({score:avg,tileCount:validScores.length,error:null});
+          }
+        }
+      }
+      
+      img.onload=function(){
+        try{
+          var canvas=document.createElement('canvas');
+          canvas.width=64;  /* Downsample to 64x64 for speed (enough resolution to detect blank) */
+          canvas.height=64;
+          var ctx=canvas.getContext('2d');
+          ctx.drawImage(img,0,0,64,64);
+          var imageData=ctx.getImageData(0,0,64,64);
+          var pixels=imageData.data;
+          
+          var nonTransparent=0;
+          var sumR=0,sumG=0,sumB=0;
+          var count=0;
+          /* Sample every 4th pixel for speed (16x16 = 256 samples) */
+          for(var py=0;py<64;py+=4){
+            for(var px=0;px<64;px+=4){
+              var idx=(py*64+px)*4;
+              var a=pixels[idx+3];
+              if(a>10){
+                nonTransparent++;
+                sumR+=pixels[idx];
+                sumG+=pixels[idx+1];
+                sumB+=pixels[idx+2];
+                count++;
+              }
+            }
+          }
+          var totalSamples=16*16;
+          var nonTransRatio=nonTransparent/totalSamples;
+          
+          /* Compute color variance among non-transparent pixels.
+             If all pixels are the same color (uniform black, uniform gray),
+             variance is 0 → factor is 0.5 (reduced but not zero — nighttime
+             IR is legitimately uniform but not "blank"). */
+          var varianceFactor=1.0;
+          if(count>0){
+            var avgR=sumR/count,avgG=sumG/count,avgB=sumB/count;
+            var varSum=0;
+            for(var py2=0;py2<64;py2+=4){
+              for(var px2=0;px2<64;px2+=4){
+                var idx2=(py2*64+px2)*4;
+                if(pixels[idx2+3]>10){
+                  var dr=pixels[idx2]-avgR;
+                  var dg=pixels[idx2+1]-avgG;
+                  var db=pixels[idx2+2]-avgB;
+                  varSum+=(dr*dr+dg*dg+db*db);
+                }
+              }
+            }
+            var variance=varSum/count;
+            /* variance ranges 0 (uniform) to ~5000+ (high contrast).
+               Map to 0.5–1.0 factor: uniform → 0.5, variance>2000 → 1.0 */
+            varianceFactor=0.5+Math.min(0.5,variance/4000);
+          }
+          
+          var score=nonTransRatio*varianceFactor;
+          finish(score);
+        }catch(e){
+          finish(-1);  /* CORS or canvas error */
+        }
+      };
+      
+      img.onerror=function(){finish(-1);};
+      img.src=tileUrl;
+      
+      /* Timeout: if tile doesn't load in 8 sec, count as failed */
+      setTimeout(function(){finish(-1);},8000);
+    });
+  });
+}
+
+/* Get the cached content score for a frame, or null if not yet analyzed. */
+function satGetContentScore(key,timeIdx){
+  if(!satContentScores[key])return null;
+  return satContentScores[key][timeIdx]||null;
+}
+
+/* Check if a frame is blank based on pixel analysis + tile error tracking.
+   Priority:
+   1. If pixel analysis is available, use loop-relative comparison
+   2. Fall back to tile error tracking (>60% errors = blank)
+   3. If neither is available, return false (don't skip — can't judge) */
+function satIsLayerBlank(layer,key,timeIdx){
+  if(!layer)return false;
+  
+  /* Method 1: Pixel analysis (preferred — catches "loaded but blank" tiles) */
+  var cached=satGetContentScore(key,timeIdx);
+  if(cached&&cached.analyzed){
+    /* Compare against the loop's median score.
+       A frame is blank if its score is <30% of the loop median.
+       This handles cases like nighttime visible imagery where ALL frames
+       are dark — the median is low, but no frame is "blank" relative to peers. */
+    var median=satComputeLoopMedianScore(key);
+    if(median>0&&cached.score>=0){
+      var ratio=cached.score/median;
+      if(ratio<0.3){
+        console.log('[Sat] Frame',timeIdx+1,'blank by pixel analysis (score='+cached.score.toFixed(3)+', median='+median.toFixed(3)+', ratio='+ratio.toFixed(2)+')');
+        return true;
+      }
+    }
+    /* If score is essentially 0, it's definitely blank regardless of median */
+    if(cached.score>=0&&cached.score<0.05){
+      console.log('[Sat] Frame',timeIdx+1,'blank by pixel analysis (score='+cached.score.toFixed(3)+' < 0.05 absolute threshold)');
+      return true;
+    }
+  }
+  
+  /* Method 2: Tile error tracking (fallback — catches 404 floods) */
+  if(layer._satStats){
+    var s=layer._satStats;
+    var total=s.loaded+s.errored;
+    if(total>=4&&(s.errored/total)>0.6){
+      console.log('[Sat] Frame',timeIdx+1,'blank by tile errors ('+s.errored+'/'+total+' = '+((s.errored/total)*100).toFixed(0)+'%)');
+      return true;
+    }
+  }
+  
+  return false;
+}
+
+/* Compute the median content score across all analyzed frames for a layer key.
+   Used as the baseline for loop-relative blank detection. */
+function satComputeLoopMedianScore(key){
+  if(!satContentScores[key])return 0;
+  var scores=[];
+  for(var idx in satContentScores[key]){
+    var entry=satContentScores[key][idx];
+    if(entry&&entry.analyzed&&entry.score>=0){
+      scores.push(entry.score);
+    }
+  }
+  if(scores.length<3)return 0;  /* Need at least 3 analyzed frames for a meaningful median */
+  scores.sort(function(a,b){return a-b;});
+  var mid=Math.floor(scores.length/2);
+  return scores.length%2===0?(scores[mid-1]+scores[mid])/2:scores[mid];
+}
+
+/* Background analysis: analyze all 24 frames sequentially with small delays
+   to avoid hammering GIBS. Stores results in satContentScores.
+   Called when a satellite layer activates. */
+function satStartBackgroundAnalysis(key){
+  if(satAnalysisActive)return;  /* Already running */
+  satAnalysisActive=true;
+  if(satAnalysisTimer)clearTimeout(satAnalysisTimer);
+  
+  if(!satContentScores[key])satContentScores[key]={};
+  
+  var idx=0;
+  var n=satFrames.length;
+  
+  function analyzeNext(){
+    if(!satAnalysisActive||idx>=n){
+      satAnalysisActive=false;
+      console.log('[Sat] Background analysis complete for',key,'—',Object.keys(satContentScores[key]||{}).length,'frames analyzed');
+      return;
+    }
+    /* Skip if already analyzed (e.g., from a previous activation) */
+    if(satContentScores[key][idx]&&satContentScores[key][idx].analyzed){
+      idx++;
+      satAnalysisTimer=setTimeout(analyzeNext,50);
+      return;
+    }
+    /* Analyze this frame */
+    satAnalyzeFramePixels(key,idx).then(function(result){
+      if(satContentScores[key]){
+        satContentScores[key][idx]={
+          score:result.score,
+          analyzed:true,
+          timestamp:Date.now(),
+          tileCount:result.tileCount
+        };
+      }
+      idx++;
+      /* Small delay between requests to be polite to GIBS */
+      satAnalysisTimer=setTimeout(analyzeNext,200);
+    });
+  }
+  
+  console.log('[Sat] Starting background pixel analysis for',key,'(',n,'frames)');
+  analyzeNext();
+}
+
+/* Stop any running background analysis. */
+function satStopBackgroundAnalysis(){
+  satAnalysisActive=false;
+  if(satAnalysisTimer){
+    clearTimeout(satAnalysisTimer);
+    satAnalysisTimer=null;
+  }
 }
 
 /* Find the next non-blank frame index for animation.
    Starts from startIdx+1, wraps around, skips blank frames.
    Returns the index of the next valid frame, or startIdx if all are blank
-   (prevents infinite loop — better to show one blank than freeze). */
+   (prevents infinite loop — better to show one blank than freeze).
+   Uses both pixel analysis and tile error tracking to detect blanks. */
 function satFindNextValidFrame(startIdx){
   var n=satFrames.length;
   if(n===0)return 0;
   /* Check up to n frames ahead (wrapping) to find a non-blank one */
   for(var i=1;i<=n;i++){
     var idx=(startIdx+i)%n;
-    /* Only skip if we have a layer to check AND it's confirmed blank.
-       For frames without a loaded layer, we can't check — don't skip them. */
+    /* Check the preloaded next layer if it corresponds to this index */
     if(idx===satCurrentFrame+1&&satLayerNext){
-      /* This is the preloaded next frame — we can check it */
-      if(satIsLayerBlank(satLayerNext)){
+      if(satIsLayerBlank(satLayerNext,satActiveKey,idx)){
         console.log('[Sat] Skipping blank frame',idx+1,'of',n);
         continue;
       }
+      return idx;
     }
-    /* For frames we can't check (not preloaded), don't skip — let them load */
+    /* For frames without a loaded layer, check cached pixel analysis only */
+    var cached=satGetContentScore(satActiveKey,idx);
+    if(cached&&cached.analyzed&&cached.score>=0){
+      var median=satComputeLoopMedianScore(satActiveKey);
+      if(median>0&&(cached.score/median)<0.3){
+        console.log('[Sat] Skipping blank frame',idx+1,'of',n,'(cached pixel analysis)');
+        continue;
+      }
+      if(cached.score<0.05){
+        console.log('[Sat] Skipping blank frame',idx+1,'of',n,'(cached score < 0.05)');
+        continue;
+      }
+    }
+    /* If we can't check (no layer, no cache), don't skip — let it load */
     return idx;
   }
   /* All checked frames were blank — return startIdx to avoid freezing */
@@ -6422,7 +6698,7 @@ function satShowFrame(idx){
       satLayerNext=satCreateLayer(satActiveKey,nextIdx);
       if(satLayerNext)satLayerNext.addTo(alertMapInstance);
       /* If current frame is blank, also preload next+1 for skip-ahead */
-      if(satIsLayerBlank(satLayerCurrent)&&nextIdx+1<satFrames.length){
+      if(satIsLayerBlank(satLayerCurrent,satActiveKey,idx)&&nextIdx+1<satFrames.length){
         console.log('[Sat] Current frame',idx+1,'is blank — preloading skip-ahead frame',nextIdx+2);
         /* Don't create a separate layer — just let satFindNextValidFrame
            handle the skip on the next tick. It will rebuild the buffer
@@ -6516,7 +6792,7 @@ function satStep(delta){
   if(newIdx<0)newIdx=n-1;
   if(newIdx>=n)newIdx=0;
   /* For forward steps, skip blank frames (matches animation behavior) */
-  if(delta>0&&satLayerNext&&satIsLayerBlank(satLayerNext)){
+  if(delta>0&&satLayerNext&&satIsLayerBlank(satLayerNext,satActiveKey,(satCurrentFrame+1)%n)){
     newIdx=satFindNextValidFrame(satCurrentFrame);
     if(newIdx===satCurrentFrame){
       /* All ahead are blank — just advance one to show the blank (user feedback) */
@@ -6700,6 +6976,11 @@ function satActivateLayer(type,sat){
   satUpdateLegend();
   console.log('[Sat] Activated',cfg.label,'at frame',satCurrentFrame+1+'/'+satFrames.length,
     '('+satFormatTime(satFrames[satCurrentFrame])+')');
+  /* Start background pixel analysis of all frames for blank detection.
+     This runs asynchronously with small delays between tile fetches to
+     avoid hammering GIBS. Results are cached in satContentScores and used
+     by satFindNextValidFrame to skip blank frames during animation. */
+  satStartBackgroundAnalysis(key);
   /* Auto-refresh frames every 10 minutes (matches GIBS scan cadence) */
   if(satRefreshTimer)clearInterval(satRefreshTimer);
   satRefreshTimer=setInterval(function(){
@@ -6710,6 +6991,13 @@ function satActivateLayer(type,sat){
     if(wasAtLatest){
       satCurrentFrame=satFrames.length-1;
     }
+    /* Clear cached pixel analysis scores since frame timestamps changed.
+       The background analysis will re-analyze the new frames. */
+    if(satContentScores[satActiveKey]){
+      delete satContentScores[satActiveKey];
+    }
+    /* Restart background analysis for the new frame set */
+    satStartBackgroundAnalysis(satActiveKey);
     /* Reload the current frame's tiles with the new layer (using rolling buffer) */
     satShowFrame(satCurrentFrame);
     satUpdateUI(satCurrentFrame);
@@ -6730,6 +7018,7 @@ function satTeardownLayersOnly(){
    picks "Off" in the satellite dropdown. */
 function satTeardown(){
   if(satPlaying)satTogglePlay();
+  satStopBackgroundAnalysis();  /* Stop any running pixel analysis */
   if(satRefreshTimer){clearInterval(satRefreshTimer);satRefreshTimer=null}
   if(satLayerPrev){try{alertMapInstance.removeLayer(satLayerPrev)}catch(e){}satLayerPrev=null}
   if(satLayerCurrent){try{alertMapInstance.removeLayer(satLayerCurrent)}catch(e){}satLayerCurrent=null}
