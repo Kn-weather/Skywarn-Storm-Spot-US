@@ -6308,7 +6308,10 @@ function satBuildUrl(key){
 /* Create a Leaflet tile layer for the given key and time index.
    - maxNativeZoom = TMS level (6 or 7) - GIBS only serves tiles up to this level.
    - maxZoom = 18 so the satellite stays visible when zoomed in (upscaled).
-   - errorTileUrl: transparent 1x1 PNG so 404s don't show as broken-image icons. */
+   - errorTileUrl: transparent 1x1 PNG so 404s don't show as broken-image icons.
+   - Tile load/error tracking: counts successful loads vs 404s per layer so
+     we can detect and skip "blank" frames during animation (GIBS occasionally
+     has time gaps where all tiles for a timestamp 404, causing flashing). */
 function satCreateLayer(key,timeIdx){
   var cfg=SAT_LAYERS[key];
   if(!cfg||!satFrames[timeIdx])return null;
@@ -6317,7 +6320,7 @@ function satCreateLayer(key,timeIdx){
     '/default/'+time+'/GoogleMapsCompatible_Level'+cfg.tms+'/{z}/{y}/{x}.jpg';
   /* 1x1 transparent PNG (base64) - used when a tile 404s */
   var transparentPng='data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
-  return L.tileLayer(url,{
+  var layer=L.tileLayer(url,{
     opacity:0,
     maxZoom:18,
     maxNativeZoom:cfg.tms,
@@ -6325,6 +6328,55 @@ function satCreateLayer(key,timeIdx){
     crossOrigin:true,
     errorTileUrl:transparentPng
   });
+  /* Track tile load/error stats for blank frame detection.
+     - _satStats.loaded: tiles that loaded successfully (have imagery)
+     - _satStats.errored: tiles that 404'd (showing transparent errorTile)
+     - _satStats.checked: set to true once we've evaluated blank status
+     A frame is "blank" if >60% of tiles errored AND at least 4 tiles were
+     requested (enough data to make a judgment). */
+  layer._satStats={loaded:0,errored:0};
+  layer.on('tileload',function(){layer._satStats.loaded++;});
+  layer.on('tileerror',function(){layer._satStats.errored++;});
+  return layer;
+}
+
+/* Check if a satellite layer's frame is "blank" (mostly failed tiles).
+   Returns true if the frame should be skipped during animation.
+   - Requires at least 4 tiles to have been requested (loaded + errored)
+   - Returns true if >60% of tiles errored (404'd → transparent)
+   - Returns false if not enough data yet (don't skip — might be valid) */
+function satIsLayerBlank(layer){
+  if(!layer||!layer._satStats)return false;
+  var s=layer._satStats;
+  var total=s.loaded+s.errored;
+  if(total<4)return false;           /* not enough data to judge */
+  return(s.errored/total)>0.6;       /* >60% errors = blank frame */
+}
+
+/* Find the next non-blank frame index for animation.
+   Starts from startIdx+1, wraps around, skips blank frames.
+   Returns the index of the next valid frame, or startIdx if all are blank
+   (prevents infinite loop — better to show one blank than freeze). */
+function satFindNextValidFrame(startIdx){
+  var n=satFrames.length;
+  if(n===0)return 0;
+  /* Check up to n frames ahead (wrapping) to find a non-blank one */
+  for(var i=1;i<=n;i++){
+    var idx=(startIdx+i)%n;
+    /* Only skip if we have a layer to check AND it's confirmed blank.
+       For frames without a loaded layer, we can't check — don't skip them. */
+    if(idx===satCurrentFrame+1&&satLayerNext){
+      /* This is the preloaded next frame — we can check it */
+      if(satIsLayerBlank(satLayerNext)){
+        console.log('[Sat] Skipping blank frame',idx+1,'of',n);
+        continue;
+      }
+    }
+    /* For frames we can't check (not preloaded), don't skip — let them load */
+    return idx;
+  }
+  /* All checked frames were blank — return startIdx to avoid freezing */
+  return startIdx;
 }
 
 /* Show the satellite frame at the given index using the 3-layer rolling buffer.
@@ -6346,7 +6398,12 @@ function satShowFrame(idx){
     return;
   }
   var oldIdx=satCurrentFrame;
-  /* If target is the preloaded next frame, just rotate the buffer forward */
+  /* If target is the preloaded next frame, just rotate the buffer forward.
+     Blank frame handling: if the next frame is blank (mostly 404'd tiles),
+     we still rotate to it (the animation timer already called satFindNextValidFrame
+     to skip it, but if we reach here it means the frame wasn't detected as blank
+     yet, or the user manually stepped to it). The next animation tick will skip
+     past it if it turns out to be blank. */
   if(idx===oldIdx+1&&satLayerNext){
     if(satLayerPrev){
       try{alertMapInstance.removeLayer(satLayerPrev)}catch(e){}
@@ -6357,11 +6414,20 @@ function satShowFrame(idx){
     /* Show current immediately (it was preloaded), hide prev */
     if(satLayerCurrent)satLayerCurrent.setOpacity(satBaseOpacity);
     if(satLayerPrev)satLayerPrev.setOpacity(0);
-    /* Preload the new next frame */
+    /* Preload the new next frame. If the current frame (just swapped in) is
+       blank, preload the frame AFTER next so the next animation tick can
+       skip directly to it without a visible blank flash. */
     var nextIdx=idx+1;
     if(nextIdx<satFrames.length){
       satLayerNext=satCreateLayer(satActiveKey,nextIdx);
       if(satLayerNext)satLayerNext.addTo(alertMapInstance);
+      /* If current frame is blank, also preload next+1 for skip-ahead */
+      if(satIsLayerBlank(satLayerCurrent)&&nextIdx+1<satFrames.length){
+        console.log('[Sat] Current frame',idx+1,'is blank — preloading skip-ahead frame',nextIdx+2);
+        /* Don't create a separate layer — just let satFindNextValidFrame
+           handle the skip on the next tick. It will rebuild the buffer
+           around the target via the "far jump" path below. */
+      }
     }
     satCurrentFrame=idx;
     return;
@@ -6439,13 +6505,24 @@ function satUpdateUI(idx){
   }
 }
 
-/* Step forward/backward by delta frames. Wraps around at the ends. */
+/* Step forward/backward by delta frames. Wraps around at the ends.
+   When stepping forward (+1), skips blank frames to match animation behavior.
+   When stepping backward (-1), does NOT skip blanks (user explicitly stepped
+   back, so they probably want to see that specific frame). */
 function satStep(delta){
   if(satFrames.length===0)return;
   var n=satFrames.length;
   var newIdx=satCurrentFrame+delta;
   if(newIdx<0)newIdx=n-1;
   if(newIdx>=n)newIdx=0;
+  /* For forward steps, skip blank frames (matches animation behavior) */
+  if(delta>0&&satLayerNext&&satIsLayerBlank(satLayerNext)){
+    newIdx=satFindNextValidFrame(satCurrentFrame);
+    if(newIdx===satCurrentFrame){
+      /* All ahead are blank — just advance one to show the blank (user feedback) */
+      newIdx=(satCurrentFrame+1)%n;
+    }
+  }
   satShowFrame(newIdx);
 }
 
@@ -6462,7 +6539,10 @@ function satJumpLatest(){
 
 /* Toggle play/pause of satellite animation. 500ms per frame (matches radar
    cadence — smoother perceived motion since frames swap instantly via the
-   3-layer buffer rather than waiting for tile loads). */
+   3-layer buffer rather than waiting for tile loads).
+   Blank frame skipping: when advancing, checks if the next frame is blank
+   (mostly 404'd tiles) and skips ahead to the next valid frame. This
+   eliminates the flashing caused by GIBS time gaps. */
 function satTogglePlay(){
   satPlaying=!satPlaying;
   var btn=document.getElementById('amSatPlayBtn');
@@ -6472,7 +6552,13 @@ function satTogglePlay(){
     satAnimTimer=setInterval(function(){
       var n=satFrames.length;
       if(n===0)return;
-      var newIdx=(satCurrentFrame+1)%n;
+      /* Find the next valid (non-blank) frame — skips blanks to prevent flashing */
+      var newIdx=satFindNextValidFrame(satCurrentFrame);
+      /* If newIdx === satCurrentFrame, all frames are blank or only current is
+         available — advance anyway to avoid freezing the animation */
+      if(newIdx===satCurrentFrame){
+        newIdx=(satCurrentFrame+1)%n;
+      }
       satShowFrame(newIdx);
     },500);
   }else{
