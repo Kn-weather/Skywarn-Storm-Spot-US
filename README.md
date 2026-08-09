@@ -57,14 +57,19 @@ A comprehensive weather monitoring PWA for storm spotters and chasers, featuring
   <img src="docs/screenshots/alert-map.png" alt="Alert Map with NWS warning polygons" width="700">
 </p>
 
+### Severe Thunderstorm Warning Detail
+<p align="center">
+  <img src="docs/screenshots/alert-detail.png" alt="Severe Thunderstorm Warning detail with 3-panel screenshot layout" width="700">
+</p>
+
 ### Radar Storm Cell Detection
 <p align="center">
   <img src="docs/screenshots/storm-cell-detection.png" alt="Radar-based storm cell detection with motion tracking" width="700">
 </p>
 
-### Outflow Boundary Detection
+### Radar Boundary Detection
 <p align="center">
-  <img src="docs/screenshots/outflow-boundary.png" alt="Outflow boundary detection from ASOS and radar" width="700">
+  <img src="docs/screenshots/radar-boundary.png" alt="Radar fine-line boundary detection with PCA line fit" width="700">
 </p>
 
 ### Storm-Safe Navigation — Storm ETA
@@ -72,14 +77,14 @@ A comprehensive weather monitoring PWA for storm spotters and chasers, featuring
   <img src="docs/screenshots/storm-eta.png" alt="Storm ETA with driving route avoidance" width="700">
 </p>
 
-### Skew-T / Log-P Sounding
+### Sounding Collage — Detroit (KDTX)
 <p align="center">
-  <img src="docs/screenshots/sounding-skew-t.png" alt="Skew-T thermodynamic diagram" width="500">
+  <img src="docs/screenshots/sounding-detroit.png" alt="Skew-T and hodograph collage from KDTX sounding" width="500">
 </p>
 
-### Hodograph
+### Sounding Collage — Pittsburgh (KPIT)
 <p align="center">
-  <img src="docs/screenshots/sounding-hodograph.png" alt="Wind hodograph with Bunkers storm motion" width="500">
+  <img src="docs/screenshots/sounding-pittsburgh.png" alt="Skew-T and hodograph collage from KPIT sounding" width="500">
 </p>
 
 ## Features
