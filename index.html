@@ -2425,6 +2425,10 @@ body.capturing .md-screenshot-only{display:none!important}
             <input type="range" id="radarBoundaryNoise" min="0" max="90" value="40" step="5" oninput="document.getElementById('radarBoundaryNoiseLabel').textContent=this.value; radarScheduleReRender()" style="width:100%;accent-color:var(--acc);cursor:pointer">
           </label>
           <div style="font-size:8px;color:var(--t3);margin-top:1px">Higher = fewer boundaries (stricter). Lower = more boundaries (more sensitive).</div>
+          <label style="margin:4px 0 2px;font-size:9px">Point density: <span id="radarBoundaryDensityLabel">50</span>%
+            <input type="range" id="radarBoundaryDensity" min="1" max="100" value="50" step="1" oninput="document.getElementById('radarBoundaryDensityLabel').textContent=this.value; radarScheduleReRender()" style="width:100%;accent-color:var(--acc);cursor:pointer">
+          </label>
+          <div style="font-size:8px;color:var(--t3);margin-top:1px">1% = straight line (start→end). 100% = all detected points. Adds points from middle outward.</div>
           <div id="radarBoundaryStatus" style="font-size:8px;color:var(--t3);margin-top:2px"></div>
         </div>
       </div>
@@ -16401,12 +16405,31 @@ function radarDetectBoundaries(tileGrids){
         
         if(denseLatlngs.length<2)continue;
         
-        /* Douglas-Peucker simplification to smooth out zig-zags.
-           This is the key step for cleaning up messy lines — it removes
-           points that deviate less than a tolerance from the line between
-           their neighbors, producing smooth polylines. */
+        /* Two-stage polyline simplification:
+           
+           Stage 1: Douglas-Peucker with tolerance (noise filter slider)
+           - Removes points that deviate less than tolerance from the line
+           - Tolerance scales with noise slider: 0.005° → 0.020° (~0.3-1.5 km)
+           - This eliminates zig-zag noise and minor wiggles.
+           
+           Stage 2: Budget-based Douglas-Peucker (point density slider)
+           - Keeps at most maxPoints points, selected by importance (max
+             deviation distance from the line between neighbors)
+           - maxPoints = ceil(stage1Points × densityPct/100)
+           - 1% → just start+end (straight line A→B)
+           - 100% → all stage-1 points kept
+           - Points are added "from the middle outward" — the point of max
+             deviation is kept first, then recursively the next most deviating
+             in each half, cascading toward both endpoints. */
         var tolerance=0.005+s*0.015;  /* 0.005° → 0.020° (~0.3-1.5 km) */
-        var latlngs=radarDouglasPeucker(denseLatlngs,tolerance);
+        var simplified=radarDouglasPeucker(denseLatlngs,tolerance);
+        
+        /* Read point density slider (1-100%, default 50%) */
+        var densitySlider=document.getElementById('radarBoundaryDensity');
+        var densityPct=densitySlider?parseInt(densitySlider.value,10):50;
+        densityPct=Math.max(1,Math.min(100,densityPct));
+        var maxPoints=Math.max(2,Math.ceil(simplified.length*(densityPct/100)));
+        var latlngs=radarDouglasPeuckerBudget(simplified,maxPoints);
         
         if(latlngs.length<2)continue;
         
@@ -16496,6 +16519,66 @@ function radarPerpDistance(p,a,b){
   var projX=ax+t*dx,projY=ay+t*dy;
   var ddx2=px-projX,ddy2=py-projY;
   return Math.sqrt(ddx2*ddx2+ddy2*ddy2);
+}
+
+/* Budget-based Douglas-Peucker simplification.
+   Returns a polyline with AT MOST maxPoints points, keeping the most
+   important points first (by max deviation distance).
+
+   This is exactly the user's mental model:
+   - maxPoints=2 → just start and end (straight line A→B)
+   - maxPoints=all → every point kept
+   - In between → points added from the middle outward (max deviation first)
+
+   Algorithm:
+   1. Assign each point an "importance" score = its perpendicular distance
+      from the line between its neighbors at the recursion level where it
+      was kept. Endpoints get importance = Infinity (always kept).
+   2. Sort all points by importance (descending).
+   3. Keep the top maxPoints.
+   4. Sort kept points back into polyline order. */
+function radarDouglasPeuckerBudget(points,maxPoints){
+  if(points.length<=2)return points.slice();
+  if(maxPoints>=points.length)return points.slice();
+  if(maxPoints<2)maxPoints=2;
+  
+  /* importance[i] = max deviation distance when point i is kept.
+     Endpoints are always kept (importance = Infinity). */
+  var importance=new Array(points.length).fill(0);
+  importance[0]=Infinity;
+  importance[points.length-1]=Infinity;
+  
+  /* Recursive: assign importance to all points between startIdx and endIdx.
+     The point with max deviation gets its distance recorded as importance
+     (if higher than any previous assignment), then we recurse on both halves. */
+  function assignImportance(startIdx,endIdx){
+    if(endIdx<=startIdx+1)return;
+    var first=points[startIdx],last=points[endIdx];
+    var maxDist=0,maxIdx=0;
+    for(var i=startIdx+1;i<endIdx;i++){
+      var d=radarPerpDistance(points[i],first,last);
+      if(d>importance[i])importance[i]=d;
+      if(d>maxDist){maxDist=d;maxIdx=i;}
+    }
+    assignImportance(startIdx,maxIdx);
+    assignImportance(maxIdx,endIdx);
+  }
+  assignImportance(0,points.length-1);
+  
+  /* Build index list, sort by importance descending, keep top maxPoints */
+  var indices=[];
+  for(var i=0;i<points.length;i++)indices.push(i);
+  indices.sort(function(a,b){return importance[b]-importance[a];});
+  var keptIndices=indices.slice(0,maxPoints);
+  
+  /* Sort kept indices back into polyline order */
+  keptIndices.sort(function(a,b){return a-b;});
+  
+  var result=[];
+  for(var i=0;i<keptIndices.length;i++){
+    result.push(points[keptIndices[i]]);
+  }
+  return result;
 }
 
 /* Render radar-detected outflow boundaries on the map.
