@@ -1004,6 +1004,14 @@ body{
   stroke-linecap:round;
   filter:drop-shadow(0 0 4px rgba(0,0,0,.6));
 }
+/* Wind-confirmed radar boundary — bright cyan glow */
+.radar-boundary-validated{
+  filter:drop-shadow(0 0 3px rgba(0,255,255,.7));
+}
+/* Unvalidated radar boundary — dim, no glow */
+.radar-boundary-unvalidated{
+  filter:drop-shadow(0 0 2px rgba(0,0,0,.4));
+}
 .storm-motion-label{
   background:rgba(10,10,10,.55);
   border:1px solid var(--acc);
@@ -2434,6 +2442,8 @@ body.capturing .md-screenshot-only{display:none!important}
             <input type="range" id="radarBoundaryDensity" min="1" max="100" value="1" step="1" oninput="document.getElementById('radarBoundaryDensityLabel').textContent=this.value; radarScheduleReRender()" style="width:100%;accent-color:var(--acc);cursor:pointer">
           </label>
           <div style="font-size:8px;color:var(--t3);margin-top:1px">1% = straight line (start→end). 100% = all detected points. Adds points from middle outward.</div>
+          <label style="margin:4px 0 2px;font-size:9px;color:var(--t2)"><input type="checkbox" id="amRadarBoundaryWindOnly" onchange="radarScheduleReRender()" style="accent-color:var(--acc)"> Show only wind-confirmed boundaries</label>
+          <div style="font-size:8px;color:var(--t3);margin-top:1px">Validates against nearby ASOS wind/temp/dewpoint. Enable Surface Obs for best results.</div>
           <div id="radarBoundaryStatus" style="font-size:8px;color:var(--t3);margin-top:2px"></div>
         </div>
       </div>
@@ -16626,7 +16636,9 @@ function radarDouglasPeuckerBudget(points,maxPoints){
 }
 
 /* Render radar-detected outflow boundaries on the map.
-   Uses the noise filter slider to control the minimum confidence threshold. */
+   Uses the noise filter slider to control the minimum confidence threshold.
+   Also validates each boundary against nearby ASOS wind data (if loaded) —
+   wind-confirmed boundaries get a brighter solid line + badge. */
 function radarRenderBoundaries(boundaries){
   if(!alertMapInstance)return;
   if(radarBoundaryLayer){
@@ -16634,30 +16646,74 @@ function radarRenderBoundaries(boundaries){
   }
   if(boundaries.length===0)return;
   
-  /* Read the noise filter slider value (0-90, default 40) */
+  /* Read the noise filter slider value (0-90, default 35) */
   var noiseSlider=document.getElementById('radarBoundaryNoise');
-  var minConfidence=noiseSlider?parseInt(noiseSlider.value,10):40;
+  var minConfidence=noiseSlider?parseInt(noiseSlider.value,10):35;
+  
+  /* Check if "wind-validated only" filter is on */
+  var windOnlyCb=document.getElementById('amRadarBoundaryWindOnly');
+  var windOnly=windOnlyCb?windOnlyCb.checked:false;
   
   radarBoundaryLayer=L.layerGroup().addTo(alertMapInstance);
   var renderedCount=0;
+  var validatedCount=0;
   
   boundaries.forEach(function(b){
     /* Only render boundaries with confidence >= slider value AND length > 5km */
     if(b.confidence<minConfidence||b.lengthKm<5)return;
     
+    /* Validate against ASOS wind data if available */
+    var validation=radarValidateBoundaryWind(b);
+    if(windOnly&&!validation.validated)return;
+    
+    /* Style: wind-validated boundaries get brighter solid line, others stay dashed */
+    var color,weight,opacity,dashArray;
+    if(validation.validated){
+      /* Wind-confirmed: bright cyan, solid, thicker */
+      color='#00ffff';
+      weight=3.5;
+      opacity=0.95;
+      dashArray='';  /* solid line */
+      validatedCount++;
+    }else{
+      /* Unvalidated: dimmer cyan, dashed */
+      color='#00aaaa';
+      weight=2.5;
+      opacity=0.6;
+      dashArray='8,5';
+    }
+    
     var polyline=L.polyline(b.latlngs,{
-      color:'#00ffff',
-      weight:2.5,
-      opacity:0.8,
-      dashArray:'8,5',
+      color:color,
+      weight:weight,
+      opacity:opacity,
+      dashArray:dashArray,
       lineCap:'round',
-      lineJoin:'round'
+      lineJoin:'round',
+      className:validation.validated?'radar-boundary-validated':'radar-boundary-unvalidated'
     });
     
+    /* Build popup with validation info */
+    var validationHtml='';
+    if(validation.checked){
+      validationHtml='<div style="margin-top:6px;padding-top:6px;border-top:1px solid #ffffff20">'+
+        '<div style="font-size:10px;font-weight:700;color:'+(validation.validated?'#00ff88':'#ff8844')+';margin-bottom:3px">'+
+          (validation.validated?'✓ Wind-Confirmed':'⚠ Wind Unconfirmed')+
+        '</div>'+
+        '<div style="font-size:9px;color:#ccc;line-height:1.5">'+
+          '<div>Stations checked: <b>'+validation.stationCount+'</b></div>'+
+          (validation.windConvergence!==null?'<div>Wind convergence: <b>'+(validation.windConvergence?'Yes':'No')+'</b></div>':'')+
+          (validation.tempGradient!==null?'<div>Temp gradient: <b>'+validation.tempGradient.toFixed(1)+'°F</b></div>':'')+
+          (validation.dewpointGradient!==null?'<div>Dewpoint gradient: <b>'+validation.dewpointGradient.toFixed(1)+'°F</b></div>':'')+
+          '<div>Validation: <b>'+validation.matchCount+'/3</b> criteria met</div>'+
+        '</div>'+
+      '</div>';
+    }
+    
     var popupHtml=
-      '<div style="font-family:Inter,sans-serif;min-width:180px">'+
+      '<div style="font-family:Inter,sans-serif;min-width:200px">'+
         '<div style="color:#00ffff;font-weight:700;font-size:11px;margin-bottom:4px">Radar Outflow Boundary</div>'+
-        '<div style="font-size:10px;color:#fff;margin-bottom:6px">Confidence: <b>'+b.confidence+'%</b></div>'+
+        '<div style="font-size:10px;color:#fff;margin-bottom:6px">Confidence: <b>'+b.confidence+'%</b>'+(validation.validated?' <span style="color:#00ff88;font-size:9px">[Wind-Confirmed]</span>':'')+'</div>'+
         '<div style="font-size:9px;color:#ccc;line-height:1.5">'+
           '<div>Length: <b>'+b.lengthKm.toFixed(1)+' km ('+(b.lengthKm*0.621371).toFixed(1)+' mi)</b></div>'+
           '<div>Orientation: <b>'+Math.round(b.orientation)+'°</b></div>'+
@@ -16665,19 +16721,190 @@ function radarRenderBoundaries(boundaries){
           '<div>Linearity: <b>'+(b.linearity*100).toFixed(0)+'%</b></div>'+
           '<div>Source: RainViewer radar reflectivity gradient</div>'+
         '</div>'+
+        validationHtml+
         '<button type="button" onclick="event.stopPropagation();event.preventDefault();screenshotGenericPopup(\'Radar Boundary\',this.parentElement.outerHTML,'+b.latlngs[0][0]+','+b.latlngs[0][1]+',\'#00ffff\');return false;" style="display:flex;align-items:center;justify-content:center;gap:4px;width:100%;margin-top:6px;padding:4px 8px;background:rgba(0,255,255,.12);border:1px solid #00ffff40;color:#00ffff;border-radius:3px;cursor:pointer;font-family:inherit;font-size:8px;font-weight:600"><i class="fas fa-camera"></i> Screenshot</button>'+
       '</div>';
     
-    polyline.bindPopup(popupHtml,{className:'obs-boundary-popup',maxWidth:240});
+    polyline.bindPopup(popupHtml,{className:'obs-boundary-popup',maxWidth:260});
     polyline.addTo(radarBoundaryLayer);
     renderedCount++;
   });
   
   var statusEl=document.getElementById('radarBoundaryStatus');
   if(statusEl){
-    statusEl.textContent=renderedCount+' boundary'+(renderedCount===1?'':'ies')+' rendered (of '+boundaries.length+' detected, filter ≥'+minConfidence+')';
+    var msg=renderedCount+' boundary'+(renderedCount===1?'':'ies')+' rendered (of '+boundaries.length+' detected, filter ≥'+minConfidence+')';
+    if(validatedCount>0)msg+=' | '+validatedCount+' wind-confirmed';
+    statusEl.textContent=msg;
   }
-  console.log('[RadarStorm] Rendered '+renderedCount+' of '+boundaries.length+' radar boundaries (filter ≥'+minConfidence+')');
+  console.log('[RadarStorm] Rendered '+renderedCount+' of '+boundaries.length+' radar boundaries ('+validatedCount+' wind-validated, filter ≥'+minConfidence+')');
+}
+
+/* Validate a radar-detected boundary against nearby ASOS wind data.
+   Checks 3 criteria:
+   1. Wind convergence — winds on opposite sides of the boundary point toward each other
+   2. Temperature gradient — ΔT ≥ 4°F across the boundary (cold side = outflow air)
+   3. Dewpoint gradient — ΔTd ≥ 3°F across the boundary
+   
+   A boundary is "wind-confirmed" if at least 2 of 3 criteria are met.
+   Returns {checked, validated, windConvergence, tempGradient, dewpointGradient, stationCount, matchCount}. */
+function radarValidateBoundaryWind(boundary){
+  /* If no ASOS data loaded, can't validate */
+  if(!obsStations||obsStations.length===0||Object.keys(obsData).length===0){
+    return{checked:false,validated:false,windConvergence:null,tempGradient:null,dewpointGradient:null,stationCount:0,matchCount:0};
+  }
+  
+  /* Use the boundary's midpoint as the validation center */
+  var midIdx=Math.floor(boundary.latlngs.length/2);
+  var midLat=boundary.latlngs[midIdx][0];
+  var midLon=boundary.latlngs[midIdx][1];
+  
+  /* Boundary orientation (bearing from start to end) */
+  var boundaryBearing=boundary.orientation;
+  /* Perpendicular to boundary = bearing ± 90° */
+  var perpBearing=(boundaryBearing+90)%360;
+  
+  /* Find ASOS stations within 20 miles of the midpoint */
+  var maxDistMi=20;
+  var nearbyStations=[];
+  for(var i=0;i<obsStations.length;i++){
+    var st=obsStations[i];
+    var dist=haversineMi(midLat,midLon,st.lat,st.lon);
+    if(dist<=maxDistMi){
+      var obs=obsData[st.id]?obsData[st.id].obs:null;
+      if(obs){
+        nearbyStations.push({
+          id:st.id,
+          lat:st.lat,
+          lon:st.lon,
+          dist:dist,
+          obs:obs
+        });
+      }
+    }
+  }
+  
+  if(nearbyStations.length<2){
+    /* Need at least 2 stations to validate (one on each side) */
+    return{checked:true,validated:false,windConvergence:null,tempGradient:null,dewpointGradient:null,stationCount:nearbyStations.length,matchCount:0};
+  }
+  
+  /* Split stations into two sides of the boundary using cross product.
+     The boundary runs from start to end; "left" and "right" are relative to
+     the boundary's direction. Cross product sign determines the side. */
+  var startLat=boundary.latlngs[0][0],startLon=boundary.latlngs[0][1];
+  var endLat=boundary.latlngs[boundary.latlngs.length-1][0],endLon=boundary.latlngs[boundary.latlngs.length-1][1];
+  var dx=endLon-startLon,dy=endLat-startLat;
+  
+  var sideA=[],sideB=[];
+  nearbyStations.forEach(function(st){
+    /* Cross product: (end-start) × (station-start)
+           Positive = station is on side A (left of boundary direction)
+           Negative = station is on side B (right of boundary direction) */
+    var sx=st.lon-startLon,sy=st.lat-startLat;
+    var cross=dx*sy-dy*sx;
+    if(cross>=0)sideA.push(st);
+    else sideB.push(st);
+  });
+  
+  if(sideA.length===0||sideB.length===0){
+    /* All stations on one side — can't validate convergence */
+    return{checked:true,validated:false,windConvergence:null,tempGradient:null,dewpointGradient:null,stationCount:nearbyStations.length,matchCount:0};
+  }
+  
+  /* Criterion 1: Wind convergence.
+     For each side, compute the average wind component perpendicular to the
+     boundary. If side A winds point toward side B AND side B winds point
+     toward side A, that's convergence.
+     
+     Wind direction in meteorology = direction wind comes FROM.
+     To get the vector the wind is blowing TOWARD, add 180°. */
+  var perpRad=perpBearing*Math.PI/180;
+  /* Unit vector perpendicular to boundary, pointing toward side B */
+  var perpX=Math.sin(perpRad);  /* lon component */
+  var perpY=Math.cos(perpRad);  /* lat component */
+  
+  function avgWindPerp(stations){
+    var sum=0,count=0;
+    stations.forEach(function(st){
+      var obs=st.obs;
+      if(obs.windDirection&&obs.windDirection.value!=null&&obs.windSpeed&&obs.windSpeed.value!=null){
+        var windFrom=obs.windDirection.value;  /* degrees, direction wind comes FROM */
+        var windToward=(windFrom+180)%360;     /* direction wind blows TOWARD */
+        var towardRad=windToward*Math.PI/180;
+        /* Component of wind-toward vector along perpendicular (toward side B) */
+        var comp=Math.sin(towardRad)*perpX+Math.cos(towardRad)*perpY;
+        var speedMs=obs.windSpeed.value;  /* m/s */
+        sum+=comp*speedMs;
+        count++;
+      }
+    });
+    return count>0?{avg:sum/count,count:count}:null;
+  }
+  
+  var aPerp=avgWindPerp(sideA);
+  var bPerp=avgWindPerp(sideB);
+  var windConvergence=false;
+  if(aPerp&&bPerp){
+    /* Side A winds should blow toward side B (positive component)
+       Side B winds should blow toward side A (negative component)
+       Sum > 0 means net convergence toward the boundary */
+    var netConvergence=aPerp.avg-bPerp.avg;  /* A toward B minus B toward A... wait */
+    /* Actually: if A blows toward B (positive) and B blows toward A (negative),
+       then aPerp.avg > 0 and bPerp.avg < 0, so aPerp.avg - bPerp.avg > 0 = convergence */
+    windConvergence=(aPerp.avg>0.5&&bPerp.avg<-0.5);  /* 0.5 m/s threshold */
+  }
+  
+  /* Criterion 2: Temperature gradient (ΔT ≥ 4°F).
+     ASOS temperature is in Celsius — convert to Fahrenheit for comparison. */
+  function avgTempF(stations){
+    var sum=0,count=0;
+    stations.forEach(function(st){
+      var c=obsGetRaw(st.obs,'temperature');
+      if(c!=null){sum+=c*9/5+32;count++;}  /* C → F */
+    });
+    return count>0?sum/count:null;
+  }
+  var tempA=avgTempF(sideA);
+  var tempB=avgTempF(sideB);
+  var tempGradient=null;
+  var tempOk=false;
+  if(tempA!=null&&tempB!=null){
+    tempGradient=Math.abs(tempA-tempB);
+    tempOk=tempGradient>=4;
+  }
+  
+  /* Criterion 3: Dewpoint gradient (ΔTd ≥ 3°F).
+     ASOS dewpoint is in Celsius — convert to Fahrenheit. */
+  function avgDewpointF(stations){
+    var sum=0,count=0;
+    stations.forEach(function(st){
+      var c=obsGetRaw(st.obs,'dewpoint');
+      if(c!=null){sum+=c*9/5+32;count++;}  /* C → F */
+    });
+    return count>0?sum/count:null;
+  }
+  var dewA=avgDewpointF(sideA);
+  var dewB=avgDewpointF(sideB);
+  var dewpointGradient=null;
+  var dewOk=false;
+  if(dewA!=null&&dewB!=null){
+    dewpointGradient=Math.abs(dewA-dewB);
+    dewOk=dewpointGradient>=3;
+  }
+  
+  /* Count how many criteria are met */
+  var matchCount=(windConvergence?1:0)+(tempOk?1:0)+(dewOk?1:0);
+  var validated=matchCount>=2;  /* Need at least 2 of 3 */
+  
+  return{
+    checked:true,
+    validated:validated,
+    windConvergence:windConvergence,
+    tempGradient:tempGradient,
+    dewpointGradient:dewpointGradient,
+    stationCount:nearbyStations.length,
+    matchCount:matchCount
+  };
 }
 
 /* Toggle radar boundary detection on/off (separate from storm cells). */
