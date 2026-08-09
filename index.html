@@ -3837,6 +3837,10 @@ function renderAlertPopupContent(idx){
    The map is captured TWICE at different zoom levels, then composited
    together with the alert panel. This requires waiting for tile loads
    between each zoom change. */
+/* KNScreenshot: Alert polygon 3-panel screenshot configuration.
+   Used by: tornado/severe thunderstorm warning polygons.
+   Layout: alert info panel (LEFT 320px) + zoomed-in map (RIGHT-TOP) + zoomed-out map (RIGHT-BOTTOM) + branding footer.
+   Temporarily enables storm motion arrows during capture. */
 async function screenshotAlert(idx){
   if(!alertPopupState||!alertMapInstance)return;
   if(typeof html2canvas==='undefined'){alert('Screenshot library not loaded');return}
@@ -3915,7 +3919,7 @@ async function screenshotAlert(idx){
     return await html2canvas(mapEl,{
       useCORS:true,
       allowTaint:true,
-      backgroundColor:'#e0e0e0',
+      backgroundColor:'#000000',
       scale:capScale,
       logging:false,
       imageTimeout:5000,  /* 5s per tile (was 15s) */
@@ -4019,7 +4023,7 @@ async function screenshotAlert(idx){
     finalCanvas.height=compositeH+footerH;
     var fctx=finalCanvas.getContext('2d');
     /* Fill background */
-    fctx.fillStyle='#e0e0e0';
+    fctx.fillStyle='#000000';  /* KNScreenshot: black background */
     fctx.fillRect(0,0,finalCanvas.width,finalCanvas.height);
     /* Draw alert panel on LEFT */
     fctx.drawImage(panelCanvas,0,0);
@@ -7434,7 +7438,7 @@ async function captureScreenshot(){
       mapCanvas=await html2canvas(mapEl,{
         useCORS:true,
         allowTaint:true,
-        backgroundColor:'#e0e0e0',
+        backgroundColor:'#000000',
         scale:Math.min(window.devicePixelRatio||1,1.5),  /* capped at 1.5x for speed */
         logging:false,
         imageTimeout:5000,
@@ -11337,7 +11341,7 @@ async function jrnlCaptureRadar(){
     await new Promise(function(r){requestAnimationFrame(function(){requestAnimationFrame(r)})});
     var mapEl=document.getElementById('alertMap');
     var canvas=await html2canvas(mapEl,{
-      useCORS:true,allowTaint:true,backgroundColor:'#e0e0e0',
+      useCORS:true,allowTaint:true,backgroundColor:'#000000',
       scale:Math.min(window.devicePixelRatio||1,1.5),
       logging:false,imageTimeout:5000,
       width:mapEl.offsetWidth,height:mapEl.offsetHeight,
@@ -14395,6 +14399,10 @@ var stormETALastData=null;
    view (with the pin + popup visible), then composites it with an info
    panel containing the ETA details and the Skywarn branding footer.
    Same pattern as screenshotAlert(). */
+/* KNScreenshot: Storm ETA screenshot configuration (variant).
+   Used by: Storm ETA popup (click map with storm motion enabled).
+   Layout: ETA info panel (LEFT 320px) + map with pin (RIGHT) + branding footer.
+   Pin stays visible during capture. Popup re-opens after. */
 async function screenshotStormETA(){
   if(!alertMapInstance||typeof html2canvas==='undefined'){
     alert('Screenshot library not loaded');
@@ -14438,7 +14446,7 @@ async function screenshotStormETA(){
     var dpr=window.devicePixelRatio||1;
     var capScale=Math.min(dpr,1.5);
     return await html2canvas(mapEl,{
-      useCORS:true,allowTaint:true,backgroundColor:'#e0e0e0',scale:capScale,
+      useCORS:true,allowTaint:true,backgroundColor:'#000000',scale:capScale,
       logging:false,imageTimeout:5000,
       width:mapEl.offsetWidth,height:mapEl.offsetHeight,
       windowWidth:mapEl.offsetWidth,windowHeight:mapEl.offsetHeight,
@@ -14525,7 +14533,7 @@ async function screenshotStormETA(){
     finalCanvas.width=compositeW;
     finalCanvas.height=compositeH+footerH;
     var fctx=finalCanvas.getContext('2d');
-    fctx.fillStyle='#e0e0e0';
+    fctx.fillStyle='#000000';  /* KNScreenshot: black background */
     fctx.fillRect(0,0,finalCanvas.width,finalCanvas.height);
     /* Draw panel on LEFT */
     fctx.drawImage(panelCanvas,0,0);
@@ -14616,6 +14624,10 @@ window.screenshotStormETA=screenshotStormETA;
    - lat, lon: the click location (for the journal auto-fill)
    - accentColor: the accent color for the panel header (default #ff7300)
    ════════════════════════════════════════════════════════════════════════ */
+/* KNScreenshot: Generic 3-panel popup screenshot configuration.
+   Used by: storm cells, surface obs, boundaries, SPC outlooks.
+   Layout: info panel (LEFT 320px) + zoomed-in map (RIGHT-TOP) + zoomed-out map (RIGHT-BOTTOM) + branding footer.
+   50/50 split: map width >= panel width. Canvas height = max(panelH, mapTargetH*2+gap). */
 async function screenshotGenericPopup(title,infoHtml,lat,lon,accentColor){
   if(!alertMapInstance||typeof html2canvas==='undefined'){
     alert('Screenshot library not loaded');
@@ -14658,7 +14670,7 @@ async function screenshotGenericPopup(title,infoHtml,lat,lon,accentColor){
     var dpr=window.devicePixelRatio||1;
     var capScale=Math.min(dpr,1.5);
     return await html2canvas(mapEl,{
-      useCORS:true,allowTaint:true,backgroundColor:'#e0e0e0',scale:capScale,
+      useCORS:true,allowTaint:true,backgroundColor:'#000000',scale:capScale,
       logging:false,imageTimeout:5000,
       width:mapEl.offsetWidth,height:mapEl.offsetHeight,
       windowWidth:mapEl.offsetWidth,windowHeight:mapEl.offsetHeight,
@@ -14735,7 +14747,7 @@ async function screenshotGenericPopup(title,infoHtml,lat,lon,accentColor){
     finalCanvas.width=compositeW;
     finalCanvas.height=compositeH+footerH;
     var fctx=finalCanvas.getContext('2d');
-    fctx.fillStyle='#e0e0e0';
+    fctx.fillStyle='#000000';  /* KNScreenshot: black background */
     fctx.fillRect(0,0,finalCanvas.width,finalCanvas.height);
     /* Draw info panel on LEFT */
     fctx.drawImage(panelCanvas,0,0);
@@ -14818,6 +14830,10 @@ window.screenshotGenericPopup=screenshotGenericPopup;
 var mdLastPopupContent=null;
 var mdLastPolygonBounds=null;
 
+/* KNScreenshot: Mesoscale Discussion 3-panel screenshot configuration.
+   Used by: SPC mesoscale discussion polygons.
+   Layout: MD info panel (LEFT 300px) + zoomed-in map (RIGHT-TOP) + zoomed-out map (RIGHT-BOTTOM) + branding footer.
+   Zooms to MD polygon bounds. Full discussion text expanded. */
 async function screenshotMD(centerLat,centerLng,mdNumber){
   if(!alertMapInstance||typeof html2canvas==='undefined'){
     alert('Screenshot library not loaded');
@@ -14881,7 +14897,7 @@ async function screenshotMD(centerLat,centerLng,mdNumber){
     var dpr=window.devicePixelRatio||1;
     var capScale=Math.min(dpr,1.5);
     return await html2canvas(mapEl,{
-      useCORS:true,allowTaint:true,backgroundColor:'#e0e0e0',scale:capScale,
+      useCORS:true,allowTaint:true,backgroundColor:'#000000',scale:capScale,
       logging:false,imageTimeout:5000,
       width:mapEl.offsetWidth,height:mapEl.offsetHeight,
       windowWidth:mapEl.offsetWidth,windowHeight:mapEl.offsetHeight,
@@ -14965,7 +14981,7 @@ async function screenshotMD(centerLat,centerLng,mdNumber){
     finalCanvas.width=compositeW;
     finalCanvas.height=compositeH+footerH;
     var fctx=finalCanvas.getContext('2d');
-    fctx.fillStyle='#e0e0e0';
+    fctx.fillStyle='#000000';  /* KNScreenshot: black background */
     fctx.fillRect(0,0,finalCanvas.width,finalCanvas.height);
     fctx.drawImage(panelCanvas,0,0);
     var mapX=panelW+gap;
