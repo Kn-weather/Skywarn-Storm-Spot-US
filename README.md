@@ -1,4 +1,13 @@
-# Skywarn Storm Spotters & Chasers United States
+<p align="center">
+  <img src="skywarn-logo.png" alt="Skywarn Storm Spotters Logo" width="200">
+</p>
+
+<h1 align="center">Skywarn Storm Spotters & Chasers United States</h1>
+
+<p align="center">
+  A field-grade Progressive Web App for storm spotters, chasers, and rural communities.<br>
+  Built for unreliable connectivity, battery-constrained field use, and life-critical situational awareness.
+</p>
 
 [![Live Site](https://img.shields.io/badge/Live_Site-kn--weather.github.io-blue?style=flat-square)](https://kn-weather.github.io/Skywarn-Storm-Spot-US/)
 [![Latest Release](https://img.shields.io/github/v/release/Kn-weather/Skywarn-Storm-Spot-US?label=Latest%20Release&style=flat-square&color=success)](https://github.com/Kn-weather/Skywarn-Storm-Spot-US/releases)
@@ -20,7 +29,58 @@ A comprehensive weather monitoring PWA for storm spotters and chasers, featuring
 
 > **Architecture Highlight:** Built as a Progressive Web App for offline resilience, battery efficiency, and small data packets — a field-grade tool designed to keep storm chasers and rural communities connected when infrastructure fails. [Read the full reasoning →](#why-the-pwa-architecture-matters-for-storm-spotters)
 
-**Live Site:** [https://kn-weather.github.io/Skywarn-Storm-Spot-US/](https://kn-weather.github.io/Skywarn-Storm-Spot-US/)
+**Live Site:** [https://kn-weather.github.io/Skywarn-Storm-Spot-US/](https://kn-weather.github.io/Skywarn-Storm-Spot-US/) · **Latest Release:** [v91](https://github.com/Kn-weather/Skywarn-Storm-Spot-US/releases) · **Report a Bug:** [Issues](https://github.com/Kn-weather/Skywarn-Storm-Spot-US/issues) · **Changelog:** [BUG_FIXES.md](BUG_FIXES.md)
+
+## Table of Contents
+
+- [Screenshots](#screenshots)
+- [Features](#features)
+- [Technology Stack](#technology-stack)
+- [PWA Support](#pwa-support)
+- [Quick Start](#quick-start)
+- [Project Structure](#project-structure)
+- [Database Schema](#database-schema)
+- [GitHub Actions (24/7 Data Collection)](#github-actions-247-data-collection)
+- [Contributing](#contributing)
+- [Roadmap](#roadmap)
+- [Standalone Files](#standalone-files)
+- [Data Sources](#data-sources)
+- [Acknowledgments](#acknowledgments)
+- [References](#references)
+- [License](#license)
+- [Why the PWA Architecture Matters](#why-the-pwa-architecture-matters-for-storm-spotters)
+
+## Screenshots
+
+### Alert Map — Live NWS Warning Polygons
+<p align="center">
+  <img src="docs/screenshots/alert-map.png" alt="Alert Map with NWS warning polygons" width="700">
+</p>
+
+### Radar Storm Cell Detection
+<p align="center">
+  <img src="docs/screenshots/storm-cell-detection.png" alt="Radar-based storm cell detection with motion tracking" width="700">
+</p>
+
+### Outflow Boundary Detection
+<p align="center">
+  <img src="docs/screenshots/outflow-boundary.png" alt="Outflow boundary detection from ASOS and radar" width="700">
+</p>
+
+### Storm-Safe Navigation — Storm ETA
+<p align="center">
+  <img src="docs/screenshots/storm-eta.png" alt="Storm ETA with driving route avoidance" width="700">
+</p>
+
+### Skew-T / Log-P Sounding
+<p align="center">
+  <img src="docs/screenshots/sounding-skew-t.png" alt="Skew-T thermodynamic diagram" width="500">
+</p>
+
+### Hodograph
+<p align="center">
+  <img src="docs/screenshots/sounding-hodograph.png" alt="Wind hodograph with Bunkers storm motion" width="500">
+</p>
 
 ## Features
 
@@ -170,27 +230,199 @@ Surface observation snapshots for animated gradient playback. Auto-cleaned after
 - Requires repository secrets: `SUPABASE_URL`, `SUPABASE_SERVICE_KEY`
 - Can also be triggered manually from the Actions tab
 
-## Standalone Files
+## Project Structure
 
-- `soundings.html` — Self-contained skew-T soundings page (no app dependencies)
-- `supabase/functions/collect-obs/index.ts` — Supabase Edge Function for observation collection (optional alternative to GitHub Actions)
+```
+Skywarn-Storm-Spot-US/
+├── index.html                    # Main app (single-file PWA, ~16,000+ lines)
+├── soundings.html                # Standalone skew-T soundings page
+├── sw.js                         # Service worker (offline caching)
+├── manifest.json                 # PWA manifest
+├── package.json                  # Node.js deps (@supabase/supabase-js, ws)
+├── package-lock.json             # Pinned dependency versions
+├── .npmrc                        # GitHub Packages registry config
+├── skywarn-logo.png              # App logo
+├── BUG_FIXES.md                  # Bug fix log with root cause analysis
+├── README.md                     # This file
+├── .github/
+│   └── workflows/
+│       └── collect-obs.yml       # GitHub Actions (every 30 min data collection)
+├── scripts/
+│   └── collect-obs.mjs           # NWS observation collector (Node.js)
+├── supabase/
+│   ├── schema.sql                # Journal tables + RLS + storage bucket
+│   ├── obs_snapshots_schema.sql  # Observation snapshots table + RLS
+│   ├── obs_cron_schedule.sql     # pg_cron schedule (optional)
+│   └── functions/
+│       └── collect-obs/
+│           └── index.ts          # Supabase Edge Function (Deno)
+├── docs/
+│   └── screenshots/              # App screenshots for README
+└── media/
+    └── beaufort_scale.mp4        # Beaufort Wind Scale training video
+```
 
-## Setup
+### Key Architecture Decisions
+
+- **Single HTML file** — The entire app (`index.html`) is one file (~16,000+ lines of vanilla JavaScript). This is intentional for the PWA architecture: minimal requests, fast caching, and no build step. See [Why the PWA Architecture Matters](#why-the-pwa-architecture-matters-for-storm-spotters).
+- **No build tooling** — No webpack, no babel, no TypeScript compilation for the frontend. The app runs directly in the browser.
+- **Node.js scripts only for backend tasks** — The `scripts/` directory contains Node.js code for data collection (runs in GitHub Actions or Supabase Edge Functions), not for the frontend.
+- **Supabase for backend** — PostgreSQL, Auth, Storage, and Realtime are all handled by Supabase, eliminating the need for a custom backend server.
+
+## Quick Start
 
 ### For Users
-Just visit the [live site](https://kn-weather.github.io/Skywarn-Storm-Spot-US/). No installation required — it's a PWA that can be installed to your home screen.
 
-### For Developers
+Just visit the [live site](https://kn-weather.github.io/Skywarn-Storm-Spot-US/). No installation required — it's a PWA that can be installed to your home screen on iOS, Android, or desktop.
 
-1. Clone the repo
-2. Open `index.html` in a browser (or serve with any static server)
-3. For journal/auth features, configure Supabase:
+### For Developers (Local Development)
+
+#### Prerequisites
+
+- [Node.js](https://nodejs.org/) ≥ 18 (for data collection scripts and GitHub Actions)
+- A modern browser (Chrome, Firefox, Safari, Edge)
+- A Supabase account (free tier works) — only needed for journal/auth features
+
+#### Steps
+
+1. **Clone the repository**
+   ```bash
+   git clone https://github.com/Kn-weather/Skywarn-Storm-Spot-US.git
+   cd Skywarn-Storm-Spot-US
+   ```
+
+2. **Install Node.js dependencies** (for data collection scripts)
+   ```bash
+   npm install
+   ```
+
+3. **Run the app** — open `index.html` in a browser, or serve with any static server:
+   ```bash
+   # Option A: Python
+   python3 -m http.server 8000
+   
+   # Option B: Node.js (npx)
+   npx serve
+   ```
+   Then visit `http://localhost:8000` (or whichever port your server uses).
+
+4. **Configure Supabase** (only needed for journal/auth features):
+   - Create a project at [supabase.com](https://supabase.com/)
    - Run `supabase_schema.sql` and `obs_snapshots_schema.sql` in your Supabase SQL editor
-   - Set `SUPABASE_URL` and `SUPABASE_ANON_KEY` in the JavaScript (search for "USER CONFIG")
+   - Set `SUPABASE_URL` and `SUPABASE_ANON_KEY` in the JavaScript (search for `USER CONFIG` in `index.html`)
    - Enable Email + Google providers in Supabase Dashboard → Authentication → Providers
-4. For 24/7 observation collection:
+
+5. **Set up 24/7 observation collection** (optional):
    - Add `SUPABASE_URL` and `SUPABASE_SERVICE_KEY` as repository secrets (GitHub Settings → Secrets → Actions)
-   - The workflow runs automatically every 30 minutes
+   - The workflow runs automatically every 30 minutes via GitHub Actions
+   - Or deploy the Supabase Edge Function: `npm run deploy:function`
+
+#### Verify Your Setup
+
+- ✅ App loads at `http://localhost:8000` with the map visible
+- ✅ Alert polygons appear (if there are active NWS alerts)
+- ✅ Radar overlay animates when enabled
+- ✅ Settings tab shows the app version
+- ✅ Journal tab works (requires Supabase configuration)
+
+## Standalone Files
+
+- `soundings.html` — Self-contained skew-T soundings page (no app dependencies). Can be deployed independently on any website.
+- `supabase/functions/collect-obs/index.ts` — Supabase Edge Function for observation collection (optional alternative to GitHub Actions). Runs on Deno runtime.
+
+## Contributing
+
+We welcome contributions from beta testers and co-developers! This project serves a mission-critical community — storm spotters and rural chasers — so code quality and reliability matter.
+
+### Reporting Bugs
+
+1. Check the [existing issues](https://github.com/Kn-weather/Skywarn-Storm-Spot-US/issues) to avoid duplicates
+2. Open a new issue with the **Bug Report** template
+3. Include: device, browser, OS version, steps to reproduce, expected vs. actual behavior, and screenshots if applicable
+4. Note the app version (visible in Settings tab) and whether you're online/offline
+
+### Suggesting Features
+
+1. Open an issue with the **Feature Request** template
+2. Describe the use case — who benefits and in what weather scenario
+3. Explain how it aligns with the PWA architecture (offline-first, battery-efficient, small data)
+
+### Development Workflow
+
+1. **Fork** the repository
+2. **Create a branch**: `git checkout -b feature/your-feature-name` or `fix/your-bugfix-name`
+3. **Make your changes** — keep the single-file architecture in mind for frontend changes
+4. **Test thoroughly**:
+   - Test in multiple browsers (Chrome, Firefox, Safari, Edge)
+   - Test on mobile (install as PWA, test offline)
+   - Test with active weather alerts if possible
+   - Verify existing features still work (no regressions)
+5. **Update documentation** if needed (README.md, BUG_FIXES.md)
+6. **Commit with clear messages**: `feat: add X`, `fix: resolve Y`, `docs: update Z`
+7. **Open a Pull Request** — describe what changed and why, link any related issues
+
+### Code Style
+
+- **Frontend**: Vanilla JavaScript, no build step. Follow existing patterns in `index.html`. Use clear variable names, comment complex algorithms.
+- **Node.js scripts**: ES modules (`import`/`export`). Follow existing patterns in `scripts/collect-obs.mjs`.
+- **SQL**: Lowercase keywords, uppercase table names. Include RLS policies for any new tables.
+- **Commits**: Use [conventional commits](https://www.conventionalcommits.org/) (`feat:`, `fix:`, `docs:`, `chore:`, `ci:`, `security:`)
+
+### Areas Needing Help
+
+- **StormCams network** — Currently a placeholder; needs camera integration
+- **Mobile testing** — iOS Safari PWA quirks need thorough testing
+- **Performance** — Radar pixel decoding is CPU-intensive; optimization welcome
+- **Accessibility** — Screen reader support, keyboard navigation
+- **Documentation** — User guide, feature tutorials, meteorological explanations
+
+### Beta Tester Guidelines
+
+If you're joining as a beta tester:
+
+1. Install the PWA on your device (Add to Home Screen)
+2. Use it during active weather events
+3. Report bugs via [Issues](https://github.com/Kn-weather/Skywarn-Storm-Spot-US/issues) with screenshots
+4. Share your use cases — what worked, what didn't, what you needed
+5. Join the conversation in Discussions (coming soon)
+
+## Roadmap
+
+### Recently Shipped (v91)
+
+- ✅ Radar storm cell detection with motion tracking
+- ✅ Storm-Safe Navigation with predictive avoidance
+- ✅ Dual-source outflow boundary detection (ASOS + radar)
+- ✅ NASA GIBS satellite layers with 24-frame animation
+- ✅ SPC Mesoscale Discussion polygons with full text
+- ✅ Skew-T / Log-P soundings with hodograph
+- ✅ Spotting Journal with Supabase backend
+- ✅ PWA architecture reasoning documented
+
+### In Progress
+
+- 🔄 StormCams network integration
+- 🔄 Facebook OAuth verification (pending Facebook review)
+- 🔄 Performance optimization for radar pixel decoding
+- 🔄 Mobile PWA testing across devices
+
+### Planned
+
+- 🔲 Real-time lightning layer (Blitzortung integration improvement)
+- 🔲 Watch polygon visualization
+- 🔲 Model data integration (HRRR, NAM, GFS)
+- 🔲 Push notifications for Tornado Warnings
+- 🔲 Offline map tiles for field use
+- 🔲 Storm reporting submission to NWS
+- 🔲 Chase log export (PDF, CSV)
+- 🔲 Multi-language support
+
+### Long-term Vision
+
+- 🔲 Community-driven storm camera network
+- 🔲 AI-assisted storm feature detection from satellite/radar
+- 🔲 Integration with amateur radio spotter networks
+- 🔲 Training module for new spotters
 
 ## Data Sources
 
@@ -203,6 +435,28 @@ Just visit the [live site](https://kn-weather.github.io/Skywarn-Storm-Spot-US/).
 - [OpenStreetMap Nominatim](https://nominatim.openstreetmap.org/) — Geocoding (journal location lookup)
 - [turf.js](https://turfjs.org/) — Geospatial analysis (polygon buffering, intersection detection, routing)
 - [TwisterData](http://www.twisterdata.com/) — Forecast soundings (embedded)
+
+## Acknowledgments
+
+This project would not be possible without the incredible work of the meteorological community and open-data providers:
+
+- **NOAA / NWS** — For providing public-domain weather data, alerts, and observations that power the core of this app. Their commitment to open access makes tools like this possible.
+- **Storm Prediction Center (SPC)** — For convective outlooks, Mesoscale Discussions, and the PDS watch feed.
+- **Iowa Environmental Mesonet (Iowa State University)** — For the RAOB sounding API that makes the skew-T feature possible.
+- **NASA GIBS** — For free, open access to GOES-East/West satellite imagery that enables the satellite layers feature.
+- **RainViewer** — For CORS-enabled radar tiles that power both the radar overlay and the client-side storm cell detection pipeline.
+- **Supabase** — For the open-source backend platform (PostgreSQL, Auth, Storage, Realtime) that powers the spotting journal.
+- **Leaflet.js** — For the mapping library that forms the foundation of the polygon map.
+- **turf.js** — For geospatial analysis tools used in storm-safe navigation and polygon operations.
+- **COMET/UCAR** — For SKYWARN spotter training materials referenced in the Spotter Safety tab.
+- **Blitzortung** — For the real-time lightning detection network.
+- **The SKYWARN community** — The volunteer storm spotters who report severe weather to the NWS, saving lives every year. This tool is built for you.
+
+### Inspired By
+
+- The culture of storm chasing and the importance of reliable, low-bandwidth tools in the field
+- The PWA movement's promise of apps that work for everyone, regardless of device or connectivity
+- The open-data philosophy that makes weather information freely accessible
 
 ## References
 
