@@ -4,6 +4,55 @@ This file documents all significant bugs found and fixed during development.
 
 ---
 
+## v93 — Pixel-Based Blank Frame Detection for Satellite Animation
+
+**Date:** Aug 9, 2026
+**Severity:** Medium (visual glitch during satellite animation playback)
+**Builds on:** v92 (which added tile error tracking)
+
+### Root Cause
+The v92 fix (tile error tracking) only caught frames where tiles returned 404. However, GIBS sometimes serves "blank-looking" tiles that load successfully (HTTP 200) but contain no actual imagery — transparent, uniformly black, or near-uniform fill. These slipped past the error tracker and still caused flashing during animation.
+
+### Fix
+Added pixel-based blank detection that mirrors the radar pixel analysis pipeline. The system now uses **two complementary methods**:
+
+1. **Pixel analysis (primary)** — Fetches 4 sample tiles per frame from CONUS center, decodes via canvas `getImageData` (64×64 downsampled, every 4th pixel sampled), and computes a content score:
+   - **Non-transparent ratio**: fraction of pixels with alpha > 10
+   - **Color variance factor**: 0.5–1.0 based on RGB variance among non-transparent pixels (catches uniform black/gray fill)
+   - Final score = non-transparent ratio × variance factor
+
+2. **Loop-relative comparison** — Computes the median content score across all analyzed frames. A frame is "blank" if:
+   - Its score is <30% of the loop median (relative threshold), OR
+   - Its score is <0.05 (absolute threshold — essentially empty)
+   
+   This handles edge cases like nighttime visible imagery where ALL frames are dark — the median is low, but no frame is "blank" relative to its peers.
+
+3. **Tile error tracking (fallback)** — The v92 method (>60% tile errors) still runs as a fallback for frames that haven't been pixel-analyzed yet.
+
+### Implementation Details
+
+- **Background analysis**: When a satellite layer activates, all 24 frames are analyzed sequentially with 200ms delays between tile fetches (polite to GIBS). Results cached in `satContentScores[key][timeIdx]`.
+- **Cache invalidation**: On 10-minute auto-refresh, the cache for the active key is cleared and re-analyzed (frame timestamps changed).
+- **Teardown**: `satStopBackgroundAnalysis()` called on layer teardown to cancel any running analysis.
+- **Skip logic**: `satFindNextValidFrame()` checks both pixel analysis cache and live tile error stats to decide whether to skip a frame.
+
+### Why Loop-Wide Comparison Matters
+A single-frame analysis can't distinguish "blank" from "legitimately dark" (e.g., nighttime visible, clear-sky IR). By comparing each frame against the loop's median, we only skip frames that deviate significantly from the baseline — not frames that are uniformly dark across the entire loop.
+
+### Thresholds (Tunable)
+In `satIsLayerBlank()` and `satFindNextValidFrame()`:
+- `0.3` — relative threshold (frame score / median < 0.3 = blank)
+- `0.05` — absolute threshold (score < 0.05 = definitely blank)
+- `0.6` — tile error fallback (>60% errors = blank)
+- `4` — minimum tiles for error-based judgment
+- `3` — minimum analyzed frames for median computation
+
+### Files Changed
+- `nws_us_alert_map.html`: Added `satAnalyzeFramePixels()`, `satGetContentScore()`, `satIsLayerBlank()` (enhanced), `satComputeLoopMedianScore()`, `satStartBackgroundAnalysis()`, `satStopBackgroundAnalysis()`, `satFindNextValidFrame()` (enhanced). Modified `satActivateLayer()`, `satTeardown()`, and auto-refresh to manage background analysis.
+- `sw.js`: Bumped CACHE_NAME to `v93` (triggers PWA update).
+
+---
+
 ## v92 — Satellite Animation Flashing on Blank Frames
 
 **Date:** Aug 9, 2026
