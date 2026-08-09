@@ -4012,7 +4012,7 @@ async function screenshotAlert(idx){
     var mapTargetW=Math.floor(mapW*mapScale);
     /* Composite dimensions */
     var compositeW=panelW+gap+mapTargetW;
-    var compositeH=panelH;
+    var compositeH=Math.max(panelH,mapTargetH*2+gap);
     var footerH=90;
     var finalCanvas=document.createElement('canvas');
     finalCanvas.width=compositeW;
@@ -14519,7 +14519,7 @@ async function screenshotStormETA(){
       mapTargetH=Math.floor(mapCanvas.height*mapScale);
     }
     var compositeW=panelW+gap+mapTargetW;
-    var compositeH=panelH;
+    var compositeH=Math.max(panelH,mapTargetH*2+gap);
     var footerH=90;
     var finalCanvas=document.createElement('canvas');
     finalCanvas.width=compositeW;
@@ -14729,7 +14729,7 @@ async function screenshotGenericPopup(title,infoHtml,lat,lon,accentColor){
       mapTargetH=Math.floor(mapCanvasZoomedIn.height*mapScale);
     }
     var compositeW=panelW+gap+mapTargetW;
-    var compositeH=panelH;
+    var compositeH=Math.max(panelH,mapTargetH*2+gap);
     var footerH=90;
     var finalCanvas=document.createElement('canvas');
     finalCanvas.width=compositeW;
@@ -14959,7 +14959,7 @@ async function screenshotMD(centerLat,centerLng,mdNumber){
       mapTargetH=Math.floor(mapCanvasZoomedIn.height*mapScale);
     }
     var compositeW=panelW+gap+mapTargetW;
-    var compositeH=panelH;
+    var compositeH=Math.max(panelH,mapTargetH*2+gap);
     var footerH=90;
     var finalCanvas=document.createElement('canvas');
     finalCanvas.width=compositeW;
