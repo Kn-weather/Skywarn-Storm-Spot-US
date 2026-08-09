@@ -2416,17 +2416,22 @@ body.capturing .md-screenshot-only{display:none!important}
           <div style="height:1px;background:var(--bdr);margin:6px 0"></div>
           <label style="margin:1px 0;font-size:9px;color:var(--t2)"><input type="checkbox" id="amRadarStorm" onchange="toggleRadarStormCells()" style="accent-color:var(--acc)"> Radar Storm Cell Detection</label>
           <label style="margin:1px 0;font-size:9px;color:var(--t2)"><input type="checkbox" id="amRadarStormMotion" onchange="radarToggleStormMotion()" style="accent-color:var(--acc)" checked> Show Cell Motion Arrows</label>
+          <label style="margin:1px 0;font-size:9px;color:var(--t2)">Arrow length: <select id="amRadarMotionHorizon" onchange="radarRenderMotionFromCache()" style="background:var(--bg);border:1px solid var(--bdr);color:var(--t1);font-family:inherit;font-size:9px;padding:2px 4px;border-radius:3px">
+            <option value="15">15 min</option>
+            <option value="30" selected>30 min</option>
+            <option value="60">60 min</option>
+          </select></label>
           <div style="font-size:8px;color:var(--t3);line-height:1.4;margin-top:2px">Decodes RainViewer radar tiles to dBZ, segments storm cells (≥40 dBZ), renders as colored circles. Auto-refreshes every 5 min.</div>
           <div id="radarStormStatus" style="font-size:8px;color:var(--t3);margin-top:2px"></div>
           <div style="height:1px;background:var(--bdr);margin:6px 0"></div>
           <label style="margin:1px 0;font-size:9px;color:var(--t2)"><input type="checkbox" id="amRadarBoundary" onchange="toggleRadarBoundary()" style="accent-color:var(--acc)"> Radar Outflow Boundaries</label>
           <div style="font-size:8px;color:var(--t3);line-height:1.4;margin-top:2px">Detects fine-line boundaries from radar reflectivity gradients. Separate from storm cell detection.</div>
-          <label style="margin:2px 0;font-size:9px">Noise filter: <span id="radarBoundaryNoiseLabel">40</span>
-            <input type="range" id="radarBoundaryNoise" min="0" max="90" value="40" step="5" oninput="document.getElementById('radarBoundaryNoiseLabel').textContent=this.value; radarScheduleReRender()" style="width:100%;accent-color:var(--acc);cursor:pointer">
+          <label style="margin:2px 0;font-size:9px">Noise filter: <span id="radarBoundaryNoiseLabel">35</span>
+            <input type="range" id="radarBoundaryNoise" min="0" max="90" value="35" step="5" oninput="document.getElementById('radarBoundaryNoiseLabel').textContent=this.value; radarScheduleReRender()" style="width:100%;accent-color:var(--acc);cursor:pointer">
           </label>
           <div style="font-size:8px;color:var(--t3);margin-top:1px">Higher = fewer boundaries (stricter). Lower = more boundaries (more sensitive).</div>
-          <label style="margin:4px 0 2px;font-size:9px">Point density: <span id="radarBoundaryDensityLabel">50</span>%
-            <input type="range" id="radarBoundaryDensity" min="1" max="100" value="50" step="1" oninput="document.getElementById('radarBoundaryDensityLabel').textContent=this.value; radarScheduleReRender()" style="width:100%;accent-color:var(--acc);cursor:pointer">
+          <label style="margin:4px 0 2px;font-size:9px">Point density: <span id="radarBoundaryDensityLabel">1</span>%
+            <input type="range" id="radarBoundaryDensity" min="1" max="100" value="1" step="1" oninput="document.getElementById('radarBoundaryDensityLabel').textContent=this.value; radarScheduleReRender()" style="width:100%;accent-color:var(--acc);cursor:pointer">
           </label>
           <div style="font-size:8px;color:var(--t3);margin-top:1px">1% = straight line (start→end). 100% = all detected points. Adds points from middle outward.</div>
           <div id="radarBoundaryStatus" style="font-size:8px;color:var(--t3);margin-top:2px"></div>
@@ -16209,9 +16214,15 @@ function radarProjectCell(cell,minutes){
   return projected;
 }
 
-/* Render storm motion arrows and projected positions on tracked cells. */
+/* Render storm motion arrows and projected positions on tracked cells.
+   Uses the time horizon selector (15/30/60 min) for arrow length.
+   Copies the warning motion arrow pattern: solid shaft + arrowhead. */
 function radarRenderMotion(cells){
   if(!radarStormLayer)return;
+  
+  /* Read time horizon from selector (15/30/60 min, default 30) */
+  var horizonSel=document.getElementById('amRadarMotionHorizon');
+  var horizonMin=horizonSel?parseInt(horizonSel.value,10):30;
   
   cells.forEach(function(cell){
     if(!cell.tracked||!cell.motion||cell.motion.speedKt<1)return;
@@ -16221,16 +16232,34 @@ function radarRenderMotion(cells){
     else if(cell.severity==='severe')color='#ff0000';
     else if(cell.severity==='extreme')color='#ff00ff';
     
-    /* Draw motion arrow (30-min projection) */
-    var projected=radarProjectCell(cell,30);
+    /* Draw motion arrow (using selected time horizon) */
+    var projected=radarProjectCell(cell,horizonMin);
     if(projected){
+      /* Arrow shaft — solid line (copies warning motion arrow style) */
       var arrow=L.polyline([
         [cell.centroidLat,cell.centroidLon],
         [projected.lat,projected.lon]
       ],{
-        color:color,weight:2,opacity:0.7,dashArray:'6,3'
+        color:color,weight:3,opacity:0.85,dashArray:'',className:'storm-motion-arrow'
       });
       arrow.addTo(radarStormLayer);
+      
+      /* Arrowhead (two short lines at the endpoint — copies warning motion pattern) */
+      var speedMs=cell.motion.speedKt*0.51444;
+      var distanceM=speedMs*horizonMin*60;
+      var headLen=distanceM*0.08;  /* 8% of total length */
+      var headAngle=25;  /* degrees on each side */
+      var bearing=cell.motion.bearing;
+      var leftEnd=stormMotionDestinationPoint(projected.lat,projected.lon,headLen,bearing+180-headAngle);
+      var rightEnd=stormMotionDestinationPoint(projected.lat,projected.lon,headLen,bearing+180+headAngle);
+      var head1=L.polyline([[projected.lat,projected.lon],[leftEnd.lat,leftEnd.lon]],{
+        color:color,weight:3,opacity:0.85,className:'storm-motion-arrow'
+      });
+      var head2=L.polyline([[projected.lat,projected.lon],[rightEnd.lat,rightEnd.lon]],{
+        color:color,weight:3,opacity:0.85,className:'storm-motion-arrow'
+      });
+      head1.addTo(radarStormLayer);
+      head2.addTo(radarStormLayer);
       
       /* Label at origin */
       var speedMph=Math.round(cell.motion.speedMph);
@@ -16243,8 +16272,12 @@ function radarRenderMotion(cells){
       var label=L.marker([cell.centroidLat,cell.centroidLon],{icon:labelIcon,interactive:false});
       label.addTo(radarStormLayer);
       
-      /* Projected position circles (+10, +20, +30 min) */
-      [10,20,30].forEach(function(min){
+      /* Projected position circles at +1/3, +2/3, and full horizon.
+         For 30-min horizon: +10, +20, +30 min.
+         For 15-min horizon: +5, +10, +15 min.
+         For 60-min horizon: +20, +40, +60 min. */
+      var stepMin=horizonMin/3;
+      [stepMin,stepMin*2,horizonMin].forEach(function(min){
         var proj=radarProjectCell(cell,min);
         if(proj){
           var projCircle=L.circle([proj.lat,proj.lon],{
@@ -16252,13 +16285,24 @@ function radarRenderMotion(cells){
             color:color,weight:1,fillColor:color,fillOpacity:0.05,
             dashArray:'2,4',opacity:0.4
           });
-          projCircle.bindTooltip('+'+min+' min projection',{permanent:false});
+          projCircle.bindTooltip('+'+Math.round(min)+' min projection',{permanent:false});
           projCircle.addTo(radarStormLayer);
         }
       });
     }
   });
 }
+
+/* Re-render motion arrows from cached cells (called by horizon selector).
+   Avoids re-running full storm cell detection — just re-draws arrows. */
+function radarRenderMotionFromCache(){
+  if(!radarStormMotionEnabled||!radarStormCells)return;
+  /* Clear existing motion arrows by re-rendering storm cells (which clears
+     the layer) then re-drawing motion */
+  radarRenderStormCells(radarStormCells);
+  radarRenderMotion(radarStormCells);
+}
+window.radarRenderMotionFromCache=radarRenderMotionFromCache;
 
 /* Detect outflow boundaries from radar reflectivity gradients.
    Computes horizontal and vertical dBZ gradients, thresholds by
