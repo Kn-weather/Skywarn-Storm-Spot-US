@@ -1,5 +1,21 @@
 # Skywarn Storm Spotters & Chasers United States
 
+[![Live Site](https://img.shields.io/badge/Live_Site-kn--weather.github.io-blue?style=flat-square)](https://kn-weather.github.io/Skywarn-Storm-Spot-US/)
+[![Latest Release](https://img.shields.io/github/v/release/Kn-weather/Skywarn-Storm-Spot-US?label=Latest%20Release&style=flat-square&color=success)](https://github.com/Kn-weather/Skywarn-Storm-Spot-US/releases)
+[![Data Collection](https://img.shields.io/github/actions/workflow/status/Kn-weather/Skywarn-Storm-Spot-US/collect-obs.yml?label=Data%20Collection&style=flat-square)](https://github.com/Kn-weather/Skywarn-Storm-Spot-US/actions/workflows/collect-obs.yml)
+[![Last Commit](https://img.shields.io/github/last-commit/Kn-weather/Skywarn-Storm-Spot-US?label=Last%20Commit&style=flat-square&color=blue)](https://github.com/Kn-weather/Skywarn-Storm-Spot-US/commits/main)
+[![Repo Size](https://img.shields.io/github/repo-size/Kn-weather/Skywarn-Storm-Spot-US?label=Repo%20Size&style=flat-square&color=blueviolet)](https://github.com/Kn-weather/Skywarn-Storm-Spot-US)
+[![License](https://img.shields.io/badge/License-Proprietary-blue?style=flat-square)](https://github.com/Kn-weather/Skywarn-Storm-Spot-US/blob/main/README.md#license)
+
+[![PWA](https://img.shields.io/badge/PWA-Offline%20Ready-success?style=flat-square)](https://github.com/Kn-weather/Skywarn-Storm-Spot-US#why-the-pwa-architecture-matters-for-storm-spotters)
+[![Backend](https://img.shields.io/badge/Backend-Supabase-3ECF8E?style=flat-square)](https://supabase.com/)
+[![Map](https://img.shields.io/badge/Map-Leaflet.js-199900?style=flat-square)](https://leafletjs.com/)
+[![Radar](https://img.shields.io/badge/Radar-RainViewer-0066CC?style=flat-square)](https://www.rainviewer.com/)
+[![Satellite](https://img.shields.io/badge/Satellite-NASA%20GIBS-0066CC?style=flat-square)](https://earthdata.nasa.gov/gibs)
+[![Soundings](https://img.shields.io/badge/Soundings-Iowa%20Mesonet-FF8200?style=flat-square)](https://mesonet.agron.iastate.edu/)
+[![Alerts](https://img.shields.io/badge/Alerts-NWS%20API-0066CC?style=flat-square)](https://www.weather.gov/documentation/services-web-api)
+[![Node.js](https://img.shields.io/badge/Node.js-%3E%3D18-339933?style=flat-square&logo=node.js&logoColor=white)](https://nodejs.org/)
+
 A comprehensive weather monitoring PWA for storm spotters and chasers, featuring live NWS alert polygons, SPC outlooks, radar animation, satellite imagery, soundings, surface observations, outflow boundary detection, radar-based storm cell tracking, storm-safe navigation, and a spotting journal with Supabase backend.
 
 > **Architecture Highlight:** Built as a Progressive Web App for offline resilience, battery efficiency, and small data packets — a field-grade tool designed to keep storm chasers and rural communities connected when infrastructure fails. [Read the full reasoning →](#why-the-pwa-architecture-matters-for-storm-spotters)
