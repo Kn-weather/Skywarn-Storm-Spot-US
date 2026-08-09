@@ -43,6 +43,7 @@ A comprehensive weather monitoring PWA for storm spotters and chasers, featuring
 - [GitHub Actions (24/7 Data Collection)](#github-actions-247-data-collection)
 - [Contributing](#contributing)
 - [Roadmap](#roadmap)
+- [Planned Features](#planned-features)
 - [Standalone Files](#standalone-files)
 - [Data Sources](#data-sources)
 - [Acknowledgments](#acknowledgments)
@@ -52,12 +53,12 @@ A comprehensive weather monitoring PWA for storm spotters and chasers, featuring
 
 ## Screenshots
 
-### Live Map
+### Alert Map — Live NWS Warning Polygons
 <p align="center">
   <img src="docs/screenshots/alert-map.png" alt="Alert Map with NWS warning polygons" width="700">
 </p>
 
-### Polygon Alerts
+### Severe Thunderstorm Warning Detail
 <p align="center">
   <img src="docs/screenshots/alert-detail.png" alt="Severe Thunderstorm Warning detail with 3-panel screenshot layout" width="700">
 </p>
@@ -72,17 +73,17 @@ A comprehensive weather monitoring PWA for storm spotters and chasers, featuring
   <img src="docs/screenshots/radar-boundary.png" alt="Radar fine-line boundary detection with PCA line fit" width="700">
 </p>
 
-### Storm ETA
+### Storm-Safe Navigation — Storm ETA
 <p align="center">
   <img src="docs/screenshots/storm-eta.png" alt="Storm ETA with driving route avoidance" width="700">
 </p>
 
-### Full SkewT & Hodograph
+### Sounding Collage — Detroit (KDTX)
 <p align="center">
   <img src="docs/screenshots/sounding-detroit.png" alt="Skew-T and hodograph collage from KDTX sounding" width="500">
 </p>
 
-### SkewT Chart
+### Sounding Collage — Pittsburgh (KPIT)
 <p align="center">
   <img src="docs/screenshots/sounding-pittsburgh.png" alt="Skew-T and hodograph collage from KPIT sounding" width="500">
 </p>
@@ -248,6 +249,7 @@ Skywarn-Storm-Spot-US/
 ├── .npmrc                        # GitHub Packages registry config
 ├── skywarn-logo.png              # App logo
 ├── BUG_FIXES.md                  # Bug fix log with root cause analysis
+├── PLANNED_FEATURES.md           # Detailed plans for upcoming features
 ├── README.md                     # This file
 ├── .github/
 │   └── workflows/
@@ -393,16 +395,15 @@ If you're joining as a beta tester:
 
 ## Roadmap
 
-### Recently Shipped (v91)
+### Recently Shipped
 
-- ✅ Radar storm cell detection with motion tracking
-- ✅ Storm-Safe Navigation with predictive avoidance
-- ✅ Dual-source outflow boundary detection (ASOS + radar)
-- ✅ NASA GIBS satellite layers with 24-frame animation
-- ✅ SPC Mesoscale Discussion polygons with full text
-- ✅ Skew-T / Log-P soundings with hodograph
-- ✅ Spotting Journal with Supabase backend
-- ✅ PWA architecture reasoning documented
+- ✅ **v97:** Wind-validated outflow boundary detection (ASOS cross-validation)
+- ✅ **v96:** Radar cell motion arrow time frame selector (15/30/60 min) + arrowheads
+- ✅ **v95:** Point density slider for boundary line simplification (budget-based Douglas-Peucker)
+- ✅ **v94:** Radar boundary noise slider fix + zig-zag cleanup (Douglas-Peucker)
+- ✅ **v93:** Pixel-based blank frame detection for satellite animation
+- ✅ **v92:** Satellite animation blank frame skipping
+- ✅ **v91:** Radar storm cell detection with motion tracking, Storm-Safe Navigation, dual-source outflow boundaries, NASA GIBS satellite layers, SPC Mesoscale Discussions, Skew-T soundings, Spotting Journal, PWA architecture documentation
 
 ### In Progress
 
@@ -422,12 +423,18 @@ If you're joining as a beta tester:
 - 🔲 Chase log export (PDF, CSV)
 - 🔲 Multi-language support
 
-### Long-term Vision
+### Long-Term Vision
 
 - 🔲 Community-driven storm camera network
 - 🔲 AI-assisted storm feature detection from satellite/radar
 - 🔲 Integration with amateur radio spotter networks
 - 🔲 Training module for new spotters
+
+## Planned Features
+
+For detailed implementation plans of major upcoming features — including outflow boundary tracking with Kalman filters, MRMS + HRRR backend validation, push notifications, offline map tiles, and AI-assisted storm detection — see the **[PLANNED_FEATURES.md](PLANNED_FEATURES.md)** document.
+
+That document consolidates this roadmap with technical architecture, phased implementation plans, and effort estimates for each major feature.
 
 ## Data Sources
 
