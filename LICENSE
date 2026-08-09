@@ -1,0 +1,84 @@
+Copyright (c) 2026 Kn-weather. All Rights Reserved.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+PROPRIETARY LICENSE — ALL RIGHTS RESERVED
+
+This software and its associated documentation files (the "Software") are the
+proprietary and confidential property of Kn-weather. No part of this Software
+may be used, copied, modified, merged, published, distributed, sublicensed,
+sold, or otherwise transferred, in whole or in part, without the prior express
+written permission of Kn-weather.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+1. DEFINITIONS
+
+   "Software" refers to all source code, documentation, assets, and related
+   materials contained in this repository, including but not limited to the
+   Progressive Web App (PWA), service worker, manifest, scripts, and
+   configuration files.
+
+   "Authorized User" refers to any person who has been granted explicit
+   written permission by Kn-weather to access, use, or modify the Software.
+
+2. GRANT OF RIGHTS
+
+   2.1 Viewing — The Software may be viewed publicly on the GitHub repository
+       for educational and evaluation purposes.
+
+   2.2 Use — End users may access and use the deployed application at
+       https://kn-weather.github.io/Skywarn-Storm-Spot-US/ subject to the
+       terms of service.
+
+   2.3 Modification & Distribution — NO RIGHTS are granted to modify, copy,
+       distribute, sublicense, or create derivative works from the Software
+       without prior written permission from Kn-weather.
+
+3. CONTRIBUTIONS
+
+   Contributions to this repository (pull requests, issues, suggestions) are
+   welcome but must be accompanied by a Contributor License Agreement (CLA).
+   By submitting a contribution, you agree that Kn-weather may use, modify,
+   and incorporate your contribution into the Software under the terms of
+   this license without further compensation or attribution.
+
+4. DATA SOURCES
+
+   Weather data displayed by this application is provided by third-party
+   sources and is NOT covered by this license:
+
+   - NOAA / NWS data — Public domain (https://www.weather.gov/)
+   - NASA GIBS imagery — Open data (https://earthdata.nasa.gov/gibs)
+   - SPC outlooks / discussions — Public domain (https://www.spc.noaa.gov/)
+   - Iowa Environmental Mesonet — Open data (https://mesonet.agron.iastate.edu/)
+   - RainViewer radar tiles — See https://www.rainviewer.com/api.html
+
+   This license applies only to the application code, not to the weather data
+   itself. Users of this Software must comply with the terms of each data source.
+
+5. NO WARRANTY
+
+   THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+   IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+   FITNESS FOR A PARTICULAR PURPOSE, AND NONINFRINGEMENT. IN NO EVENT SHALL
+   THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES, OR OTHER
+   LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT, OR OTHERWISE, ARISING
+   FROM, OUT OF, OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+   DEALINGS IN THE SOFTWARE.
+
+6. SAFETY DISCLAIMER
+
+   This Software is intended for situational awareness and educational purposes
+   only. It is NOT a substitute for official National Weather Service warnings,
+   alerts, or guidance. Always follow instructions from local emergency
+   management officials and NWS forecasts during severe weather events. The
+   authors assume no responsibility for decisions made based on information
+   displayed by this Software.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+For licensing inquiries, contribution agreements, or permission requests,
+please open an issue at: https://github.com/Kn-weather/Skywarn-Storm-Spot-US/issues
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
