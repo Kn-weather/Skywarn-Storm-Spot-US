@@ -4,6 +4,42 @@ This file documents all significant bugs found and fixed during development.
 
 ---
 
+## v96 — Radar Cell Motion Arrow Time Frame Selector + Arrowheads + Default Slider Changes
+
+**Date:** Aug 9, 2026
+**Severity:** Feature enhancement
+
+### What Was Added
+
+1. **Time frame selector for radar cell motion arrows** — A dropdown (15/30/60 min) that controls the arrow length, matching the warning motion arrows pattern. The projected position circles also adapt to the selected time frame (e.g., 30 min → +10/+20/+30 min circles; 60 min → +20/+40/+60 min circles).
+
+2. **Arrowheads on radar cell motion arrows** — Previously the radar cell motion arrows were dashed lines with no arrowhead. Now they have solid shafts + arrowheads (copying the warning motion arrow pattern: weight 3, opacity 0.85, 8% head length, 25° head angle).
+
+3. **Default slider values changed:**
+   - Noise filter: 40 → **35**
+   - Point density: 50% → **1%** (straight lines by default)
+
+### Implementation Details
+
+- Added `amRadarMotionHorizon` dropdown selector (15/30/60 min, default 30)
+- `radarRenderMotion()` now reads the selector and uses it for:
+  - Arrow shaft length (projected endpoint at selected horizon)
+  - Arrowhead size (8% of total distance)
+  - Projected position circles (3 circles at 1/3, 2/3, and full horizon)
+- New `radarRenderMotionFromCache()` function re-renders arrows from cached cells when the selector changes — avoids re-running full storm cell detection
+- Arrow style changed from dashed (weight 2, opacity 0.7, dashArray '6,3') to solid (weight 3, opacity 0.85, no dashArray) + arrowhead — matches warning motion arrows
+
+### Files Changed
+- `nws_us_alert_map.html`:
+  - Added `amRadarMotionHorizon` dropdown in UI
+  - Modified `radarRenderMotion()`: uses horizon selector, adds arrowheads, adapts projected circles
+  - New: `radarRenderMotionFromCache()` — re-renders from cache on selector change
+  - Changed default: noise filter 40 → 35
+  - Changed default: point density 50% → 1%
+- `sw.js`: Bumped CACHE_NAME to `v96`
+
+---
+
 ## v95 — Point Density Slider for Boundary Line Simplification
 
 **Date:** Aug 9, 2026
