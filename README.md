@@ -2,6 +2,8 @@
 
 A comprehensive weather monitoring PWA for storm spotters and chasers, featuring live NWS alert polygons, SPC outlooks, radar animation, satellite imagery, soundings, surface observations, outflow boundary detection, radar-based storm cell tracking, storm-safe navigation, and a spotting journal with Supabase backend.
 
+> **Architecture Highlight:** Built as a Progressive Web App for offline resilience, battery efficiency, and small data packets — a field-grade tool designed to keep storm chasers and rural communities connected when infrastructure fails. [Read the full reasoning →](#why-the-pwa-architecture-matters-for-storm-spotters)
+
 **Live Site:** [https://kn-weather.github.io/Skywarn-Storm-Spot-US/](https://kn-weather.github.io/Skywarn-Storm-Spot-US/)
 
 ## Features
@@ -127,6 +129,8 @@ A comprehensive weather monitoring PWA for storm spotters and chasers, featuring
 - Cache versioning for seamless updates
 - App version display + update notification in Settings
 
+> See [Why the PWA Architecture Matters for Storm Spotters](#why-the-pwa-architecture-matters-for-storm-spotters) at the end of this document for the architectural reasoning behind this choice.
+
 ## Database Schema
 
 ### journal_events
@@ -199,3 +203,35 @@ Weather data is provided by NOAA/NWS (public domain). Application code is propri
 - **GitHub:** [Kn-weather/Skywarn-Storm-Spot-US](https://github.com/Kn-weather/Skywarn-Storm-Spot-US)
 - **Live Site:** [https://kn-weather.github.io/Skywarn-Storm-Spot-US/](https://kn-weather.github.io/Skywarn-Storm-Spot-US/)
 - **Standalone Soundings:** [https://kn-weather.github.io/Skywarn-Storm-Spot-US/soundings.html](https://kn-weather.github.io/Skywarn-Storm-Spot-US/soundings.html)
+
+---
+
+## Why the PWA Architecture Matters for Storm Spotters
+
+### Core Purpose
+
+The Skywarn Storm Spotters PWA is designed to be more than just a weather app. It is a field-grade tool built for storm chasers and rural communities where connectivity and power are unreliable. The architecture choice — Progressive Web App (PWA) — is intentional and mission-critical.
+
+### Strengths of the PWA Approach
+
+- **Offline resilience** — Service workers cache maps, alerts, and discussions, ensuring situational awareness even during total outages or tower failures.
+- **Battery efficiency** — Lightweight JavaScript and selective updates minimize drain, allowing devices to last longer in the field.
+- **Small data packets** — Updates are delivered in tiny increments, critical when towers are overloaded or rural bandwidth is minimal.
+- **Instant updates** — Bug fixes and improvements can be pushed immediately without app store delays, keeping the tool reliable during active weather.
+
+### Why It's Worth Fighting For
+
+- **Safety first:** Chasers depend on uninterrupted access to alerts and maps. A native app might offer smoother APIs, but it risks heavier battery use and larger data payloads — unacceptable in life-critical scenarios.
+- **Accessibility:** PWAs run on any modern browser, lowering barriers for rural communities where device diversity is high.
+- **Resilience under stress:** When towers are congested or damaged, the PWA's caching and lightweight design keep information flowing.
+- **Operational trust:** Spotters know they can rely on the app even in worst-case conditions. That trust is built on the PWA's architecture.
+
+### Lessons Learned
+
+- The PWA path is harder — browser quirks, API limits, and performance ceilings demand constant vigilance.
+- But the payoff is unique: a tool that works when nothing else does.
+- The "easy way" (native app only) might reduce bugs, but it sacrifices the offline, battery-light resilience that keeps people safe.
+
+### Conclusion
+
+The PWA architecture is both the greatest strength and greatest challenge of the Skywarn Storm Spotters app. It is worth the fight because it aligns directly with the mission: to keep storm chasers and rural communities safe, informed, and connected even when the infrastructure fails.
