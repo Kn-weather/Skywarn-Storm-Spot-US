@@ -17717,15 +17717,21 @@ function mdParsePage(html,linkName){
       if(p.length<8)continue;
       var lat,lon;
       if(p.length===8){
-        /* 4+4: DDMM DDMM — longitude is < 100°W (no leading 1).
-           Do NOT add 100 to longitude (that was the bug — it pushed
-           polygons to -178° in the Pacific Ocean). */
+        /* 4+4: DDMM DDMM — longitude may be < 100° or >= 100°.
+           When longitude >= 100°W, the SPC drops the leading "1" from the
+           5-digit DDDMM format, making it look like 4 digits. We detect this
+           by checking if the parsed longitude is < 10° (which would put it
+           in the Atlantic Ocean near Africa) — if so, add 100 to get the
+           correct western hemisphere longitude.
+           Example: 0075 → 00°75' = 1.25° → < 10 → add 100 → 101.25° ✓
+           Example: 9890 → 98°90' = 99.5° → >= 10 → no add → 99.5° ✓ */
         var latDeg=parseInt(p.substring(0,2));
         var latMin=parseInt(p.substring(2,4));
         lat=latDeg+latMin/60;
         var lonDeg=parseInt(p.substring(4,6));
         var lonMin=parseInt(p.substring(6,8));
         lon=lonDeg+lonMin/60;
+        if(lon<10)lon+=100;  /* Leading "1" was dropped for >= 100°W */
       }else if(p.length===9){
         /* 4+5: DDMM DDDMM */
         latDeg=parseInt(p.substring(0,2));
