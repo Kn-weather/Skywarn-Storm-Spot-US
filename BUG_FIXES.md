@@ -4,6 +4,34 @@ This file documents all significant bugs found and fixed during development.
 
 ---
 
+## v92 — Satellite Animation Flashing on Blank Frames
+
+**Date:** Aug 9, 2026
+**Severity:** Medium (visual glitch during satellite animation playback)
+
+### Root Cause
+The satellite animation generates 24 theoretical frame times (every 10 min for 4 hours), but NASA GIBS doesn't always have imagery for every timestamp — during satellite scan gaps, maintenance windows, or processing delays, some timestamps return 404 for all tiles. The existing `errorTileUrl: transparentPng` handled 404s gracefully (showing transparent instead of broken-image icons), but the 3-layer rolling buffer would still swap to these "blank" frames during animation, causing visible flashing as the map showed transparent tiles for 500ms before advancing.
+
+### Fix
+Added tile load/error tracking to each satellite layer and blank frame skipping during animation:
+
+1. **Tile stats tracking** (`satCreateLayer`): Each layer now has `_satStats = {loaded, errored}` that counts `tileload` and `tileerror` events.
+2. **Blank detection** (`satIsLayerBlank`): A frame is "blank" if >60% of tiles errored AND at least 4 tiles were requested (enough data to judge).
+3. **Skip-ahead logic** (`satFindNextValidFrame`): During animation, checks if the preloaded next frame is blank and skips ahead to the next valid frame. Wraps around the timeline and returns the start index if all frames are blank (prevents infinite loop).
+4. **Animation timer** (`satTogglePlay`): Now calls `satFindNextValidFrame` instead of blindly advancing by 1.
+5. **Manual stepping** (`satStep`): Forward steps also skip blanks; backward steps do not (user explicitly stepped back).
+
+### Threshold Rationale
+- **>60% error rate**: Catches frames where most tiles failed, but tolerates edge tiles 404ing (areas outside the satellite disk).
+- **Minimum 4 tiles**: Prevents false positives when only 1-2 tiles have been requested (not enough data to judge).
+- These values can be tuned in `satIsLayerBlank()` if needed.
+
+### Files Changed
+- `nws_us_alert_map.html`: Added `_satStats` tracking to `satCreateLayer`, new `satIsLayerBlank()` and `satFindNextValidFrame()` functions, modified `satTogglePlay()` and `satStep()` to skip blanks.
+- `sw.js`: Bumped CACHE_NAME to `v92` (triggers PWA update).
+
+---
+
 ## v83 — MD Polygon Coordinates in Pacific Ocean
 
 **Date:** Aug 8, 2026
