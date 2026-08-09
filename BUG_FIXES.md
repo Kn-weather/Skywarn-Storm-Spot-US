@@ -4,6 +4,51 @@ This file documents all significant bugs found and fixed during development.
 
 ---
 
+## v95 — Point Density Slider for Boundary Line Simplification
+
+**Date:** Aug 9, 2026
+**Severity:** Feature enhancement (builds on v94 boundary fix)
+**Builds on:** v94 (noise slider + Douglas-Peucker simplification)
+
+### What Was Added
+A second slider — **Point density** (1-100%) — that controls how many points are kept in each boundary polyline, independent of the noise filter slider.
+
+### How It Works
+The slider implements **budget-based Douglas-Peucker simplification**:
+
+1. **Stage 1** (noise slider): Standard Douglas-Peucker with tolerance removes zig-zag noise
+2. **Stage 2** (point density slider): Budget-based DP keeps the N most important points
+
+The budget-based algorithm assigns each point an "importance" score = its perpendicular distance from the line between neighbors at the recursion level where it was kept. Endpoints get importance = Infinity (always kept). Points are then kept in order of importance (highest deviation first).
+
+### Slider Behavior
+- **1%** → just start and end points (straight line A→B)
+- **50%** (default) → half the detected points, keeping the most significant deviations
+- **100%** → all stage-1 points kept (full detail after noise filtering)
+
+### "Cascade from Middle" Behavior
+The user's mental model: "as the slider goes up, points are added from the middle of the boundary line cascading out towards each endpoint." This is exactly how the budget-based DP works:
+- The point of maximum deviation from the start-end line is kept first (typically near the middle)
+- Then recursively, the next most deviating point in each half is kept
+- This cascades outward toward both endpoints as the budget increases
+
+### Two-Slider System
+| Slider | Controls | Range |
+|--------|----------|-------|
+| Noise filter | Detection thresholds + tolerance smoothing | 0-90 |
+| Point density | Number of points per polyline (post-detection) | 1-100% |
+
+The noise filter handles **detection sensitivity** (how many boundaries, how strict), while point density handles **polyline detail** (how many points per boundary line). They're independent — you can have strict detection with high point density, or loose detection with low point density.
+
+### Files Changed
+- `nws_us_alert_map.html`:
+  - Added `radarBoundaryDensity` slider (1-100%) in the UI
+  - New: `radarDouglasPeuckerBudget(points, maxPoints)` — budget-based DP
+  - Modified `radarDetectBoundaries()`: two-stage simplification (tolerance DP + budget DP)
+- `sw.js`: Bumped CACHE_NAME to `v95`
+
+---
+
 ## v94 — Radar Boundary Noise Slider Not Working + Zig-Zag Cleanup
 
 **Date:** Aug 9, 2026
