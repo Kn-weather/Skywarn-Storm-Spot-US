@@ -252,11 +252,16 @@ Skywarn-Storm-Spot-US/
 ├── CHANGELOG.md                  # Version history with feature highlights
 ├── PLANNED_FEATURES.md           # Detailed plans for upcoming features
 ├── LICENSE                       # All Rights Reserved proprietary license
+├── CLA.md                        # Contributor License Agreement
 ├── .gitignore                    # Git ignore rules (deps, secrets, OS/IDE files)
 ├── README.md                     # This file
 ├── .github/
-│   └── workflows/
-│       └── collect-obs.yml       # GitHub Actions (every 30 min data collection)
+│   ├── workflows/
+│   │   └── collect-obs.yml       # GitHub Actions (every 30 min data collection)
+│   ├── pull_request_template.md  # PR template (CLA confirmation, testing checklist)
+│   └── ISSUE_TEMPLATE/
+│       ├── bug_report.md         # Bug report template
+│       └── feature_request.md    # Feature request template
 ├── scripts/
 │   └── collect-obs.mjs           # NWS observation collector (Node.js)
 ├── supabase/
@@ -344,6 +349,8 @@ Just visit the [live site](https://kn-weather.github.io/Skywarn-Storm-Spot-US/).
 
 We welcome contributions from beta testers and co-developers! This project serves a mission-critical community — storm spotters and rural chasers — so code quality and reliability matter.
 
+> **📋 Contributor License Agreement:** By submitting a pull request, you agree to the terms of our [CLA](CLA.md). Please read it before your first contribution. The CLA ensures you retain ownership of your work while granting us permission to use, modify, and distribute your contributions under our proprietary license.
+
 ### Reporting Bugs
 
 1. Check the [existing issues](https://github.com/Kn-weather/Skywarn-Storm-Spot-US/issues) to avoid duplicates
@@ -360,16 +367,18 @@ We welcome contributions from beta testers and co-developers! This project serve
 ### Development Workflow
 
 1. **Fork** the repository
-2. **Create a branch**: `git checkout -b feature/your-feature-name` or `fix/your-bugfix-name`
-3. **Make your changes** — keep the single-file architecture in mind for frontend changes
-4. **Test thoroughly**:
+2. **Read the [CLA](CLA.md)** — submitting a PR constitutes agreement
+3. **Create a branch**: `git checkout -b feature/your-feature-name` or `fix/your-bugfix-name`
+4. **Make your changes** — keep the single-file architecture in mind for frontend changes
+5. **Test thoroughly**:
    - Test in multiple browsers (Chrome, Firefox, Safari, Edge)
    - Test on mobile (install as PWA, test offline)
    - Test with active weather alerts if possible
    - Verify existing features still work (no regressions)
-5. **Update documentation** if needed (README.md, BUG_FIXES.md)
-6. **Commit with clear messages**: `feat: add X`, `fix: resolve Y`, `docs: update Z`
-7. **Open a Pull Request** — describe what changed and why, link any related issues
+6. **Update documentation** if needed (README.md, CHANGELOG.md, BUG_FIXES.md)
+7. **Bump the service worker cache version** (`sw.js` CACHE_NAME) if your change affects frontend code
+8. **Commit with clear messages**: `feat: add X`, `fix: resolve Y`, `docs: update Z`
+9. **Open a Pull Request** — the PR template will prompt you to confirm CLA agreement, describe what changed, and verify testing
 
 ### Code Style
 
