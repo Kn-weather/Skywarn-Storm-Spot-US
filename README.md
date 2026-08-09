@@ -29,7 +29,7 @@ A comprehensive weather monitoring PWA for storm spotters and chasers, featuring
 
 > **Architecture Highlight:** Built as a Progressive Web App for offline resilience, battery efficiency, and small data packets — a field-grade tool designed to keep storm chasers and rural communities connected when infrastructure fails. [Read the full reasoning →](#why-the-pwa-architecture-matters-for-storm-spotters)
 
-**Live Site:** [https://kn-weather.github.io/Skywarn-Storm-Spot-US/](https://kn-weather.github.io/Skywarn-Storm-Spot-US/) · **Latest Release:** [v91](https://github.com/Kn-weather/Skywarn-Storm-Spot-US/releases) · **Report a Bug:** [Issues](https://github.com/Kn-weather/Skywarn-Storm-Spot-US/issues) · **Changelog:** [BUG_FIXES.md](BUG_FIXES.md)
+**Live Site:** [https://kn-weather.github.io/Skywarn-Storm-Spot-US/](https://kn-weather.github.io/Skywarn-Storm-Spot-US/) · **Latest Release:** [v91](https://github.com/Kn-weather/Skywarn-Storm-Spot-US/releases) · **Report a Bug:** [Issues](https://github.com/Kn-weather/Skywarn-Storm-Spot-US/issues) · **Changelog:** [CHANGELOG.md](CHANGELOG.md) · **Bug Fixes:** [BUG_FIXES.md](BUG_FIXES.md)
 
 ## Table of Contents
 
@@ -249,6 +249,7 @@ Skywarn-Storm-Spot-US/
 ├── .npmrc                        # GitHub Packages registry config
 ├── skywarn-logo.png              # App logo
 ├── BUG_FIXES.md                  # Bug fix log with root cause analysis
+├── CHANGELOG.md                  # Version history with feature highlights
 ├── PLANNED_FEATURES.md           # Detailed plans for upcoming features
 ├── README.md                     # This file
 ├── .github/
