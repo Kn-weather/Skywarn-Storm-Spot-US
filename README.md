@@ -52,12 +52,12 @@ A comprehensive weather monitoring PWA for storm spotters and chasers, featuring
 
 ## Screenshots
 
-### Alert Map — Live NWS Warning Polygons
+### Live Map
 <p align="center">
   <img src="docs/screenshots/alert-map.png" alt="Alert Map with NWS warning polygons" width="700">
 </p>
 
-### Severe Thunderstorm Warning Detail
+### Polygon Alerts
 <p align="center">
   <img src="docs/screenshots/alert-detail.png" alt="Severe Thunderstorm Warning detail with 3-panel screenshot layout" width="700">
 </p>
@@ -72,17 +72,17 @@ A comprehensive weather monitoring PWA for storm spotters and chasers, featuring
   <img src="docs/screenshots/radar-boundary.png" alt="Radar fine-line boundary detection with PCA line fit" width="700">
 </p>
 
-### Storm-Safe Navigation — Storm ETA
+### Storm ETA
 <p align="center">
   <img src="docs/screenshots/storm-eta.png" alt="Storm ETA with driving route avoidance" width="700">
 </p>
 
-### Sounding Collage — Detroit (KDTX)
+### Full SkewT & Hodograph
 <p align="center">
   <img src="docs/screenshots/sounding-detroit.png" alt="Skew-T and hodograph collage from KDTX sounding" width="500">
 </p>
 
-### Sounding Collage — Pittsburgh (KPIT)
+### SkewT Chart
 <p align="center">
   <img src="docs/screenshots/sounding-pittsburgh.png" alt="Skew-T and hodograph collage from KPIT sounding" width="500">
 </p>
