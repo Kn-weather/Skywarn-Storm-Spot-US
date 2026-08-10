@@ -493,7 +493,7 @@ This project would not be possible without the incredible work of the meteorolog
 This software is proprietary. See the [LICENSE](LICENSE) file for the full "All Rights Reserved" license terms.
 
 **Summary:**
-- **Application code** — Copyright © 2026 Kn-weather. All Rights Reserved. No use, modification, or distribution without written permission.
+- **Application code** — Copyright © 2026 Kinshi Now (KN Weather division). All Rights Reserved. No use, modification, or distribution without written permission.
 - **Weather data** — Provided by NOAA/NWS (public domain), NASA GIBS, SPC, Iowa Mesonet, and RainViewer under their respective terms.
 - **Contributions** — Welcome but require a Contributor License Agreement (see [Contributing](#contributing) and the [LICENSE](LICENSE) file).
 
@@ -501,6 +501,7 @@ For licensing inquiries, open an [issue](https://github.com/Kn-weather/Skywarn-S
 
 ## Repository
 
+- **Business:** Kinshi Now (KN Weather division)
 - **GitHub:** [Kn-weather/Skywarn-Storm-Spot-US](https://github.com/Kn-weather/Skywarn-Storm-Spot-US)
 - **Live Site:** [https://kn-weather.github.io/Skywarn-Storm-Spot-US/](https://kn-weather.github.io/Skywarn-Storm-Spot-US/)
 - **Standalone Soundings:** [https://kn-weather.github.io/Skywarn-Storm-Spot-US/soundings.html](https://kn-weather.github.io/Skywarn-Storm-Spot-US/soundings.html)
