@@ -1,14 +1,14 @@
-Copyright (c) 2026 Kn-weather. All Rights Reserved.
+Copyright (c) 2026 Kinshi Now (KN Weather division). All Rights Reserved.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 PROPRIETARY LICENSE — ALL RIGHTS RESERVED
 
 This software and its associated documentation files (the "Software") are the
-proprietary and confidential property of Kn-weather. No part of this Software
-may be used, copied, modified, merged, published, distributed, sublicensed,
-sold, or otherwise transferred, in whole or in part, without the prior express
-written permission of Kn-weather.
+proprietary and confidential property of Kinshi Now (KN Weather division). No
+part of this Software may be used, copied, modified, merged, published,
+distributed, sublicensed, sold, or otherwise transferred, in whole or in part,
+without the prior express written permission of Kinshi Now.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
@@ -20,7 +20,7 @@ written permission of Kn-weather.
    configuration files.
 
    "Authorized User" refers to any person who has been granted explicit
-   written permission by Kn-weather to access, use, or modify the Software.
+   written permission by Kinshi Now to access, use, or modify the Software.
 
 2. GRANT OF RIGHTS
 
@@ -33,13 +33,13 @@ written permission of Kn-weather.
 
    2.3 Modification & Distribution — NO RIGHTS are granted to modify, copy,
        distribute, sublicense, or create derivative works from the Software
-       without prior written permission from Kn-weather.
+       without prior written permission from Kinshi Now.
 
 3. CONTRIBUTIONS
 
    Contributions to this repository (pull requests, issues, suggestions) are
    welcome but must be accompanied by a Contributor License Agreement (CLA).
-   By submitting a contribution, you agree that Kn-weather may use, modify,
+   By submitting a contribution, you agree that Kinshi Now may use, modify,
    and incorporate your contribution into the Software under the terms of
    this license without further compensation or attribution.
 
