@@ -2,7 +2,7 @@
 
 **Project:** Skywarn Storm Spotters & Chasers United States
 **Repository:** [Kn-weather/Skywarn-Storm-Spot-US](https://github.com/Kn-weather/Skywarn-Storm-Spot-US)
-**Licensor:** Kn-weather
+**Licensor:** Kinshi Now (KN Weather division)
 **Effective Date:** Aug 9, 2026
 
 ---
@@ -27,7 +27,7 @@ By submitting a pull request, issue, code, documentation, or other contribution 
 
 - **"Contribution"** means any original work of authorship, including any modifications or additions to existing work, that is intentionally submitted by you to the repository for inclusion in the project.
 - **"Project"** means the Skywarn Storm Spotters & Chasers United States software and all associated files.
-- **"Licensor"** means Kn-weather, the copyright holder of the Project.
+- **"Licensor"** means Kinshi Now (KN Weather division), the copyright holder of the Project.
 - **"You"** means the individual submitting the Contribution.
 
 ### 2. Grant of License
