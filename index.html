@@ -18536,39 +18536,73 @@ function mdParsePage(html,linkName){
   var latLonMatch=text.match(/LAT\.\.\.LON\s+([\d\s]+)/);
   if(latLonMatch){
     var coordStr=latLonMatch[1].trim();
-    var parts=coordStr.split(/\s+/);
-    for(var i=0;i<parts.length;i++){
-      var p=parts[i];
-      if(p.length<8)continue;
-      var lat,lon;
-      if(p.length===8){
-        /* 4+4: DDMM DDMM — longitude may be < 100° or >= 100°.
-           When longitude >= 100°W, the SPC drops the leading "1" from the
-           5-digit DDDMM format, making it look like 4 digits. We detect this
-           by checking if the parsed longitude is < 10° (which would put it
-           in the Atlantic Ocean near Africa) — if so, add 100 to get the
-           correct western hemisphere longitude.
-           Example: 0075 → 00°75' = 1.25° → < 10 → add 100 → 101.25° ✓
-           Example: 9890 → 98°90' = 99.5° → >= 10 → no add → 99.5° ✓ */
-        var latDeg=parseInt(p.substring(0,2));
-        var latMin=parseInt(p.substring(2,4));
-        lat=latDeg+latMin/60;
-        var lonDeg=parseInt(p.substring(4,6));
-        var lonMin=parseInt(p.substring(6,8));
-        lon=lonDeg+lonMin/60;
-        if(lon<10)lon+=100;  /* Leading "1" was dropped for >= 100°W */
-      }else if(p.length===9){
-        /* 4+5: DDMM DDDMM */
-        latDeg=parseInt(p.substring(0,2));
-        latMin=parseInt(p.substring(2,4));
-        lat=latDeg+latMin/60;
-        lonDeg=parseInt(p.substring(4,7));
-        lonMin=parseInt(p.substring(7,9));
-        lon=lonDeg+lonMin/60;
-      }else{
-        continue;
+    var parts=coordStr.split(/\s+/).filter(function(p){return p.length>0;});
+    
+    /* Detect format: if all parts are 4 digits, they're lat/lon pairs.
+       If all parts are 8-9 digits, they're combined DDMMDDMM or DDMMDDDMM. */
+    var allFourDigit=parts.length>0&&parts.every(function(p){return p.length===4;});
+    
+    if(allFourDigit){
+      /* 4-digit pair format: parts[0]=lat1, parts[1]=lon1, parts[2]=lat2, parts[3]=lon2, ...
+         Pair them up and parse each as DDMM */
+      for(var i=0;i+1<parts.length;i+=2){
+        var latPart=parts[i];
+        var lonPart=parts[i+1];
+        var latDeg=parseInt(latPart.substring(0,2));
+        var latMin=parseInt(latPart.substring(2,4));
+        var lat=latDeg+latMin/60;
+        var lonDeg=parseInt(lonPart.substring(0,2));
+        var lonMin=parseInt(lonPart.substring(2,4));
+        var lon=lonDeg+lonMin/60;
+        /* In 4-digit format, the leading "1" is dropped for >= 100°W.
+           CONUS longitudes range from ~67°W (Maine) to ~125°W (Washington).
+           Any parsed lon < 60 is definitely a dropped-"1" case (Atlantic Ocean).
+           This catches 100-125°W (parsed as 0-25° → all < 60). */
+        if(lon<60)lon+=100;
+        data.polygon.push([lat,-lon]);
       }
-      data.polygon.push([lat,-lon]);
+    }else{
+      /* 8-digit or 9-digit combined format */
+      for(var i=0;i<parts.length;i++){
+        var p=parts[i];
+        if(p.length<8)continue;
+        var lat,lon;
+        if(p.length===8){
+          /* 4+4: DDMM DDMM — longitude may be < 100° or >= 100°.
+             When longitude >= 100°W, the SPC drops the leading "1" from the
+             5-digit DDDMM format, making it look like 4 digits.
+             
+             The v91 fix used `if(lon<10)` which only caught 100-109°W
+             (where the dropped "1" makes lon parse as 0-9°). But 110-125°W
+             (western US) parses as 10-25°, which was NOT caught — causing
+             those coordinates to render in the Atlantic Ocean.
+             
+             Fix: use `if(lon<60)` — CONUS longitudes are 67-125°W, so any
+             parsed lon < 60 is definitely a dropped-"1" case.
+             - 100-109°W → parsed as 0-9° → < 60 → +100 ✓
+             - 110-119°W → parsed as 10-19° → < 60 → +100 ✓ (was broken!)
+             - 120-125°W → parsed as 20-25° → < 60 → +100 ✓ (was broken!)
+             - 67-100°W → parsed as 67-100° → >= 60 → no add ✓ */
+          var latDeg=parseInt(p.substring(0,2));
+          var latMin=parseInt(p.substring(2,4));
+          lat=latDeg+latMin/60;
+          var lonDeg=parseInt(p.substring(4,6));
+          var lonMin=parseInt(p.substring(6,8));
+          lon=lonDeg+lonMin/60;
+          if(lon<60)lon+=100;  /* Leading "1" was dropped for >= 100°W */
+        }else if(p.length===9){
+          /* 4+5: DDMM DDDMM */
+          latDeg=parseInt(p.substring(0,2));
+          latMin=parseInt(p.substring(2,4));
+          lat=latDeg+latMin/60;
+          lonDeg=parseInt(p.substring(4,7));
+          lonMin=parseInt(p.substring(7,9));
+          lon=lonDeg+lonMin/60;
+        }else{
+          continue;
+        }
+        data.polygon.push([lat,-lon]);
+      }
     }
   }
   /* Parse areas affected */
