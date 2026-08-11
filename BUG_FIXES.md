@@ -4,6 +4,43 @@ This file documents all significant bugs found and fixed during development.
 
 ---
 
+## v99 — Manual Number Inputs for Boundary Noise + Point Density
+
+**Date:** Aug 11, 2026
+**Severity:** UX improvement (mobile field use)
+
+### Problem
+During field testing in an active storm environment, the user found it difficult to set exact slider values on a mobile device. For example, setting point density to exactly 5% (to show curvature on certain storms) was a nuisance with the slider — the touch target is small and precision is hard in storm conditions. This is less of an issue on laptop/desktop where mouse/trackpad control is more precise.
+
+### Fix
+Added manual number input fields alongside both sliders:
+
+1. **Noise filter** — number input (0-90, step 5) next to the slider
+2. **Point density** — number input (1-100%, step 1) next to the slider
+
+Both controls stay synchronized via `radarBoundarySyncNoise()` and `radarBoundarySyncDensity()`:
+- Typing in the number input updates the slider position
+- Moving the slider updates the number input
+- Both trigger the 500ms debounced re-render
+- Values are clamped to valid ranges
+- Noise filter rounds to nearest 5 to match slider step
+
+### Mobile Field Use
+Now you can:
+- **Tap the number input** and type an exact value (e.g., "5" for 5% density)
+- **Drag the slider** for quick visual adjustment
+- Both methods work interchangeably — no need to fumble with the slider for precise values in storm conditions
+
+### Files Changed
+- `nws_us_alert_map.html`:
+  - Added `radarBoundaryNoiseNum` number input (0-90, step 5)
+  - Added `radarBoundaryDensityNum` number input (1-100, step 1)
+  - New: `radarBoundarySyncNoise(val)` — synchronizes noise slider + number input
+  - New: `radarBoundarySyncDensity(val)` — synchronizes density slider + number input
+- `sw.js`: Bumped CACHE_NAME to `v99`
+
+---
+
 ## v98 — MD Polygon Longitude for 110-125°W + 4-Digit Pair Format
 
 **Date:** Aug 10, 2026
