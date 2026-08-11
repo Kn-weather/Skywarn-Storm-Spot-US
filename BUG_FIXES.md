@@ -4,6 +4,39 @@ This file documents all significant bugs found and fixed during development.
 
 ---
 
+## v98 — MD Polygon Longitude for 110-125°W + 4-Digit Pair Format
+
+**Date:** Aug 10, 2026
+**Severity:** High (MD polygons in western US rendered in Atlantic Ocean)
+**Builds on:** v91 (which fixed 100-109°W but missed 110-125°W)
+
+### Root Cause
+The v91 fix used `if(lon<10)lon+=100` to detect dropped-leading-"1" longitudes. This only caught longitudes 100-109°W (where the dropped "1" makes the parsed value 0-9°). But for **longitudes 110-125°W** (western US — California, Oregon, Washington, Nevada, Idaho, Utah, Arizona), the dropped "1" makes the parsed value 10-25°, which is NOT < 10, so +100 was never applied. Those coordinates rendered at 10-25°W (Atlantic Ocean near Africa) instead of 110-125°W (western US).
+
+Additionally, the code only handled 8-digit and 9-digit coordinate tokens. If the SPC provides **4-digit pairs** (e.g., `4538 9885 4540 9880`), all tokens were skipped by `if(p.length<8)continue`, resulting in empty or partial polygons.
+
+### Fix
+**1. Changed longitude threshold from 10 to 60:**
+```js
+// Old (v91): if(lon<10)lon+=100;     // Only catches 100-109°W
+// New (v98): if(lon<60)lon+=100;     // Catches 100-125°W
+```
+
+CONUS longitudes range from ~67°W (Maine) to ~125°W (Washington). Any parsed 8-digit longitude < 60° is definitely a dropped-"1" case (would be in the Atlantic Ocean). This catches:
+- 100-109°W → parsed as 0-9° → < 60 → +100 ✓ (was already working)
+- 110-119°W → parsed as 10-19° → < 60 → +100 ✓ (was broken!)
+- 120-125°W → parsed as 20-25° → < 60 → +100 ✓ (was broken!)
+- 67-100°W → parsed as 67-100° → >= 60 → no add ✓ (correctly unchanged)
+
+**2. Added 4-digit pair format handling:**
+If all coordinate tokens are 4 digits (e.g., `4538 9885 4540 9880`), the code now pairs them up as (lat, lon) and parses each as DDMM. Previously, these were all skipped by `if(p.length<8)continue`.
+
+### Files Changed
+- `nws_us_alert_map.html`: `mdParsePage()` — changed `if(lon<10)` to `if(lon<60)`, added 4-digit pair format detection and handling
+- `sw.js`: Bumped CACHE_NAME to `v98`
+
+---
+
 ## v97 — Wind-Validated Outflow Boundary Detection (Client-Side)
 
 **Date:** Aug 9, 2026
