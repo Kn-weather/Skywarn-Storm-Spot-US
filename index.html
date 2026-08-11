@@ -2434,12 +2434,14 @@ body.capturing .md-screenshot-only{display:none!important}
           <div style="height:1px;background:var(--bdr);margin:6px 0"></div>
           <label style="margin:1px 0;font-size:9px;color:var(--t2)"><input type="checkbox" id="amRadarBoundary" onchange="toggleRadarBoundary()" style="accent-color:var(--acc)"> Radar Outflow Boundaries</label>
           <div style="font-size:8px;color:var(--t3);line-height:1.4;margin-top:2px">Detects fine-line boundaries from radar reflectivity gradients. Separate from storm cell detection.</div>
-          <label style="margin:2px 0;font-size:9px">Noise filter: <span id="radarBoundaryNoiseLabel">35</span>
-            <input type="range" id="radarBoundaryNoise" min="0" max="90" value="35" step="5" oninput="document.getElementById('radarBoundaryNoiseLabel').textContent=this.value; radarScheduleReRender()" style="width:100%;accent-color:var(--acc);cursor:pointer">
+          <label style="margin:2px 0;font-size:9px">Noise filter:
+            <input type="number" id="radarBoundaryNoiseNum" min="0" max="90" value="35" step="5" oninput="radarBoundarySyncNoise(this.value)" style="width:42px;background:var(--bg);border:1px solid var(--bdr);color:var(--t1);font-family:inherit;font-size:9px;padding:1px 3px;border-radius:3px;text-align:center">
+            <input type="range" id="radarBoundaryNoise" min="0" max="90" value="35" step="5" oninput="radarBoundarySyncNoise(this.value)" style="width:calc(100% - 50px);accent-color:var(--acc);cursor:pointer;vertical-align:middle">
           </label>
           <div style="font-size:8px;color:var(--t3);margin-top:1px">Higher = fewer boundaries (stricter). Lower = more boundaries (more sensitive).</div>
-          <label style="margin:4px 0 2px;font-size:9px">Point density: <span id="radarBoundaryDensityLabel">1</span>%
-            <input type="range" id="radarBoundaryDensity" min="1" max="100" value="1" step="1" oninput="document.getElementById('radarBoundaryDensityLabel').textContent=this.value; radarScheduleReRender()" style="width:100%;accent-color:var(--acc);cursor:pointer">
+          <label style="margin:4px 0 2px;font-size:9px">Point density:
+            <input type="number" id="radarBoundaryDensityNum" min="1" max="100" value="1" step="1" oninput="radarBoundarySyncDensity(this.value)" style="width:42px;background:var(--bg);border:1px solid var(--bdr);color:var(--t1);font-family:inherit;font-size:9px;padding:1px 3px;border-radius:3px;text-align:center">%
+            <input type="range" id="radarBoundaryDensity" min="1" max="100" value="1" step="1" oninput="radarBoundarySyncDensity(this.value)" style="width:calc(100% - 55px);accent-color:var(--acc);cursor:pointer;vertical-align:middle">
           </label>
           <div style="font-size:8px;color:var(--t3);margin-top:1px">1% = straight line (start→end). 100% = all detected points. Adds points from middle outward.</div>
           <label style="margin:4px 0 2px;font-size:9px;color:var(--t2)"><input type="checkbox" id="amRadarBoundaryWindOnly" onchange="radarScheduleReRender()" style="accent-color:var(--acc)"> Show only wind-confirmed boundaries</label>
@@ -16953,6 +16955,37 @@ function radarScheduleReRender(){
   },500);
 }
 window.radarScheduleReRender=radarScheduleReRender;
+
+/* Synchronize the noise filter slider and number input.
+   Called by either control's oninput — updates the other + triggers re-render.
+   This makes it easy to type an exact value on mobile (where slider precision
+   is difficult) while keeping the slider for quick visual adjustment. */
+function radarBoundarySyncNoise(val){
+  var v=parseInt(val,10);
+  if(isNaN(v))return;
+  v=Math.max(0,Math.min(90,v));  /* clamp 0-90 */
+  /* Round to nearest 5 to match slider step */
+  v=Math.round(v/5)*5;
+  var slider=document.getElementById('radarBoundaryNoise');
+  var num=document.getElementById('radarBoundaryNoiseNum');
+  if(slider)slider.value=v;
+  if(num)num.value=v;
+  radarScheduleReRender();
+}
+window.radarBoundarySyncNoise=radarBoundarySyncNoise;
+
+/* Synchronize the point density slider and number input. */
+function radarBoundarySyncDensity(val){
+  var v=parseInt(val,10);
+  if(isNaN(v))return;
+  v=Math.max(1,Math.min(100,v));  /* clamp 1-100 */
+  var slider=document.getElementById('radarBoundaryDensity');
+  var num=document.getElementById('radarBoundaryDensityNum');
+  if(slider)slider.value=v;
+  if(num)num.value=v;
+  radarScheduleReRender();
+}
+window.radarBoundarySyncDensity=radarBoundarySyncDensity;
 
 /* Toggle radar storm cell motion arrows on/off. */
 function radarToggleStormMotion(){
